@@ -1,4 +1,4 @@
-# mam-ai
+# MAM-AI
 
 MAM-AI is a smart search application developed for nurses and midwives in Zanzibar. This repository
 is an MVP for this, as submitted to the [Gemma3n Kaggle challenge](https://www.kaggle.com/competitions/google-gemma-3n-hackathon).
