@@ -108,7 +108,7 @@ class _IntroPageState extends State<IntroPage> {
       if (done) {
         // Little bit of a hack over doing a checksum but is is ok for an mvp
         int fileSize = files.map((file) => io.File("${_downloadDir!.path}/$file").lengthSync()).reduce((a, b) => a + b);
-        print(fileSize);
+        debugPrint('Downloaded files total size: $fileSize bytes');
         if (fileSize == 4564057313) {
           return true;
         }

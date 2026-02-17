@@ -13,7 +13,7 @@ class SearchPage extends StatefulWidget {
 
   /// Request the LLM to initialise itself (used in intro)
   static void requestLlmPreinit() {
-    print("init LLM");
+    debugPrint('Requesting LLM initialization');
     _SearchPageState.platform.invokeMethod("ensureInit");
   }
 
@@ -47,7 +47,7 @@ class _SearchPageState extends State<SearchPage> {
 
       await platform.invokeMethod<int>("generateResponse", prompt);
     } on PlatformException catch (e) {
-      print("Error: $e");
+      debugPrint('Platform error while generating response: $e');
     }
   }
 
