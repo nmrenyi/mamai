@@ -83,9 +83,10 @@ class RagPipeline(application: Application) {
 
     var llmReady = false
 
-    // rendezvous channel for the LLM being ready - allows coroutine to wait for the llm to be ready
+    // Buffered channel for the LLM being ready - allows coroutine to wait for the llm to be ready
+    // Capacity 1 ensures trySend succeeds even if no receiver is waiting yet
     // https://stackoverflow.com/a/55421973
-    val onLlmReady = Channel<Unit>(0)
+    val onLlmReady = Channel<Unit>(1)
 
     private val initStartTime = System.currentTimeMillis()
 
@@ -108,6 +109,11 @@ class RagPipeline(application: Application) {
                 }
 
                 override fun onFailure(t: Throwable) {
+                    Log.e("mam-ai", "[ERROR] LLM initialization failed after ${System.currentTimeMillis() - initStartTime}ms", t)
+                    Log.e("mam-ai", "[ERROR] LLM will not be available. App may crash on query attempts.")
+                    // Signal the channel anyway to unblock waiting coroutines
+                    // They will fail later when trying to use the uninitialized model
+                    onLlmReady.trySend(Unit)
                 }
             },
             Executors.newSingleThreadExecutor(),
@@ -168,6 +174,10 @@ class RagPipeline(application: Application) {
             // Wait for llm to be ready via rendezvous channel
             if (!llmReady) {
                 onLlmReady.receive()
+                // Check again after receiving - if still not ready, initialization failed
+                if (!llmReady) {
+                    throw IllegalStateException("LLM initialization failed. Cannot process queries. Check logcat for details.")
+                }
             }
 
             Log.w("mam-ai", "[QUERY] prompt: \"${prompt.take(80)}...\"")

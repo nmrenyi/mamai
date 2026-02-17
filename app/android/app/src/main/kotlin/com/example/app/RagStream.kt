@@ -95,11 +95,27 @@ class RagStream(application: Application, val lifecycleScope: LifecycleCoroutine
                         }
                     }
 
-                    ragPipeline.generateResponse(
-                        prompt,
-                        { results -> onRetrieve(results) },
-                        { response, done -> onGenerate(response, done) }
-                    );
+                    try {
+                        ragPipeline.generateResponse(
+                            prompt,
+                            { results -> onRetrieve(results) },
+                            { response, done -> onGenerate(response, done) }
+                        );
+                    } catch (e: Exception) {
+                        // Send error to Flutter via EventChannel
+                        Handler(Looper.getMainLooper()).post {
+                            latestGeneration?.error(
+                                "LLM_ERROR",
+                                e.message ?: "Unknown error during generation",
+                                e.stackTraceToString()
+                            )
+                        }
+                        // Clean up state
+                        synchronized(this) {
+                            currentJob = null
+                            currentPrompt = null
+                        }
+                    }
                 }
             }
         }
