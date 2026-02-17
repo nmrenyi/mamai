@@ -77,7 +77,7 @@ class RagStream(application: Application, val lifecycleScope: LifecycleCoroutine
                             )
 
                             if (done) {
-                                synchronized(this) {
+                                synchronized(this@RagStream) {
                                     currentJob = null
                                     currentPrompt = null
                                 }
@@ -111,7 +111,7 @@ class RagStream(application: Application, val lifecycleScope: LifecycleCoroutine
                             )
                         }
                         // Clean up state
-                        synchronized(this) {
+                        synchronized(this@RagStream) {
                             currentJob = null
                             currentPrompt = null
                         }
