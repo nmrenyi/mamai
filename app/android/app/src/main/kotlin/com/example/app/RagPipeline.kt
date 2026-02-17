@@ -38,7 +38,7 @@ class RagPipeline(application: Application) {
     private val mediaPipeLanguageModelOptions: LlmInferenceOptions =
         LlmInferenceOptions.builder().setModelPath(
             baseFolder + GEMMA_MODEL
-        ).setPreferredBackend(LlmInference.Backend.GPU).setMaxTokens(4096).build()
+        ).setPreferredBackend(LlmInference.Backend.CPU).setMaxTokens(4096).build()
     private val mediaPipeLanguageModelSessionOptions: LlmInferenceSession.LlmInferenceSessionOptions =
         LlmInferenceSession.LlmInferenceSessionOptions.builder().setTemperature(1.0f)
             .setTopP(0.95f).setTopK(64).build()
@@ -166,7 +166,7 @@ class RagPipeline(application: Application) {
         }
 
     companion object {
-        private const val USE_GPU_FOR_EMBEDDINGS = true
+        private const val USE_GPU_FOR_EMBEDDINGS = false
         private val CHUNK_SEPARATORS = listOf("<sep>", "<doc_sep>")
 
         private const val GEMMA_MODEL = "gemma-3n-E4B-it-int4.task"
