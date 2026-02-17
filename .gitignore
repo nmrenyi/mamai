@@ -1,0 +1,42 @@
+# IDE
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Android
+local.properties
+*.keystore
+*.jks
+
+# Gradle
+.gradle/
+build/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+.venv/
+venv/
+*.egg
+
+# Model files & large artifacts
+*.tflite
+*.task
+*.sqlite
+sentencepiece.model
+
+# RAG output
+rag/out.txt
+
+# Misc
+*.log
+*.swp
