@@ -30,8 +30,12 @@ class _SearchPageState extends State<SearchPage> {
   /// Documents retrieved from RAG
   List<String> _retrievedDocuments = List.empty();
 
-  static const platform = MethodChannel("io.github.mzsfighters.mam_ai/request_generation");
-  static const latestMessageStream = EventChannel("io.github.mzsfighters.mam_ai/latest_message");
+  static const platform = MethodChannel(
+    "io.github.mzsfighters.mam_ai/request_generation",
+  );
+  static const latestMessageStream = EventChannel(
+    "io.github.mzsfighters.mam_ai/latest_message",
+  );
   StreamSubscription? _latestMessageSubscription;
   SearchController controller = SearchController();
   bool _searchedBefore = false;
@@ -52,7 +56,9 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   void _startListeningForLatestMessage() {
-    _latestMessageSubscription = latestMessageStream.receiveBroadcastStream().listen(_onLatestMessageUpdate);
+    _latestMessageSubscription = latestMessageStream
+        .receiveBroadcastStream()
+        .listen(_onLatestMessageUpdate);
   }
 
   /// Update the latest message & documents as the model generates
@@ -97,7 +103,7 @@ class _SearchPageState extends State<SearchPage> {
       "Preparing for home birth",
       "Infection risks childbirth",
       "Bleeding after delivery",
-      "Newborn not breathing"
+      "Newborn not breathing",
     ];
     var history = []; // Search history TBD
 
@@ -141,9 +147,17 @@ class _SearchPageState extends State<SearchPage> {
                 viewOnSubmitted: onSubmit,
                 builder: (BuildContext context, SearchController controller) {
                   return SearchBar(
-                    constraints: const BoxConstraints(minWidth: 360.0, minHeight: 56.0),
+                    constraints: const BoxConstraints(
+                      minWidth: 360.0,
+                      minHeight: 56.0,
+                    ),
                     leading: Padding(
-                      padding: const EdgeInsets.only(left: 8.0, top: 12.0, right: 0.0, bottom: 8.0),
+                      padding: const EdgeInsets.only(
+                        left: 8.0,
+                        top: 12.0,
+                        right: 0.0,
+                        bottom: 8.0,
+                      ),
                       child: Icon(Icons.search),
                     ),
                     controller: controller,
@@ -153,36 +167,71 @@ class _SearchPageState extends State<SearchPage> {
                     onChanged: (_) => controller.openView(),
                   );
                 },
-                suggestionsBuilder: (BuildContext context, SearchController controller) {
-                  RegExp regex = RegExp(RegExp.escape(controller.text.toLowerCase()));
-                  return history
-                      .map((text) => SearchSuggestionTile(text, SuggestionType.history, onPressed: onSubmit))
-                      .followedBy(examples.map((text) => SearchSuggestionTile(text, SuggestionType.example, onPressed: onSubmit)))
-                      .where((tile) => regex.hasMatch(tile.text.toLowerCase()))
-                      .toList();
-                },
+                suggestionsBuilder:
+                    (BuildContext context, SearchController controller) {
+                      RegExp regex = RegExp(
+                        RegExp.escape(controller.text.toLowerCase()),
+                      );
+                      return history
+                          .map(
+                            (text) => SearchSuggestionTile(
+                              text,
+                              SuggestionType.history,
+                              onPressed: onSubmit,
+                            ),
+                          )
+                          .followedBy(
+                            examples.map(
+                              (text) => SearchSuggestionTile(
+                                text,
+                                SuggestionType.example,
+                                onPressed: onSubmit,
+                              ),
+                            ),
+                          )
+                          .where(
+                            (tile) => regex.hasMatch(tile.text.toLowerCase()),
+                          )
+                          .toList();
+                    },
               ),
               const SizedBox(height: 16),
 
               Expanded(
                 child: SingleChildScrollView(
-                  child:
-                    (_searchedBefore)
-                      ? SearchOutput(summary: _latestMessage, retrievedDocuments: _retrievedDocuments)
+                  child: (_searchedBefore)
+                      ? SearchOutput(
+                          summary: _latestMessage,
+                          retrievedDocuments: _retrievedDocuments,
+                        )
                       : Container(
-                        margin: const EdgeInsets.only(bottom: 20),
-                        child: Wrap(
+                          margin: const EdgeInsets.only(bottom: 20),
+                          child: Wrap(
                             alignment: WrapAlignment.center,
                             spacing: 5,
                             runSpacing: 5,
                             children: history
-                                .map((text) => SearchSuggestionChip(text, SuggestionType.history, onPressed: onSubmit))
-                                .followedBy(examples.map((text) => SearchSuggestionChip(text, SuggestionType.example, onPressed: onSubmit)))
-                                .toList()
+                                .map(
+                                  (text) => SearchSuggestionChip(
+                                    text,
+                                    SuggestionType.history,
+                                    onPressed: onSubmit,
+                                  ),
+                                )
+                                .followedBy(
+                                  examples.map(
+                                    (text) => SearchSuggestionChip(
+                                      text,
+                                      SuggestionType.example,
+                                      onPressed: onSubmit,
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                          ),
                         ),
-                      ),
                 ),
-              )
+              ),
             ],
           ),
         ),
@@ -193,14 +242,16 @@ class _SearchPageState extends State<SearchPage> {
 
 /// We have two types of suggestion chips - example & history. Only example
 /// is used so far
-enum SuggestionType {
-  example,
-  history,
-}
+enum SuggestionType { example, history }
 
 /// A search suggestion appearing in the dropdown list
 class SearchSuggestionTile extends StatelessWidget {
-  const SearchSuggestionTile(this.text, this.type, {super.key, required this.onPressed});
+  const SearchSuggestionTile(
+    this.text,
+    this.type, {
+    super.key,
+    required this.onPressed,
+  });
 
   final String text;
   final Function(String) onPressed;
@@ -211,7 +262,7 @@ class SearchSuggestionTile extends StatelessWidget {
     Icon icon;
     Color? textColor;
 
-    switch(type) {
+    switch (type) {
       case SuggestionType.example:
         textColor = Color(0xff994000);
         icon = Icon(Icons.auto_awesome, color: textColor);
@@ -224,10 +275,7 @@ class SearchSuggestionTile extends StatelessWidget {
 
     return ListTile(
       leading: icon,
-      title: Text(
-        text,
-        style: TextStyle(color: textColor)
-      ),
+      title: Text(text, style: TextStyle(color: textColor)),
       onTap: () => onPressed(text),
     );
   }
@@ -235,7 +283,12 @@ class SearchSuggestionTile extends StatelessWidget {
 
 /// A search suggestion chip
 class SearchSuggestionChip extends StatelessWidget {
-  const SearchSuggestionChip(this.text, this.type, {super.key, required this.onPressed});
+  const SearchSuggestionChip(
+    this.text,
+    this.type, {
+    super.key,
+    required this.onPressed,
+  });
 
   final String text;
   final Function(String) onPressed;
@@ -248,7 +301,7 @@ class SearchSuggestionChip extends StatelessWidget {
     Color? textColor;
     Color borderColor;
 
-    switch(type) {
+    switch (type) {
       case SuggestionType.example:
         icon = Icon(Icons.auto_awesome);
         bgColor = Colors.orange[50];
@@ -276,9 +329,7 @@ class SearchSuggestionChip extends StatelessWidget {
       ),
       child: ActionChip(
         avatar: icon,
-        label: Text(
-          text,
-        ),
+        label: Text(text),
         onPressed: () => onPressed(text),
       ),
     );
@@ -287,7 +338,11 @@ class SearchSuggestionChip extends StatelessWidget {
 
 /// The main widget for the search summary
 class SearchOutput extends StatelessWidget {
-  const SearchOutput({super.key, required this.summary, required this.retrievedDocuments});
+  const SearchOutput({
+    super.key,
+    required this.summary,
+    required this.retrievedDocuments,
+  });
 
   final String? summary;
   final List<String> retrievedDocuments;
@@ -295,25 +350,38 @@ class SearchOutput extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (summary == null) {
-      return Center(child: SizedBox(width: 75, height: 75, child: CircularProgressIndicator(color: Color(0xffcc5500))));
+      return Center(
+        child: SizedBox(
+          width: 75,
+          height: 75,
+          child: CircularProgressIndicator(color: Color(0xffcc5500)),
+        ),
+      );
     }
 
     final retrievedDocs = retrievedDocuments.map((doc) {
       return Card(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.book),
-                title: const Text('Information from guidelines'),
-                contentPadding: const EdgeInsetsDirectional.only(start: 16.0, end: 24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.book),
+              title: const Text('Information from guidelines'),
+              contentPadding: const EdgeInsetsDirectional.only(
+                start: 16.0,
+                end: 24.0,
               ),
-              Padding(
-                padding: EdgeInsetsDirectional.only(start: 16.0, end: 24.0, bottom: 16.0),
-                child: Text(doc, style: TextStyle(fontSize: 16)),
-              )
-            ],
-          )
+            ),
+            Padding(
+              padding: EdgeInsetsDirectional.only(
+                start: 16.0,
+                end: 24.0,
+                bottom: 16.0,
+              ),
+              child: Text(doc, style: TextStyle(fontSize: 16)),
+            ),
+          ],
+        ),
       );
     });
 
@@ -331,32 +399,42 @@ class SearchOutput extends StatelessWidget {
             children: [
               ListTile(
                 leading: Icon(Icons.auto_awesome, color: darkOrange, size: 40),
-                title: const Text('Generated summary', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24),),
-                subtitle: RichText(text: TextSpan(
+                title: const Text(
+                  'Generated summary',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
+                ),
+                subtitle: RichText(
+                  text: TextSpan(
                     text: '⚠️ Read with care. ',
                     style: DefaultTextStyle.of(context).style,
                     children: [
                       TextSpan(
-                          text: 'AI can make serious mistakes! ⚠️',
-                          style: TextStyle(fontWeight: FontWeight.bold)
-                      )
-                    ])
+                        text: 'AI can make serious mistakes! ⚠️',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
                 ),
-                contentPadding: const EdgeInsetsDirectional.only(start: 16.0, end: 24.0),
+                contentPadding: const EdgeInsetsDirectional.only(
+                  start: 16.0,
+                  end: 24.0,
+                ),
               ),
               Padding(
-                padding: EdgeInsetsDirectional.only(start: 16.0, end: 24.0, bottom: 16.0),
+                padding: EdgeInsetsDirectional.only(
+                  start: 16.0,
+                  end: 24.0,
+                  bottom: 16.0,
+                ),
                 child: MarkdownBlock(
                   data: summary!,
                   config: MarkdownConfig(
-                    configs: [
-                      PConfig(textStyle: TextStyle(fontSize: 18))
-                    ]
+                    configs: [PConfig(textStyle: TextStyle(fontSize: 18))],
                   ),
                 ),
-              )
+              ),
             ],
-          )
+          ),
         ),
         ...retrievedDocs,
       ],

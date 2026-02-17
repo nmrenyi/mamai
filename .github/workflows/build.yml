@@ -37,7 +37,7 @@ jobs:
 
       - name: Check code formatting
         working-directory: app
-        run: flutter format --set-exit-if-changed lib/
+        run: dart format --set-exit-if-changed lib/
 
       - name: Build APK
         working-directory: app
