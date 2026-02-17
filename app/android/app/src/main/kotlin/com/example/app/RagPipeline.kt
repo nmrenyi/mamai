@@ -42,29 +42,44 @@ class RagPipeline(application: Application) {
     private val mediaPipeLanguageModelSessionOptions: LlmInferenceSession.LlmInferenceSessionOptions =
         LlmInferenceSession.LlmInferenceSessionOptions.builder().setTemperature(1.0f)
             .setTopP(0.95f).setTopK(64).build()
-    private val mediaPipeLanguageModel: MediaPipeLlmBackend =
-        MediaPipeLlmBackend(
+    private val mediaPipeLanguageModel: MediaPipeLlmBackend
+    private val embedder: Embedder<String>
+    private val textMemory: DefaultSemanticTextMemory
+    private val config: ChainConfig<String>
+    private val retrievalAndInferenceChain: RetrievalAndInferenceChain
+
+    init {
+        val t0 = System.currentTimeMillis()
+        Log.w("mam-ai", "[TIMING] Thread: ${Thread.currentThread().name} — starting heavy init")
+
+        mediaPipeLanguageModel = MediaPipeLlmBackend(
             application.applicationContext, mediaPipeLanguageModelOptions,
             mediaPipeLanguageModelSessionOptions
         )
+        Log.w("mam-ai", "[TIMING] MediaPipeLlmBackend constructor: ${System.currentTimeMillis() - t0}ms")
 
-    private val embedder: Embedder<String> = GeckoEmbeddingModel(
-        baseFolder + GECKO_MODEL,
-        Optional.of(baseFolder + TOKENIZER_MODEL),
-        USE_GPU_FOR_EMBEDDINGS,
-    )
+        val t1 = System.currentTimeMillis()
+        embedder = GeckoEmbeddingModel(
+            baseFolder + GECKO_MODEL,
+            Optional.of(baseFolder + TOKENIZER_MODEL),
+            USE_GPU_FOR_EMBEDDINGS,
+        )
+        Log.w("mam-ai", "[TIMING] GeckoEmbeddingModel constructor: ${System.currentTimeMillis() - t1}ms")
 
-
-    private val textMemory = DefaultSemanticTextMemory(
-        // Gecko embedding model dimension is 768
-        SqliteVectorStore(768, baseFolder + "embeddings.sqlite"), embedder
-    )
-
-    private val config = ChainConfig.create(
-        mediaPipeLanguageModel, PromptBuilder(PROMPT_TEMPLATE),
-        textMemory
-    )
-    private val retrievalAndInferenceChain = RetrievalAndInferenceChain(config)
+        val t2 = System.currentTimeMillis()
+        textMemory = DefaultSemanticTextMemory(
+            SqliteVectorStore(768, baseFolder + "embeddings.sqlite"), embedder
+        )
+        config = ChainConfig.create(
+            mediaPipeLanguageModel, PromptBuilder(PROMPT_TEMPLATE),
+            textMemory
+        )
+        retrievalAndInferenceChain = RetrievalAndInferenceChain(config)
+        Log.w("mam-ai", "[TIMING] Remaining init (memory+config+chain): ${System.currentTimeMillis() - t2}ms")
+        Log.w("mam-ai", "[TIMING] Total main-thread init: ${System.currentTimeMillis() - t0}ms")
+        val rt = Runtime.getRuntime()
+        Log.w("mam-ai", "[MEMORY] heap: ${rt.totalMemory() / 1024 / 1024}MB used, ${rt.freeMemory() / 1024 / 1024}MB free, ${rt.maxMemory() / 1024 / 1024}MB max")
+    }
 
     var llmReady = false
 
@@ -72,12 +87,17 @@ class RagPipeline(application: Application) {
     // https://stackoverflow.com/a/55421973
     val onLlmReady = Channel<Unit>(0)
 
+    private val initStartTime = System.currentTimeMillis()
+
     /// Load the model
     init {
         Futures.addCallback(
             mediaPipeLanguageModel.initialize(),
             object : FutureCallback<Boolean> {
                 override fun onSuccess(result: Boolean) {
+                    Log.w("mam-ai", "[TIMING] LLM initialize() completed: ${System.currentTimeMillis() - initStartTime}ms after construction")
+                    val rt = Runtime.getRuntime()
+                    Log.w("mam-ai", "[MEMORY] post-init heap: ${rt.totalMemory() / 1024 / 1024}MB used, ${rt.freeMemory() / 1024 / 1024}MB free, ${rt.maxMemory() / 1024 / 1024}MB max")
                     Log.i("mam-ai", "LLM initialized!")
                     // UNCOMMENT IF YOU WANT TO ADD MORE CONTEXT
                     // memorizeChunks(application.applicationContext, "mamai_trim.txt")
@@ -150,6 +170,9 @@ class RagPipeline(application: Application) {
                 onLlmReady.receive()
             }
 
+            Log.w("mam-ai", "[QUERY] prompt: \"${prompt.take(80)}...\"")
+            val qStart = System.currentTimeMillis()
+
             // Get relevant docs - this is actually duplicated by the retrievalAndInferenceChain.invoke
             // call but we also want to show the docs themselves to the user, so we have to do it
             // twice to get the actual output (usually it's passed to the model only)
@@ -159,10 +182,15 @@ class RagPipeline(application: Application) {
                     RetrievalConfig.create(3, 0.0f, TaskType.RETRIEVAL_QUERY)
                 )
             val retrievalResults = textMemory.retrieveResults(retrievalRequest).await().getEntities().map { e -> e.data }.toList()
+            Log.w("mam-ai", "[TIMING] retrieval (embed + vector search): ${System.currentTimeMillis() - qStart}ms, ${retrievalResults.size} docs")
             retrievalListener(retrievalResults);
 
             // Get the model output
-            retrievalAndInferenceChain.invoke(retrievalRequest, generationListener).await().text
+            val genStart = System.currentTimeMillis()
+            val result = retrievalAndInferenceChain.invoke(retrievalRequest, generationListener).await().text
+            Log.w("mam-ai", "[TIMING] generation: ${System.currentTimeMillis() - genStart}ms, ${result.length} chars")
+            Log.w("mam-ai", "[TIMING] total query: ${System.currentTimeMillis() - qStart}ms")
+            result
         }
 
     companion object {
