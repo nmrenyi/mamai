@@ -81,6 +81,7 @@ class RagPipeline(application: Application) {
         Log.w("mam-ai", "[MEMORY] heap: ${rt.totalMemory() / 1024 / 1024}MB used, ${rt.freeMemory() / 1024 / 1024}MB free, ${rt.maxMemory() / 1024 / 1024}MB max")
     }
 
+    @Volatile
     var llmReady = false
 
     // Buffered channel for the LLM being ready - allows coroutine to wait for the llm to be ready
