@@ -130,7 +130,6 @@ class _SearchPageState extends State<SearchPage> {
         );
       }
     });
-    _scrollToBottom();
   }
 
   @override
