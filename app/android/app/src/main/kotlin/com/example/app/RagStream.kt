@@ -23,10 +23,6 @@ class RagStream(application: Application, val lifecycleScope: LifecycleCoroutine
     // Currently executing prompt future - we can't execute two at once else the mediapipe
     // backend crashes
     private var currentJob: Job? = null
-    // Current prompt that is executing - we store this to avoid re-creating the current execution
-    // if there is already one running with the exact same prompt (e.g. if user clicks search twice
-    // for the same query)
-    private var currentPrompt: String? = null
 
     val ragPipeline: RagPipeline by lazy { RagPipeline(application) }
 
@@ -53,16 +49,10 @@ class RagStream(application: Application, val lifecycleScope: LifecycleCoroutine
     }
 
     // Generate a response to the prompt, sending updates to Flutter as it is being generated
-    fun generateResponse(prompt: String) {
+    fun generateResponse(prompt: String, history: List<Map<String, String>>) {
         synchronized(this) {
-            // We are already generating for this prompt
-            if (currentJob != null && currentPrompt == prompt) {
-                return
-            }
-
             currentJob?.cancel()
 
-            currentPrompt = prompt
             currentJob = lifecycleScope.launch {
                 withContext(backgroundExecutor.asCoroutineDispatcher()) {
                     fun onGenerate(response: LanguageModelResponse, done: Boolean) {
@@ -79,7 +69,6 @@ class RagStream(application: Application, val lifecycleScope: LifecycleCoroutine
                             if (done) {
                                 synchronized(this@RagStream) {
                                     currentJob = null
-                                    currentPrompt = null
                                 }
                             }
                         }
@@ -98,9 +87,10 @@ class RagStream(application: Application, val lifecycleScope: LifecycleCoroutine
                     try {
                         ragPipeline.generateResponse(
                             prompt,
+                            history,
                             { results -> onRetrieve(results) },
                             { response, done -> onGenerate(response, done) }
-                        );
+                        )
                     } catch (e: Exception) {
                         // Send error to Flutter via EventChannel
                         Handler(Looper.getMainLooper()).post {
@@ -113,7 +103,6 @@ class RagStream(application: Application, val lifecycleScope: LifecycleCoroutine
                         // Clean up state
                         synchronized(this@RagStream) {
                             currentJob = null
-                            currentPrompt = null
                         }
                     }
                 }

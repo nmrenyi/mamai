@@ -3,8 +3,36 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:markdown_widget/markdown_widget.dart';
 
-/// This is the search page. The user interacts with the model by typing in
-/// the search bar or clicking one of the suggestion chips.
+/// A single message in the conversation
+class ChatMessage {
+  final String role; // "user" or "assistant"
+  final String text;
+  final List<String> retrievedDocs;
+  final bool isLoading;
+
+  const ChatMessage({
+    required this.role,
+    required this.text,
+    this.retrievedDocs = const [],
+    this.isLoading = false,
+  });
+
+  ChatMessage copyWith({
+    String? text,
+    List<String>? retrievedDocs,
+    bool? isLoading,
+  }) {
+    return ChatMessage(
+      role: role,
+      text: text ?? this.text,
+      retrievedDocs: retrievedDocs ?? this.retrievedDocs,
+      isLoading: isLoading ?? this.isLoading,
+    );
+  }
+}
+
+/// This is the chat page. The user interacts with the model by typing in
+/// the input field or clicking one of the suggestion chips.
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
 
@@ -24,11 +52,7 @@ class SearchPage extends StatefulWidget {
 }
 
 class _SearchPageState extends State<SearchPage> {
-  /// Response from the LLM (summary)
-  String? _latestMessage;
-
-  /// Documents retrieved from RAG
-  List<String> _retrievedDocuments = List.empty();
+  final List<ChatMessage> _messages = [];
 
   static const platform = MethodChannel(
     "io.github.mzsfighters.mam_ai/request_generation",
@@ -37,22 +61,50 @@ class _SearchPageState extends State<SearchPage> {
     "io.github.mzsfighters.mam_ai/latest_message",
   );
   StreamSubscription? _latestMessageSubscription;
-  SearchController controller = SearchController();
-  bool _searchedBefore = false;
+  final TextEditingController _textController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
 
-  /// Request the model to generate a prompt - this calls into the Android code
-  /// (see app/android/app/src/main/kotlin/com/example/app/MainActivity.kt)
+  /// Build the conversation history to send to Android (last 4 completed turns)
+  List<Map<String, String>> _buildHistory() {
+    final completed =
+        _messages.where((m) => !m.isLoading && m.text.isNotEmpty).toList();
+    final recent =
+        completed.length > 4
+            ? completed.sublist(completed.length - 4)
+            : completed;
+    return recent.map((m) => {"role": m.role, "text": m.text}).toList();
+  }
+
+  /// Request the model to generate a response — calls into Android code
   Future<void> _generateResponse(String prompt) async {
+    if (prompt.trim().isEmpty) return;
+    final history = _buildHistory();
+    setState(() {
+      _messages.add(ChatMessage(role: 'user', text: prompt));
+      _messages.add(ChatMessage(role: 'assistant', text: '', isLoading: true));
+    });
+    _textController.clear();
+    _scrollToBottom();
     try {
-      setState(() {
-        _searchedBefore = true;
-        _latestMessage = null;
+      await platform.invokeMethod<int>("generateResponse", {
+        "prompt": prompt,
+        "history": history,
       });
-
-      await platform.invokeMethod<int>("generateResponse", prompt);
     } on PlatformException catch (e) {
       debugPrint('Platform error while generating response: $e');
     }
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
   }
 
   void _startListeningForLatestMessage() {
@@ -61,179 +113,171 @@ class _SearchPageState extends State<SearchPage> {
         .listen(_onLatestMessageUpdate);
   }
 
-  /// Update the latest message & documents as the model generates
+  /// Update the latest assistant message as the model streams tokens
   void _onLatestMessageUpdate(value) {
     setState(() {
+      final lastIdx = _messages.length - 1;
+      if (lastIdx < 0 || _messages[lastIdx].role != 'assistant') return;
       if (value.containsKey("response")) {
-        _latestMessage = value["response"];
+        _messages[lastIdx] = _messages[lastIdx].copyWith(
+          text: value["response"],
+          isLoading: false,
+        );
       } else {
-        List<Object?> docs = value["results"];
-        _retrievedDocuments = docs.map<String>((a) => a as String).toList();
+        final List<Object?> docs = value["results"];
+        _messages[lastIdx] = _messages[lastIdx].copyWith(
+          retrievedDocs: docs.map<String>((a) => a as String).toList(),
+        );
       }
     });
+    _scrollToBottom();
   }
 
   @override
   void dispose() {
-    super.dispose();
     _latestMessageSubscription?.cancel();
-  }
-
-  /// Called when the user clicks a chip or presses search
-  void onSubmit(String text) {
-    // For some reason, if we close an already closed view, it will make the
-    // entire screen black - I think that this is probably poorly-isolated code
-    // given that it affects the entire _screen_ and not only the widget it is
-    // supposed to control
-    if (controller.isOpen) {
-      controller.closeView(text);
-    } else {
-      // We still want to set the text even if the search view is closed
-      controller.text = text;
-    }
-
-    _generateResponse(text);
+    _scrollController.dispose();
+    _textController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // Some suggested prompt
-    var examples = [
-      "Baby continuous crying",
-      "Preparing for home birth",
-      "Infection risks childbirth",
-      "Bleeding after delivery",
-      "Newborn not breathing",
-    ];
-    var history = []; // Search history TBD
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_latestMessageSubscription == null) {
         _startListeningForLatestMessage();
       }
     });
 
-    return Material(
-      child: Scaffold(
-        appBar: AppBar(
-          toolbarHeight: 64,
-          title: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircleAvatar(
-                radius: 24,
-                backgroundColor: Colors.white,
-                child: Image.asset('images/logo.png', height: 42),
-              ),
-              SizedBox(width: 10),
-              const Text(
-                'MAM-AI clinical search',
-                style: TextStyle(color: Colors.white),
-              ),
-            ],
-          ),
-          centerTitle: true,
-          backgroundColor: Colors.deepOrange,
-        ),
-        body: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SearchAnchor(
-                shrinkWrap: true,
-                searchController: controller,
-                viewOnSubmitted: onSubmit,
-                builder: (BuildContext context, SearchController controller) {
-                  return SearchBar(
-                    constraints: const BoxConstraints(
-                      minWidth: 360.0,
-                      minHeight: 56.0,
-                    ),
-                    leading: Padding(
-                      padding: const EdgeInsets.only(
-                        left: 8.0,
-                        top: 12.0,
-                        right: 0.0,
-                        bottom: 8.0,
-                      ),
-                      child: Icon(Icons.search),
-                    ),
-                    controller: controller,
-                    hintText: "Search in medical guidelines...",
-                    onSubmitted: onSubmit,
-                    onTap: controller.openView,
-                    onChanged: (_) => controller.openView(),
-                  );
-                },
-                suggestionsBuilder:
-                    (BuildContext context, SearchController controller) {
-                      RegExp regex = RegExp(
-                        RegExp.escape(controller.text.toLowerCase()),
-                      );
-                      return history
-                          .map(
-                            (text) => SearchSuggestionTile(
-                              text,
-                              SuggestionType.history,
-                              onPressed: onSubmit,
-                            ),
-                          )
-                          .followedBy(
-                            examples.map(
-                              (text) => SearchSuggestionTile(
-                                text,
-                                SuggestionType.example,
-                                onPressed: onSubmit,
-                              ),
-                            ),
-                          )
-                          .where(
-                            (tile) => regex.hasMatch(tile.text.toLowerCase()),
-                          )
-                          .toList();
-                    },
-              ),
-              const SizedBox(height: 16),
+    const examples = [
+      "Baby continuous crying",
+      "Preparing for home birth",
+      "Infection risks childbirth",
+      "Bleeding after delivery",
+      "Newborn not breathing",
+    ];
 
-              Expanded(
-                child: SingleChildScrollView(
-                  child: (_searchedBefore)
-                      ? SearchOutput(
-                          summary: _latestMessage,
-                          retrievedDocuments: _retrievedDocuments,
-                        )
-                      : Container(
-                          margin: const EdgeInsets.only(bottom: 20),
-                          child: Wrap(
-                            alignment: WrapAlignment.center,
-                            spacing: 5,
-                            runSpacing: 5,
-                            children: history
-                                .map(
-                                  (text) => SearchSuggestionChip(
-                                    text,
-                                    SuggestionType.history,
-                                    onPressed: onSubmit,
-                                  ),
-                                )
-                                .followedBy(
-                                  examples.map(
-                                    (text) => SearchSuggestionChip(
-                                      text,
-                                      SuggestionType.example,
-                                      onPressed: onSubmit,
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                          ),
-                        ),
-                ),
-              ),
-            ],
+    return Scaffold(
+      appBar: AppBar(
+        toolbarHeight: 64,
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircleAvatar(
+              radius: 24,
+              backgroundColor: Colors.white,
+              child: Image.asset('images/logo.png', height: 42),
+            ),
+            const SizedBox(width: 10),
+            const Text(
+              'MAM-AI clinical search',
+              style: TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+        centerTitle: true,
+        backgroundColor: Colors.deepOrange,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add_comment, color: Colors.white),
+            tooltip: 'New conversation',
+            onPressed: () => setState(() => _messages.clear()),
           ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child:
+                _messages.isEmpty
+                    ? _buildSuggestionChips(examples)
+                    : ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _messages.length,
+                      itemBuilder: (context, index) {
+                        final message = _messages[index];
+                        if (message.role == 'user') {
+                          return _UserBubble(text: message.text);
+                        } else {
+                          return _AssistantCard(message: message);
+                        }
+                      },
+                    ),
+          ),
+          _buildInputBar(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSuggestionChips(List<String> examples) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(bottom: 12),
+            child: Text(
+              'Try asking:',
+              style: TextStyle(fontSize: 16, color: Colors.black54),
+            ),
+          ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children:
+                examples
+                    .map(
+                      (text) => SearchSuggestionChip(
+                        text,
+                        SuggestionType.example,
+                        onPressed: _generateResponse,
+                      ),
+                    )
+                    .toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInputBar() {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _textController,
+                decoration: InputDecoration(
+                  hintText: 'Ask a medical question...',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                ),
+                textInputAction: TextInputAction.send,
+                onSubmitted: _generateResponse,
+                minLines: 1,
+                maxLines: 4,
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton.filled(
+              icon: const Icon(Icons.send),
+              style: IconButton.styleFrom(
+                backgroundColor: const Color(0xffcc5500),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => _generateResponse(_textController.text),
+            ),
+          ],
         ),
       ),
     );
@@ -244,7 +288,7 @@ class _SearchPageState extends State<SearchPage> {
 /// is used so far
 enum SuggestionType { example, history }
 
-/// A search suggestion appearing in the dropdown list
+/// A search suggestion appearing in the dropdown list (kept for future use)
 class SearchSuggestionTile extends StatelessWidget {
   const SearchSuggestionTile(
     this.text,
@@ -264,12 +308,12 @@ class SearchSuggestionTile extends StatelessWidget {
 
     switch (type) {
       case SuggestionType.example:
-        textColor = Color(0xff994000);
+        textColor = const Color(0xff994000);
         icon = Icon(Icons.auto_awesome, color: textColor);
         break;
 
       case SuggestionType.history:
-        icon = Icon(Icons.history);
+        icon = const Icon(Icons.history);
         break;
     }
 
@@ -303,10 +347,9 @@ class SearchSuggestionChip extends StatelessWidget {
 
     switch (type) {
       case SuggestionType.example:
-        icon = Icon(Icons.auto_awesome);
+        icon = const Icon(Icons.auto_awesome);
         bgColor = Colors.orange[50];
-
-        textColor = Color(0xffcc5500);
+        textColor = const Color(0xffcc5500);
         borderColor = Colors.orange[300]!;
         break;
 
@@ -336,108 +379,142 @@ class SearchSuggestionChip extends StatelessWidget {
   }
 }
 
-/// The main widget for the search summary
-class SearchOutput extends StatelessWidget {
-  const SearchOutput({
-    super.key,
-    required this.summary,
-    required this.retrievedDocuments,
-  });
-
-  final String? summary;
-  final List<String> retrievedDocuments;
+/// User message bubble (right-aligned, orange)
+class _UserBubble extends StatelessWidget {
+  final String text;
+  const _UserBubble({required this.text});
 
   @override
   Widget build(BuildContext context) {
-    if (summary == null) {
-      return Center(
-        child: SizedBox(
-          width: 75,
-          height: 75,
-          child: CircularProgressIndicator(color: Color(0xffcc5500)),
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Container(
+        margin: const EdgeInsets.only(left: 64, bottom: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xffcc5500),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Text(
+          text,
+          style: const TextStyle(color: Colors.white, fontSize: 16),
+        ),
+      ),
+    );
+  }
+}
+
+/// Assistant message card with markdown response and retrieved docs
+class _AssistantCard extends StatelessWidget {
+  final ChatMessage message;
+  const _AssistantCard({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    if (message.isLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: SizedBox(
+            width: 40,
+            height: 40,
+            child: CircularProgressIndicator(color: Color(0xffcc5500)),
+          ),
         ),
       );
     }
 
-    final retrievedDocs = retrievedDocuments.map((doc) {
-      return Card(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.book),
-              title: const Text('Information from guidelines'),
-              contentPadding: const EdgeInsetsDirectional.only(
-                start: 16.0,
-                end: 24.0,
-              ),
-            ),
-            Padding(
-              padding: EdgeInsetsDirectional.only(
-                start: 16.0,
-                end: 24.0,
-                bottom: 16.0,
-              ),
-              child: Text(doc, style: TextStyle(fontSize: 16)),
-            ),
-          ],
-        ),
-      );
-    });
+    const darkOrange = Color(0xffcc5500);
+    const lightOrange = Color(0xffff7f50);
 
-    Color lightOrange = Color(0xffff7f50);
-    Color darkOrange = Color(0xffcc5500);
-
-    return Column(
-      children: [
-        Card(
-          elevation: 2.0,
-          surfaceTintColor: lightOrange,
-          shadowColor: lightOrange,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ListTile(
-                leading: Icon(Icons.auto_awesome, color: darkOrange, size: 40),
-                title: const Text(
-                  'Generated summary',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Card(
+            elevation: 2,
+            surfaceTintColor: lightOrange,
+            shadowColor: lightOrange,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ListTile(
+                  leading: const Icon(
+                    Icons.auto_awesome,
+                    color: darkOrange,
+                    size: 32,
+                  ),
+                  title: const Text(
+                    'Generated summary',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 20,
+                    ),
+                  ),
+                  subtitle: RichText(
+                    text: TextSpan(
+                      text: '⚠️ Read with care. ',
+                      style: DefaultTextStyle.of(context).style,
+                      children: const [
+                        TextSpan(
+                          text: 'AI can make serious mistakes! ⚠️',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
+                  contentPadding: const EdgeInsetsDirectional.only(
+                    start: 16,
+                    end: 24,
+                  ),
                 ),
-                subtitle: RichText(
-                  text: TextSpan(
-                    text: '⚠️ Read with care. ',
-                    style: DefaultTextStyle.of(context).style,
-                    children: [
-                      TextSpan(
-                        text: 'AI can make serious mistakes! ⚠️',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                if (message.text.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsetsDirectional.only(
+                      start: 16,
+                      end: 24,
+                      bottom: 16,
+                    ),
+                    child: MarkdownBlock(
+                      data: message.text,
+                      config: MarkdownConfig(
+                        configs: [
+                          PConfig(textStyle: const TextStyle(fontSize: 18)),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
-                contentPadding: const EdgeInsetsDirectional.only(
-                  start: 16.0,
-                  end: 24.0,
-                ),
-              ),
-              Padding(
-                padding: EdgeInsetsDirectional.only(
-                  start: 16.0,
-                  end: 24.0,
-                  bottom: 16.0,
-                ),
-                child: MarkdownBlock(
-                  data: summary!,
-                  config: MarkdownConfig(
-                    configs: [PConfig(textStyle: TextStyle(fontSize: 18))],
-                  ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-        ...retrievedDocs,
-      ],
+          ...message.retrievedDocs.map(
+            (doc) => Card(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const ListTile(
+                    leading: Icon(Icons.book),
+                    title: Text('Information from guidelines'),
+                    contentPadding: EdgeInsetsDirectional.only(
+                      start: 16,
+                      end: 24,
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsetsDirectional.only(
+                      start: 16,
+                      end: 24,
+                      bottom: 16,
+                    ),
+                    child: Text(doc, style: const TextStyle(fontSize: 16)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

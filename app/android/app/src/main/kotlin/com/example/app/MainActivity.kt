@@ -30,7 +30,11 @@ class MainActivity : FlutterActivity() {
                     }
                 }
                 "generateResponse" -> {
-                    ragStream.generateResponse(call.arguments<String>()!!)
+                    @Suppress("UNCHECKED_CAST")
+                    val args = call.arguments<Map<String, Any>>()!!
+                    val prompt = args["prompt"] as String
+                    val history = (args["history"] as? List<Map<String, String>>) ?: emptyList()
+                    ragStream.generateResponse(prompt, history)
                     result.success(0)
                 }
                 else -> {

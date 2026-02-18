@@ -4,12 +4,12 @@ import android.app.Application
 import android.content.Context
 import android.util.Log
 import com.google.ai.edge.localagents.rag.chains.ChainConfig
-import com.google.ai.edge.localagents.rag.chains.RetrievalAndInferenceChain
 import com.google.ai.edge.localagents.rag.memory.DefaultSemanticTextMemory
 import com.google.ai.edge.localagents.rag.memory.SqliteVectorStore
 import com.google.ai.edge.localagents.rag.models.AsyncProgressListener
 import com.google.ai.edge.localagents.rag.models.Embedder
 import com.google.ai.edge.localagents.rag.models.GeckoEmbeddingModel
+import com.google.ai.edge.localagents.rag.models.LanguageModelRequest
 import com.google.ai.edge.localagents.rag.models.LanguageModelResponse
 import com.google.ai.edge.localagents.rag.models.MediaPipeLlmBackend
 import com.google.ai.edge.localagents.rag.prompt.PromptBuilder
@@ -22,7 +22,6 @@ import com.google.common.util.concurrent.Futures
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import com.google.mediapipe.tasks.genai.llminference.LlmInference.LlmInferenceOptions
 import com.google.mediapipe.tasks.genai.llminference.LlmInferenceSession
-import io.flutter.plugin.common.EventChannel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.guava.await
@@ -46,7 +45,7 @@ class RagPipeline(application: Application) {
     private val embedder: Embedder<String>
     private val textMemory: DefaultSemanticTextMemory
     private val config: ChainConfig<String>
-    private val retrievalAndInferenceChain: RetrievalAndInferenceChain
+    private val llmExecutor = Executors.newSingleThreadExecutor()
 
     init {
         val t0 = System.currentTimeMillis()
@@ -74,8 +73,7 @@ class RagPipeline(application: Application) {
             mediaPipeLanguageModel, PromptBuilder(PROMPT_TEMPLATE),
             textMemory
         )
-        retrievalAndInferenceChain = RetrievalAndInferenceChain(config)
-        Log.w("mam-ai", "[TIMING] Remaining init (memory+config+chain): ${System.currentTimeMillis() - t2}ms")
+        Log.w("mam-ai", "[TIMING] Remaining init (memory+config): ${System.currentTimeMillis() - t2}ms")
         Log.w("mam-ai", "[TIMING] Total main-thread init: ${System.currentTimeMillis() - t0}ms")
         val rt = Runtime.getRuntime()
         Log.w("mam-ai", "[MEMORY] heap: ${rt.totalMemory() / 1024 / 1024}MB used, ${rt.freeMemory() / 1024 / 1024}MB free, ${rt.maxMemory() / 1024 / 1024}MB max")
@@ -165,9 +163,10 @@ class RagPipeline(application: Application) {
         future?.get()
     }
 
-    /** Generates the response from the LLM. */
+    /** Generates the response from the LLM with conversation history support. */
     suspend fun generateResponse(
         prompt: String,
+        history: List<Map<String, String>>,
         retrievalListener: (docs: List<String>) -> Unit,
         generationListener: AsyncProgressListener<LanguageModelResponse>?,
     ): String =
@@ -181,28 +180,62 @@ class RagPipeline(application: Application) {
                 }
             }
 
-            Log.w("mam-ai", "[QUERY] prompt: \"${prompt.take(80)}...\"")
+            Log.w("mam-ai", "[QUERY] prompt: \"${prompt.take(80)}...\", history turns: ${history.size}")
             val qStart = System.currentTimeMillis()
 
-            // Get relevant docs - this is actually duplicated by the retrievalAndInferenceChain.invoke
-            // call but we also want to show the docs themselves to the user, so we have to do it
-            // twice to get the actual output (usually it's passed to the model only)
+            // Retrieve relevant docs (once — fixes double-retrieval bug)
             val retrievalRequest =
                 RetrievalRequest.create(
                     prompt,
                     RetrievalConfig.create(3, 0.0f, TaskType.RETRIEVAL_QUERY)
                 )
-            val retrievalResults = textMemory.retrieveResults(retrievalRequest).await().getEntities().map { e -> e.data }.toList()
-            Log.w("mam-ai", "[TIMING] retrieval (embed + vector search): ${System.currentTimeMillis() - qStart}ms, ${retrievalResults.size} docs")
-            retrievalListener(retrievalResults);
+            val docs = textMemory.retrieveResults(retrievalRequest).await().getEntities().map { e -> e.data }.toList()
+            Log.w("mam-ai", "[TIMING] retrieval (embed + vector search): ${System.currentTimeMillis() - qStart}ms, ${docs.size} docs")
+            retrievalListener(docs)
 
-            // Get the model output
+            // Build history string
+            val historyStr = if (history.isEmpty()) "" else
+                history.joinToString("\n") { turn ->
+                    val role = if (turn["role"] == "user") "User" else "Assistant"
+                    "$role: ${turn["text"]}"
+                }
+
+            // Construct the full prompt manually for complete control over history injection
+            val contextStr = docs.joinToString("\n\n")
+            val fullPrompt = buildPrompt(contextStr, historyStr, prompt)
+
+            // Generate via LLM directly (bypasses RetrievalAndInferenceChain)
             val genStart = System.currentTimeMillis()
-            val result = retrievalAndInferenceChain.invoke(retrievalRequest, generationListener).await().text
+            val request = LanguageModelRequest.builder().setPrompt(fullPrompt).build()
+            val result = mediaPipeLanguageModel.generateResponse(request, llmExecutor, generationListener).await().text
             Log.w("mam-ai", "[TIMING] generation: ${System.currentTimeMillis() - genStart}ms, ${result.length} chars")
             Log.w("mam-ai", "[TIMING] total query: ${System.currentTimeMillis() - qStart}ms")
             result
         }
+
+    private fun buildPrompt(context: String, history: String, query: String): String {
+        val historySection = if (history.isNotEmpty())
+            "<separator>\nCONVERSATION HISTORY:\n$history\n"
+        else ""
+        return "CONTEXT FOR THE QUERY BELOW: $context.\n" +
+                "<separator>\n" +
+                "You are a smart search engine designed to support nurses and midwives in neonatal care. Speak in simple, clear English suitable for a second-language speaker. Be impartial and impersonal - you are creating a summary for the user, not chatting with them. Give accurate, medically grounded information from reliable sources, orienting toward actionable steps for practical care. Keep answers short, prioritise conciseness and easy to understand, making use of bullet points.\n" +
+                "\n" +
+                "THE CONTEXT MAY OR MAY NOT BE RELEVANT, ONLY THE 3 MOST SIMILAR DOCUMENTS ARE RETRIEVED. IF NONE ARE RELEVANT, 3 IRRELEVANT DOCUMENTS WILL BE RETRIEVED. IGNORE THEM IN THIS CASE AND SAY THAT NOTHING RELEVANT WAS FOUND!\n" +
+                "\n" +
+                "If a user describes symptoms that could be urgent or dangerous—such as bleeding, severe pain, trouble breathing, fever in a newborn, or anything that sounds serious—tell them to contact a doctor, nurse, or emergency service right away. Do not try to diagnose emergencies.\n" +
+                "\n" +
+                "If you're unsure or don't have enough information, say: \u201cI\u2019m not sure. It\u2019s best to ask a doctor or nurse.\u201d\n" +
+                "\n" +
+                "Use the context provided to answer questions. If no context is available, give general advice based on trusted health guidelines.\n" +
+                "\n" +
+                "Never make guesses. Always prioritize safety and clarity. Remember that you have no physical body as an LLM and therefore in an emergency you need to ask the mother to ask a doctor or nurse.\n" +
+                "\n" +
+                historySection +
+                "<separator>\n" +
+                "User: $query\n" +
+                "Assistant:"
+    }
 
     companion object {
         private const val USE_GPU_FOR_EMBEDDINGS = false
