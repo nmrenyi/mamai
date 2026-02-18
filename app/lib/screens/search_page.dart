@@ -66,13 +66,10 @@ class _SearchPageState extends State<SearchPage> {
 
   /// Build the conversation history to send to Android (last 4 completed turns)
   List<Map<String, String>> _buildHistory() {
-    final completed =
-        _messages.where((m) => !m.isLoading && m.text.isNotEmpty).toList();
-    final recent =
-        completed.length > 4
-            ? completed.sublist(completed.length - 4)
-            : completed;
-    return recent.map((m) => {"role": m.role, "text": m.text}).toList();
+    return _messages
+        .where((m) => !m.isLoading && m.text.isNotEmpty)
+        .map((m) => {"role": m.role, "text": m.text})
+        .toList();
   }
 
   /// Request the model to generate a response — calls into Android code
