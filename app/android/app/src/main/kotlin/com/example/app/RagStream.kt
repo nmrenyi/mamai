@@ -49,7 +49,7 @@ class RagStream(application: Application, val lifecycleScope: LifecycleCoroutine
     }
 
     // Generate a response to the prompt, sending updates to Flutter as it is being generated
-    fun generateResponse(prompt: String, history: List<Map<String, String>>) {
+    fun generateResponse(prompt: String, history: List<Map<String, String>>, useRetrieval: Boolean = true) {
         synchronized(this) {
             currentJob?.cancel()
 
@@ -88,6 +88,7 @@ class RagStream(application: Application, val lifecycleScope: LifecycleCoroutine
                         ragPipeline.generateResponse(
                             prompt,
                             history,
+                            useRetrieval,
                             { results -> onRetrieve(results) },
                             { response, done -> onGenerate(response, done) }
                         )

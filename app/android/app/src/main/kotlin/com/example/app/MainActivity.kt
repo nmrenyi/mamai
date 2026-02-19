@@ -34,7 +34,8 @@ class MainActivity : FlutterActivity() {
                     val args = call.arguments<Map<String, Any>>()!!
                     val prompt = args["prompt"] as String
                     val history = (args["history"] as? List<Map<String, String>>) ?: emptyList()
-                    ragStream.generateResponse(prompt, history)
+                    val useRetrieval = args["useRetrieval"] as? Boolean ?: true
+                    ragStream.generateResponse(prompt, history, useRetrieval)
                     result.success(0)
                 }
                 else -> {

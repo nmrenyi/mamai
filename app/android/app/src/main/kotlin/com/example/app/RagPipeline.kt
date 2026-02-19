@@ -167,6 +167,7 @@ class RagPipeline(application: Application) {
     suspend fun generateResponse(
         prompt: String,
         history: List<Map<String, String>>,
+        useRetrieval: Boolean = true,
         retrievalListener: (docs: List<String>) -> Unit,
         generationListener: AsyncProgressListener<LanguageModelResponse>?,
     ): String =
@@ -180,19 +181,23 @@ class RagPipeline(application: Application) {
                 }
             }
 
-            Log.w("mam-ai", "[QUERY] prompt: \"${prompt.take(80)}...\", history turns: ${history.size}")
+            Log.w("mam-ai", "[QUERY] prompt: \"${prompt.take(80)}...\", history turns: ${history.size}, retrieval: $useRetrieval")
             val qStart = System.currentTimeMillis()
 
-            // Retrieve relevant docs (once — fixes double-retrieval bug)
-            val retrievalRequest =
-                RetrievalRequest.create(
+            val docs = if (useRetrieval) {
+                val retrievalRequest = RetrievalRequest.create(
                     prompt,
                     RetrievalConfig.create(3, 0.0f, TaskType.RETRIEVAL_QUERY)
                 )
-            val docs = textMemory.retrieveResults(retrievalRequest).await().getEntities().map { e -> e.data }.toList()
-            Log.w("mam-ai", "[TIMING] retrieval (embed + vector search): ${System.currentTimeMillis() - qStart}ms, ${docs.size} docs")
-            retrievalListener(docs)
-            Log.w("mam-ai", "[RETRIEVAL] docs sent to Flutter, starting generation")
+                val results = textMemory.retrieveResults(retrievalRequest).await().getEntities().map { e -> e.data }.toList()
+                Log.w("mam-ai", "[TIMING] retrieval (embed + vector search): ${System.currentTimeMillis() - qStart}ms, ${results.size} docs")
+                retrievalListener(results)
+                Log.w("mam-ai", "[RETRIEVAL] docs sent to Flutter, starting generation")
+                results
+            } else {
+                Log.w("mam-ai", "[RETRIEVAL] skipped by user")
+                emptyList()
+            }
 
             // Build history string
             val historyStr = if (history.isEmpty()) "" else

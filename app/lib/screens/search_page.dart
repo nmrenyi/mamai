@@ -63,6 +63,7 @@ class _SearchPageState extends State<SearchPage> {
   StreamSubscription? _latestMessageSubscription;
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  bool _useRetrieval = true;
 
   static const _modelContextTokens = 32000; // Gemma 3n E4B context window
   static const _charsPerToken = 4; // rough estimate for English text
@@ -118,6 +119,7 @@ class _SearchPageState extends State<SearchPage> {
       await platform.invokeMethod<int>("generateResponse", {
         "prompt": prompt,
         "history": history,
+        "useRetrieval": _useRetrieval,
       });
     } on PlatformException catch (e) {
       debugPrint('Platform error while generating response: $e');
@@ -294,7 +296,16 @@ class _SearchPageState extends State<SearchPage> {
                 maxLines: 4,
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 4),
+            IconButton(
+              tooltip: _useRetrieval ? 'Search enabled' : 'Search disabled',
+              icon: Icon(
+                Icons.search,
+                color: _useRetrieval ? const Color(0xffcc5500) : Colors.grey,
+              ),
+              onPressed: () => setState(() => _useRetrieval = !_useRetrieval),
+            ),
+            const SizedBox(width: 4),
             IconButton.filled(
               icon: const Icon(Icons.send),
               style: IconButton.styleFrom(
