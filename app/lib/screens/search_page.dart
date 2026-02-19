@@ -437,19 +437,6 @@ class _AssistantCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (message.isLoading) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 16),
-        child: Center(
-          child: SizedBox(
-            width: 40,
-            height: 40,
-            child: CircularProgressIndicator(color: Color(0xffcc5500)),
-          ),
-        ),
-      );
-    }
-
     const darkOrange = Color(0xffcc5500);
     const lightOrange = Color(0xffff7f50);
 
@@ -492,7 +479,18 @@ class _AssistantCard extends StatelessWidget {
                     end: 24,
                   ),
                 ),
-                if (message.text.isNotEmpty)
+                if (message.isLoading)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Center(
+                      child: SizedBox(
+                        width: 40,
+                        height: 40,
+                        child: CircularProgressIndicator(color: darkOrange),
+                      ),
+                    ),
+                  )
+                else if (message.text.isNotEmpty)
                   Padding(
                     padding: const EdgeInsetsDirectional.only(
                       start: 16,

@@ -192,6 +192,7 @@ class RagPipeline(application: Application) {
             val docs = textMemory.retrieveResults(retrievalRequest).await().getEntities().map { e -> e.data }.toList()
             Log.w("mam-ai", "[TIMING] retrieval (embed + vector search): ${System.currentTimeMillis() - qStart}ms, ${docs.size} docs")
             retrievalListener(docs)
+            Log.w("mam-ai", "[RETRIEVAL] docs sent to Flutter, starting generation")
 
             // Build history string
             val historyStr = if (history.isEmpty()) "" else
