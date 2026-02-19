@@ -223,22 +223,42 @@ class RagPipeline(application: Application) {
             // No history: context + current query go in the first (and only) user turn
             if (context.isNotEmpty()) {
                 sb.append("\nRELEVANT CONTEXT FROM MEDICAL GUIDELINES:\n$context\n")
+                sb.append("\nQuestion: $query<end_of_turn>\n")
+            } else {
+                sb.append("\n$query<end_of_turn>\n")
             }
-            sb.append("\nQuestion: $query<end_of_turn>\n")
         } else {
-            // History: first historical user message closes the first turn (system instructions only)
+            // History: first historical user message closes the first turn (system instructions only).
+            // Always use "Question:" here since the query follows system instructions in the same turn.
+            val firstCtx = history.first()["context"]
+            if (!firstCtx.isNullOrEmpty()) {
+                sb.append("\nRELEVANT CONTEXT FROM MEDICAL GUIDELINES:\n$firstCtx\n")
+            }
             sb.append("\nQuestion: ${history.first()["text"]}<end_of_turn>\n")
             // Remaining history turns alternate model/user
             for (turn in history.drop(1)) {
                 val role = if (turn["role"] == "user") "user" else "model"
-                sb.append("<start_of_turn>$role\n${turn["text"]}<end_of_turn>\n")
+                if (role == "user") {
+                    sb.append("<start_of_turn>user\n")
+                    val turnCtx = turn["context"]
+                    if (!turnCtx.isNullOrEmpty()) {
+                        sb.append("RELEVANT CONTEXT FROM MEDICAL GUIDELINES:\n$turnCtx\n\n")
+                        sb.append("Question: ${turn["text"]}<end_of_turn>\n")
+                    } else {
+                        sb.append("${turn["text"]}<end_of_turn>\n")
+                    }
+                } else {
+                    sb.append("<start_of_turn>model\n${turn["text"]}<end_of_turn>\n")
+                }
             }
             // Current query as the final user turn, with retrieved context immediately before it
             sb.append("<start_of_turn>user\n")
             if (context.isNotEmpty()) {
                 sb.append("RELEVANT CONTEXT FROM MEDICAL GUIDELINES:\n$context\n\n")
+                sb.append("Question: $query<end_of_turn>\n")
+            } else {
+                sb.append("$query<end_of_turn>\n")
             }
-            sb.append("$query<end_of_turn>\n")
         }
 
         // Trigger generation — no closing <end_of_turn>
