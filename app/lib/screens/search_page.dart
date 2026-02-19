@@ -508,12 +508,14 @@ class _AssistantCard extends StatelessWidget {
                       end: 24,
                       bottom: 16,
                     ),
-                    child: MarkdownBlock(
-                      data: message.text,
-                      config: MarkdownConfig(
-                        configs: [
-                          PConfig(textStyle: const TextStyle(fontSize: 18)),
-                        ],
+                    child: SelectionContainer.disabled(
+                      child: MarkdownBlock(
+                        data: message.text,
+                        config: MarkdownConfig(
+                          configs: [
+                            PConfig(textStyle: const TextStyle(fontSize: 18)),
+                          ],
+                        ),
                       ),
                     ),
                   ),
