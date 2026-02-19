@@ -237,8 +237,10 @@ class RagPipeline(application: Application) {
             sb.append("<start_of_turn>user\n")
             if (context.isNotEmpty()) {
                 sb.append("RELEVANT CONTEXT FROM MEDICAL GUIDELINES:\n$context\n\n")
+                sb.append("Question: $query<end_of_turn>\n")
+            } else {
+                sb.append("$query<end_of_turn>\n")
             }
-            sb.append("$query<end_of_turn>\n")
         }
 
         // Trigger generation — no closing <end_of_turn>
