@@ -179,7 +179,8 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   /// Update the latest assistant message as the model streams tokens
-  void _onLatestMessageUpdate(value) {
+  void _onLatestMessageUpdate(dynamic value) {
+    if (value is! Map) return; // guard against unexpected non-Map events
     if (!_isGenerating) return; // ignore stray events after cancel
     if (value.containsKey("done")) {
       setState(() => _isGenerating = false);
@@ -194,12 +195,19 @@ class _SearchPageState extends State<SearchPage> {
           isLoading: false,
         );
       } else if (value.containsKey("results")) {
-        final List<Object?> docs = value["results"];
+        final docs = value["results"];
+        if (docs is! List) return;
         _messages[lastIdx] = _messages[lastIdx].copyWith(
           retrievedDocs: docs.map<String>((a) => a as String).toList(),
         );
       }
     });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _startListeningForLatestMessage();
   }
 
   @override
@@ -212,11 +220,6 @@ class _SearchPageState extends State<SearchPage> {
 
   @override
   Widget build(BuildContext context) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_latestMessageSubscription == null) {
-        _startListeningForLatestMessage();
-      }
-    });
 
     const examples = [
       "Baby continuous crying",
