@@ -230,17 +230,18 @@ class RagPipeline(application: Application) {
             sb.append("\nQuestion: ${history.first()["text"]}<end_of_turn>\n")
             // Remaining history turns alternate model/user
             for (turn in history.drop(1)) {
-                val role = if (turn["role"] == "user") "user" else "model"
-                sb.append("<start_of_turn>$role\n${turn["text"]}<end_of_turn>\n")
+                if (turn["role"] == "user") {
+                    sb.append("<start_of_turn>user\nQuestion: ${turn["text"]}<end_of_turn>\n")
+                } else {
+                    sb.append("<start_of_turn>model\n${turn["text"]}<end_of_turn>\n")
+                }
             }
             // Current query as the final user turn, with retrieved context immediately before it
             sb.append("<start_of_turn>user\n")
             if (context.isNotEmpty()) {
                 sb.append("RELEVANT CONTEXT FROM MEDICAL GUIDELINES:\n$context\n\n")
-                sb.append("Question: $query<end_of_turn>\n")
-            } else {
-                sb.append("$query<end_of_turn>\n")
             }
+            sb.append("Question: $query<end_of_turn>\n")
         }
 
         // Trigger generation — no closing <end_of_turn>
