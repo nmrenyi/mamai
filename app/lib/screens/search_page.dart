@@ -73,15 +73,28 @@ class _SearchPageState extends State<SearchPage> {
       (_modelContextTokens * _charsPerToken) - _reservedChars;
 
   /// Returns (history, wasTruncated). Drops oldest turns until under threshold.
+  /// User turns include a "context" key with their retrieved docs (if any),
+  /// so the model always has access to the source documents for each query.
   (List<Map<String, String>>, bool) _buildHistory() {
-    var history = _messages
-        .where((m) => !m.isLoading && m.text.isNotEmpty)
-        .map((m) => {"role": m.role, "text": m.text})
-        .toList();
+    final completed = _messages.where((m) => !m.isLoading && m.text.isNotEmpty).toList();
+    var history = <Map<String, String>>[];
+    for (int i = 0; i < completed.length; i++) {
+      final m = completed[i];
+      if (m.role == 'user') {
+        final entry = <String, String>{"role": m.role, "text": m.text};
+        // Attach the docs retrieved for this query (stored on the following assistant message)
+        if (i + 1 < completed.length && completed[i + 1].retrievedDocs.isNotEmpty) {
+          entry["context"] = completed[i + 1].retrievedDocs.join("\n\n");
+        }
+        history.add(entry);
+      } else {
+        history.add({"role": m.role, "text": m.text});
+      }
+    }
 
     var truncated = false;
     while (history.length > 1) {
-      final chars = history.fold<int>(0, (sum, m) => sum + m["text"]!.length);
+      final chars = history.fold<int>(0, (sum, m) => sum + m["text"]!.length + (m["context"]?.length ?? 0));
       if (chars <= _historyCharThreshold) break;
       history = history.sublist(1); // drop oldest message
       truncated = true;
