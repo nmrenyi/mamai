@@ -234,6 +234,14 @@ class _SearchPageState extends State<SearchPage> {
                     },
                   ),
           ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 6),
+            child: Text(
+              'MAM-AI can make mistakes. Please double-check responses.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: Colors.black45),
+            ),
+          ),
           _buildInputBar(),
         ],
       ),
@@ -456,7 +464,6 @@ class _AssistantCardState extends State<_AssistantCard> {
   @override
   Widget build(BuildContext context) {
     final message = widget.message;
-    const darkOrange = Color(0xffcc5500);
     const lightOrange = Color(0xffff7f50);
 
     return Padding(
@@ -479,33 +486,6 @@ class _AssistantCardState extends State<_AssistantCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ListTile(
-                  leading: const Icon(
-                    Icons.auto_awesome,
-                    color: darkOrange,
-                    size: 32,
-                  ),
-                  title: const Text(
-                    'Generated summary',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
-                  ),
-                  subtitle: RichText(
-                    text: TextSpan(
-                      text: '⚠️ Read with care. ',
-                      style: DefaultTextStyle.of(context).style,
-                      children: const [
-                        TextSpan(
-                          text: 'AI can make serious mistakes! ⚠️',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                  ),
-                  contentPadding: const EdgeInsetsDirectional.only(
-                    start: 16,
-                    end: 24,
-                  ),
-                ),
                 if (message.isLoading)
                   _ThinkingIndicator(hasDocs: message.retrievedDocs.isNotEmpty)
                 else if (message.text.isNotEmpty)
