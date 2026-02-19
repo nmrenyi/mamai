@@ -64,24 +64,56 @@ class _SearchPageState extends State<SearchPage> {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
-  /// Build the conversation history to send to Android (last 4 completed turns)
-  List<Map<String, String>> _buildHistory() {
-    return _messages
+  static const _modelContextTokens = 32000; // Gemma 3n E4B context window
+  static const _charsPerToken = 4; // rough estimate for English text
+  static const _reservedChars =
+      4000; // system prompt + retrieved docs + current query + response
+  static const _historyCharThreshold =
+      (_modelContextTokens * _charsPerToken) - _reservedChars;
+
+  /// Returns (history, wasTruncated). Drops oldest turns until under threshold.
+  (List<Map<String, String>>, bool) _buildHistory() {
+    var history = _messages
         .where((m) => !m.isLoading && m.text.isNotEmpty)
         .map((m) => {"role": m.role, "text": m.text})
         .toList();
+
+    var truncated = false;
+    while (history.length > 1) {
+      final chars = history.fold<int>(0, (sum, m) => sum + m["text"]!.length);
+      if (chars <= _historyCharThreshold) break;
+      history = history.sublist(1); // drop oldest message
+      truncated = true;
+    }
+
+    if (truncated) {
+      debugPrint(
+        '[WARN] History truncated: oldest turns dropped to fit context window',
+      );
+    }
+    return (history, truncated);
   }
 
   /// Request the model to generate a response — calls into Android code
   Future<void> _generateResponse(String prompt) async {
     if (prompt.trim().isEmpty) return;
-    final history = _buildHistory();
+    final (history, historyTruncated) = _buildHistory();
     setState(() {
       _messages.add(ChatMessage(role: 'user', text: prompt));
       _messages.add(ChatMessage(role: 'assistant', text: '', isLoading: true));
     });
     _textController.clear();
     _scrollToBottom();
+    if (historyTruncated && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Older messages were removed to fit the model\'s context window.',
+          ),
+          duration: Duration(seconds: 4),
+        ),
+      );
+    }
     try {
       await platform.invokeMethod<int>("generateResponse", {
         "prompt": prompt,
@@ -184,22 +216,21 @@ class _SearchPageState extends State<SearchPage> {
       body: Column(
         children: [
           Expanded(
-            child:
-                _messages.isEmpty
-                    ? _buildSuggestionChips(examples)
-                    : ListView.builder(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _messages.length,
-                      itemBuilder: (context, index) {
-                        final message = _messages[index];
-                        if (message.role == 'user') {
-                          return _UserBubble(text: message.text);
-                        } else {
-                          return _AssistantCard(message: message);
-                        }
-                      },
-                    ),
+            child: _messages.isEmpty
+                ? _buildSuggestionChips(examples)
+                : ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _messages.length,
+                    itemBuilder: (context, index) {
+                      final message = _messages[index];
+                      if (message.role == 'user') {
+                        return _UserBubble(text: message.text);
+                      } else {
+                        return _AssistantCard(message: message);
+                      }
+                    },
+                  ),
           ),
           _buildInputBar(),
         ],
@@ -223,16 +254,15 @@ class _SearchPageState extends State<SearchPage> {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children:
-                examples
-                    .map(
-                      (text) => SearchSuggestionChip(
-                        text,
-                        SuggestionType.example,
-                        onPressed: _generateResponse,
-                      ),
-                    )
-                    .toList(),
+            children: examples
+                .map(
+                  (text) => SearchSuggestionChip(
+                    text,
+                    SuggestionType.example,
+                    onPressed: _generateResponse,
+                  ),
+                )
+                .toList(),
           ),
         ],
       ),
@@ -443,10 +473,7 @@ class _AssistantCard extends StatelessWidget {
                   ),
                   title: const Text(
                     'Generated summary',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 20,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
                   ),
                   subtitle: RichText(
                     text: TextSpan(

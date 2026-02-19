@@ -37,7 +37,7 @@ class RagPipeline(application: Application) {
     private val mediaPipeLanguageModelOptions: LlmInferenceOptions =
         LlmInferenceOptions.builder().setModelPath(
             baseFolder + GEMMA_MODEL
-        ).setPreferredBackend(LlmInference.Backend.CPU).setMaxTokens(4096).build()
+        ).setPreferredBackend(LlmInference.Backend.CPU).setMaxTokens(32000).build()  // Gemma 3n E4B IT has 32k context window
     private val mediaPipeLanguageModelSessionOptions: LlmInferenceSession.LlmInferenceSessionOptions =
         LlmInferenceSession.LlmInferenceSessionOptions.builder().setTemperature(1.0f)
             .setTopP(0.95f).setTopK(64).build()
