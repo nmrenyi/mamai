@@ -441,13 +441,21 @@ class _UserBubble extends StatelessWidget {
   }
 }
 
-/// Assistant message card with markdown response and retrieved docs
-class _AssistantCard extends StatelessWidget {
+/// Assistant message card with markdown response and collapsible retrieved docs
+class _AssistantCard extends StatefulWidget {
   final ChatMessage message;
   const _AssistantCard({required this.message});
 
   @override
+  State<_AssistantCard> createState() => _AssistantCardState();
+}
+
+class _AssistantCardState extends State<_AssistantCard> {
+  bool _docsExpanded = false;
+
+  @override
   Widget build(BuildContext context) {
+    final message = widget.message;
     const darkOrange = Color(0xffcc5500);
     const lightOrange = Color(0xffff7f50);
 
@@ -456,6 +464,14 @@ class _AssistantCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Collapsible retrieval disclosure — shown above the response card
+          if (message.retrievedDocs.isNotEmpty)
+            _RetrievalDisclosure(
+              docs: message.retrievedDocs,
+              expanded: _docsExpanded,
+              onToggle: () => setState(() => _docsExpanded = !_docsExpanded),
+            ),
+          // Main response card
           Card(
             elevation: 2,
             surfaceTintColor: lightOrange,
@@ -491,16 +507,7 @@ class _AssistantCard extends StatelessWidget {
                   ),
                 ),
                 if (message.isLoading)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16),
-                    child: Center(
-                      child: SizedBox(
-                        width: 40,
-                        height: 40,
-                        child: CircularProgressIndicator(color: darkOrange),
-                      ),
-                    ),
-                  )
+                  _ThinkingIndicator(hasDocs: message.retrievedDocs.isNotEmpty)
                 else if (message.text.isNotEmpty)
                   Padding(
                     padding: const EdgeInsetsDirectional.only(
@@ -522,7 +529,104 @@ class _AssistantCard extends StatelessWidget {
               ],
             ),
           ),
-          ...message.retrievedDocs.map(
+        ],
+      ),
+    );
+  }
+}
+
+/// Animated "Thinking..." / "Generating response..." indicator shown while loading
+class _ThinkingIndicator extends StatefulWidget {
+  final bool hasDocs;
+  const _ThinkingIndicator({required this.hasDocs});
+
+  @override
+  State<_ThinkingIndicator> createState() => _ThinkingIndicatorState();
+}
+
+class _ThinkingIndicatorState extends State<_ThinkingIndicator>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final label = widget.hasDocs ? 'Generating response' : 'Thinking';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          final dots = '.' * ((_controller.value * 3).floor() + 1);
+          return Text(
+            '$label$dots',
+            style: const TextStyle(
+              color: Colors.grey,
+              fontSize: 16,
+              fontStyle: FontStyle.italic,
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Collapsible section showing retrieved guideline chunks
+class _RetrievalDisclosure extends StatelessWidget {
+  final List<String> docs;
+  final bool expanded;
+  final VoidCallback onToggle;
+
+  const _RetrievalDisclosure({
+    required this.docs,
+    required this.expanded,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: onToggle,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  expanded ? Icons.expand_less : Icons.expand_more,
+                  size: 16,
+                  color: Colors.grey,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'Retrieved ${docs.length} guideline${docs.length == 1 ? '' : 's'}',
+                  style: const TextStyle(color: Colors.grey, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (expanded)
+          ...docs.map(
             (doc) => Card(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -547,8 +651,7 @@ class _AssistantCard extends StatelessWidget {
               ),
             ),
           ),
-        ],
-      ),
+      ],
     );
   }
 }
