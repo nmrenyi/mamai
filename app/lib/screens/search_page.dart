@@ -157,6 +157,20 @@ class _SearchPageState extends State<SearchPage> {
     });
   }
 
+  Future<void> _startNewConversation() async {
+    if (_isGenerating) {
+      try {
+        await platform.invokeMethod("cancelGeneration");
+      } on PlatformException catch (e) {
+        debugPrint('Platform error while cancelling on new conversation: $e');
+      }
+    }
+    setState(() {
+      _isGenerating = false;
+      _messages.clear();
+    });
+  }
+
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
@@ -253,7 +267,7 @@ class _SearchPageState extends State<SearchPage> {
           IconButton(
             icon: const Icon(Icons.add_comment, color: Colors.white),
             tooltip: 'New conversation',
-            onPressed: () => setState(() => _messages.clear()),
+            onPressed: _startNewConversation,
           ),
         ],
       ),
