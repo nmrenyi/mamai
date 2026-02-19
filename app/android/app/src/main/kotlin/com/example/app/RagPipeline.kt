@@ -191,16 +191,9 @@ class RagPipeline(application: Application) {
                 emptyList()
             }
 
-            // Build history string
-            val historyStr = if (history.isEmpty()) "" else
-                history.joinToString("\n") { turn ->
-                    val role = if (turn["role"] == "user") "User" else "Assistant"
-                    "$role: ${turn["text"]}"
-                }
-
-            // Construct the full prompt manually for complete control over history injection
+            // Construct the full prompt using Gemma IT chat template
             val contextStr = docs.joinToString("\n\n")
-            val fullPrompt = buildPrompt(contextStr, historyStr, prompt)
+            val fullPrompt = buildPrompt(contextStr, history, prompt)
 
             // Generate via LLM directly (bypasses RetrievalAndInferenceChain)
             val genStart = System.currentTimeMillis()
@@ -211,32 +204,39 @@ class RagPipeline(application: Application) {
             result
         }
 
-    private fun buildPrompt(context: String, history: String, query: String): String {
-        val contextSection = if (context.isNotEmpty())
-            "CONTEXT FOR THE QUERY BELOW: $context.\n" +
-            "<separator>\n" +
-            "THE CONTEXT MAY OR MAY NOT BE RELEVANT, ONLY THE 3 MOST SIMILAR DOCUMENTS ARE RETRIEVED. IF NONE ARE RELEVANT, 3 IRRELEVANT DOCUMENTS WILL BE RETRIEVED. IGNORE THEM IN THIS CASE AND SAY THAT NOTHING RELEVANT WAS FOUND!\n" +
-            "\n"
-        else ""
-        val historySection = if (history.isNotEmpty())
-            "<separator>\nCONVERSATION HISTORY:\n$history\n"
-        else ""
-        return contextSection +
-                "<separator>\n" +
-                "You are a smart search engine designed to support nurses and midwives in neonatal care. Speak in simple, clear English suitable for a second-language speaker. Be impartial and impersonal - you are creating a summary for the user, not chatting with them. Give accurate, medically grounded information from reliable sources, orienting toward actionable steps for practical care. Keep answers short, prioritise conciseness and easy to understand, making use of bullet points.\n" +
-                "\n" +
-                "If a user describes symptoms that could be urgent or dangerous—such as bleeding, severe pain, trouble breathing, fever in a newborn, or anything that sounds serious—tell them to contact a doctor, nurse, or emergency service right away. Do not try to diagnose emergencies.\n" +
-                "\n" +
-                "If you're unsure or don't have enough information, say: \u201cI\u2019m not sure. It\u2019s best to ask a doctor or nurse.\u201d\n" +
-                "\n" +
-                "Use the context provided to answer questions. If no context is available, give general advice based on trusted health guidelines.\n" +
-                "\n" +
-                "Never make guesses. Always prioritize safety and clarity. Remember that you have no physical body as an LLM and therefore in an emergency you need to ask the mother to ask a doctor or nurse.\n" +
-                "\n" +
-                historySection +
-                "<separator>\n" +
-                "User: $query\n" +
-                "Assistant:"
+    /**
+     * Builds a prompt using the Gemma IT chat template.
+     * Format: <start_of_turn>user / <end_of_turn> / <start_of_turn>model
+     * System instructions and context are prepended inside the first user turn.
+     */
+    private fun buildPrompt(context: String, history: List<Map<String, String>>, query: String): String {
+        val sb = StringBuilder()
+
+        // Open first user turn — contains system instructions and optional context
+        sb.append("<start_of_turn>user\n")
+        sb.append(SYSTEM_INSTRUCTIONS)
+        if (context.isNotEmpty()) {
+            sb.append("\nRELEVANT CONTEXT FROM MEDICAL GUIDELINES:\n$context\n")
+        }
+
+        if (history.isEmpty()) {
+            // No history: current query closes the first (and only) user turn
+            sb.append("\n$query<end_of_turn>\n")
+        } else {
+            // History: first historical user message closes the first turn (after system/context)
+            sb.append("\n${history.first()["text"]}<end_of_turn>\n")
+            // Remaining history turns alternate model/user
+            for (turn in history.drop(1)) {
+                val role = if (turn["role"] == "user") "user" else "model"
+                sb.append("<start_of_turn>$role\n${turn["text"]}<end_of_turn>\n")
+            }
+            // Current query as the final user turn
+            sb.append("<start_of_turn>user\n$query<end_of_turn>\n")
+        }
+
+        // Trigger generation — no closing <end_of_turn>
+        sb.append("<start_of_turn>model\n")
+        return sb.toString()
     }
 
     companion object {
@@ -247,5 +247,13 @@ class RagPipeline(application: Application) {
         private const val TOKENIZER_MODEL = "sentencepiece.model"
         private const val GECKO_MODEL = "Gecko_1024_quant.tflite"
 
+        private const val SYSTEM_INSTRUCTIONS =
+            "You are a medical assistant supporting nurses and midwives in neonatal care in Zanzibar.\n" +
+            "Speak in simple, clear English suitable for second-language speakers.\n" +
+            "Give accurate, medically grounded information. Be concise and use bullet points.\n" +
+            "If retrieved context is provided, use it to answer. If it is irrelevant, say so and answer from general medical knowledge.\n" +
+            "For urgent symptoms (bleeding, severe pain, breathing difficulty, fever in a newborn), always direct to a doctor or emergency service immediately.\n" +
+            "If unsure, say: \u201cI\u2019m not sure. It\u2019s best to ask a doctor or nurse.\u201d\n" +
+            "Never make guesses. Prioritize safety."
     }
 }
