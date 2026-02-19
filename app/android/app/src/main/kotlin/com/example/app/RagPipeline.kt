@@ -212,14 +212,18 @@ class RagPipeline(application: Application) {
         }
 
     private fun buildPrompt(context: String, history: String, query: String): String {
+        val contextSection = if (context.isNotEmpty())
+            "CONTEXT FOR THE QUERY BELOW: $context.\n" +
+            "<separator>\n" +
+            "THE CONTEXT MAY OR MAY NOT BE RELEVANT, ONLY THE 3 MOST SIMILAR DOCUMENTS ARE RETRIEVED. IF NONE ARE RELEVANT, 3 IRRELEVANT DOCUMENTS WILL BE RETRIEVED. IGNORE THEM IN THIS CASE AND SAY THAT NOTHING RELEVANT WAS FOUND!\n" +
+            "\n"
+        else ""
         val historySection = if (history.isNotEmpty())
             "<separator>\nCONVERSATION HISTORY:\n$history\n"
         else ""
-        return "CONTEXT FOR THE QUERY BELOW: $context.\n" +
+        return contextSection +
                 "<separator>\n" +
                 "You are a smart search engine designed to support nurses and midwives in neonatal care. Speak in simple, clear English suitable for a second-language speaker. Be impartial and impersonal - you are creating a summary for the user, not chatting with them. Give accurate, medically grounded information from reliable sources, orienting toward actionable steps for practical care. Keep answers short, prioritise conciseness and easy to understand, making use of bullet points.\n" +
-                "\n" +
-                "THE CONTEXT MAY OR MAY NOT BE RELEVANT, ONLY THE 3 MOST SIMILAR DOCUMENTS ARE RETRIEVED. IF NONE ARE RELEVANT, 3 IRRELEVANT DOCUMENTS WILL BE RETRIEVED. IGNORE THEM IN THIS CASE AND SAY THAT NOTHING RELEVANT WAS FOUND!\n" +
                 "\n" +
                 "If a user describes symptoms that could be urgent or dangerous—such as bleeding, severe pain, trouble breathing, fever in a newborn, or anything that sounds serious—tell them to contact a doctor, nurse, or emergency service right away. Do not try to diagnose emergencies.\n" +
                 "\n" +
