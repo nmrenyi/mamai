@@ -195,6 +195,8 @@ class RagPipeline(application: Application) {
             val contextStr = docs.joinToString("\n\n")
             val fullPrompt = buildPrompt(contextStr, history, prompt)
 
+            Log.w("mam-ai", "[PROMPT] full prompt sent to LLM:\n$fullPrompt")
+
             // Generate via LLM directly (bypasses RetrievalAndInferenceChain)
             val genStart = System.currentTimeMillis()
             val request = LanguageModelRequest.builder().setPrompt(fullPrompt).build()
@@ -221,10 +223,10 @@ class RagPipeline(application: Application) {
 
         if (history.isEmpty()) {
             // No history: current query closes the first (and only) user turn
-            sb.append("\n$query<end_of_turn>\n")
+            sb.append("\nQuestion: $query<end_of_turn>\n")
         } else {
             // History: first historical user message closes the first turn (after system/context)
-            sb.append("\n${history.first()["text"]}<end_of_turn>\n")
+            sb.append("\nQuestion: ${history.first()["text"]}<end_of_turn>\n")
             // Remaining history turns alternate model/user
             for (turn in history.drop(1)) {
                 val role = if (turn["role"] == "user") "user" else "model"
