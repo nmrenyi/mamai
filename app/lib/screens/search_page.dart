@@ -118,9 +118,19 @@ class _SearchPageState extends State<SearchPage> {
         debugPrint('Platform error while cancelling previous generation: $e');
       }
       _isGenerating = false;
-      // Remove the in-progress assistant message
       if (_messages.isNotEmpty && _messages.last.role == 'assistant') {
-        _messages.removeLast();
+        final last = _messages.last;
+        if (last.text.isEmpty) {
+          // No response yet — remove both placeholder and its user message
+          _messages.removeLast();
+          if (_messages.isNotEmpty && _messages.last.role == 'user') {
+            _messages.removeLast();
+          }
+        } else {
+          // Partial response exists — keep the pair, mark as cancelled
+          _messages[_messages.length - 1] =
+              last.copyWith(isLoading: false, wasCancelled: true);
+        }
       }
     }
     final (history, historyTruncated) = _buildHistory();

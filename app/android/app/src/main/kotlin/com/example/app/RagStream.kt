@@ -105,6 +105,14 @@ class RagStream(application: Application, val lifecycleScope: LifecycleCoroutine
                             { results -> onRetrieve(results) },
                             { response, done -> onGenerate(response, done) }
                         )
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        // Normal cancellation — don't send error to Flutter,
+                        // just clean up. Re-throw so the coroutine framework
+                        // handles cancellation properly.
+                        synchronized(this@RagStream) {
+                            currentJob = null
+                        }
+                        throw e
                     } catch (e: Exception) {
                         // Send error to Flutter via EventChannel
                         Handler(Looper.getMainLooper()).post {
