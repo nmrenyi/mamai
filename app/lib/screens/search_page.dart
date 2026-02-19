@@ -92,6 +92,13 @@ class _SearchPageState extends State<SearchPage> {
       truncated = true;
     }
 
+    // After size-based truncation, the oldest remaining entry may be a model
+    // turn (its paired user turn was just dropped). Drop leading model turns
+    // so buildPrompt() always receives a history that starts with a user turn.
+    while (history.isNotEmpty && history.first["role"] != "user") {
+      history = history.sublist(1);
+    }
+
     if (truncated) {
       debugPrint(
         '[WARN] History truncated: oldest turns dropped to fit context window',
