@@ -38,6 +38,10 @@ class MainActivity : FlutterActivity() {
                     ragStream.generateResponse(prompt, history, useRetrieval)
                     result.success(0)
                 }
+                "cancelGeneration" -> {
+                    ragStream.cancel()
+                    result.success(null)
+                }
                 else -> {
                     result.notImplemented()
                 }

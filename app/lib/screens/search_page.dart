@@ -64,6 +64,7 @@ class _SearchPageState extends State<SearchPage> {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   bool _useRetrieval = true;
+  bool _isGenerating = false;
 
   static const _modelContextTokens = 32000; // Gemma 3n E4B context window
   static const _charsPerToken = 4; // rough estimate for English text
@@ -97,9 +98,10 @@ class _SearchPageState extends State<SearchPage> {
 
   /// Request the model to generate a response — calls into Android code
   Future<void> _generateResponse(String prompt) async {
-    if (prompt.trim().isEmpty) return;
+    if (prompt.trim().isEmpty || _isGenerating) return;
     final (history, historyTruncated) = _buildHistory();
     setState(() {
+      _isGenerating = true;
       _messages.add(ChatMessage(role: 'user', text: prompt));
       _messages.add(ChatMessage(role: 'assistant', text: '', isLoading: true));
     });
@@ -126,6 +128,25 @@ class _SearchPageState extends State<SearchPage> {
     }
   }
 
+  Future<void> _cancelGeneration() async {
+    try {
+      await platform.invokeMethod("cancelGeneration");
+    } on PlatformException catch (e) {
+      debugPrint('Platform error while cancelling: $e');
+    }
+    setState(() {
+      _isGenerating = false;
+      if (_messages.isNotEmpty && _messages.last.role == 'assistant') {
+        final last = _messages.last;
+        if (last.text.isEmpty) {
+          _messages.removeLast();
+        } else {
+          _messages[_messages.length - 1] = last.copyWith(isLoading: false);
+        }
+      }
+    });
+  }
+
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
@@ -141,11 +162,19 @@ class _SearchPageState extends State<SearchPage> {
   void _startListeningForLatestMessage() {
     _latestMessageSubscription = latestMessageStream
         .receiveBroadcastStream()
-        .listen(_onLatestMessageUpdate);
+        .listen(
+          _onLatestMessageUpdate,
+          onError: (_) => setState(() => _isGenerating = false),
+        );
   }
 
   /// Update the latest assistant message as the model streams tokens
   void _onLatestMessageUpdate(value) {
+    if (!_isGenerating) return; // ignore stray events after cancel
+    if (value.containsKey("done")) {
+      setState(() => _isGenerating = false);
+      return;
+    }
     setState(() {
       final lastIdx = _messages.length - 1;
       if (lastIdx < 0 || _messages[lastIdx].role != 'assistant') return;
@@ -154,7 +183,7 @@ class _SearchPageState extends State<SearchPage> {
           text: value["response"],
           isLoading: false,
         );
-      } else {
+      } else if (value.containsKey("results")) {
         final List<Object?> docs = value["results"];
         _messages[lastIdx] = _messages[lastIdx].copyWith(
           retrievedDocs: docs.map<String>((a) => a as String).toList(),
@@ -314,14 +343,24 @@ class _SearchPageState extends State<SearchPage> {
               onPressed: () => setState(() => _useRetrieval = !_useRetrieval),
             ),
             const SizedBox(width: 4),
-            IconButton.filled(
-              icon: const Icon(Icons.send),
-              style: IconButton.styleFrom(
-                backgroundColor: const Color(0xffcc5500),
-                foregroundColor: Colors.white,
+            if (_isGenerating)
+              IconButton.filled(
+                icon: const Icon(Icons.stop),
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xffcc5500),
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: _cancelGeneration,
+              )
+            else
+              IconButton.filled(
+                icon: const Icon(Icons.send),
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xffcc5500),
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () => _generateResponse(_textController.text),
               ),
-              onPressed: () => _generateResponse(_textController.text),
-            ),
           ],
         ),
       ),

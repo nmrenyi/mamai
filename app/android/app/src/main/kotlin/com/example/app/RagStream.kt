@@ -48,6 +48,14 @@ class RagStream(application: Application, val lifecycleScope: LifecycleCoroutine
         ragPipeline // Force lazy initialization to happen now
     }
 
+    // Cancel any in-progress generation
+    fun cancel() {
+        synchronized(this) {
+            currentJob?.cancel()
+            currentJob = null
+        }
+    }
+
     // Generate a response to the prompt, sending updates to Flutter as it is being generated
     fun generateResponse(prompt: String, history: List<Map<String, String>>, useRetrieval: Boolean = true) {
         synchronized(this) {
@@ -67,6 +75,7 @@ class RagStream(application: Application, val lifecycleScope: LifecycleCoroutine
                             )
 
                             if (done) {
+                                latestGeneration?.success(hashMapOf("done" to true))
                                 synchronized(this@RagStream) {
                                     currentJob = null
                                 }
