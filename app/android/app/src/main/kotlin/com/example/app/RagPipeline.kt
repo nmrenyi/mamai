@@ -209,31 +209,36 @@ class RagPipeline(application: Application) {
     /**
      * Builds a prompt using the Gemma IT chat template.
      * Format: <start_of_turn>user / <end_of_turn> / <start_of_turn>model
-     * System instructions and context are prepended inside the first user turn.
+     * System instructions go in the first user turn. Retrieved context is placed
+     * immediately before the query it was retrieved for (the current/final user turn).
      */
     private fun buildPrompt(context: String, history: List<Map<String, String>>, query: String): String {
         val sb = StringBuilder()
 
-        // Open first user turn — contains system instructions and optional context
+        // First user turn — system instructions only
         sb.append("<start_of_turn>user\n")
         sb.append(SYSTEM_INSTRUCTIONS)
-        if (context.isNotEmpty()) {
-            sb.append("\nRELEVANT CONTEXT FROM MEDICAL GUIDELINES:\n$context\n")
-        }
 
         if (history.isEmpty()) {
-            // No history: current query closes the first (and only) user turn
+            // No history: context + current query go in the first (and only) user turn
+            if (context.isNotEmpty()) {
+                sb.append("\nRELEVANT CONTEXT FROM MEDICAL GUIDELINES:\n$context\n")
+            }
             sb.append("\nQuestion: $query<end_of_turn>\n")
         } else {
-            // History: first historical user message closes the first turn (after system/context)
+            // History: first historical user message closes the first turn (system instructions only)
             sb.append("\nQuestion: ${history.first()["text"]}<end_of_turn>\n")
             // Remaining history turns alternate model/user
             for (turn in history.drop(1)) {
                 val role = if (turn["role"] == "user") "user" else "model"
                 sb.append("<start_of_turn>$role\n${turn["text"]}<end_of_turn>\n")
             }
-            // Current query as the final user turn
-            sb.append("<start_of_turn>user\n$query<end_of_turn>\n")
+            // Current query as the final user turn, with retrieved context immediately before it
+            sb.append("<start_of_turn>user\n")
+            if (context.isNotEmpty()) {
+                sb.append("RELEVANT CONTEXT FROM MEDICAL GUIDELINES:\n$context\n\n")
+            }
+            sb.append("$query<end_of_turn>\n")
         }
 
         // Trigger generation — no closing <end_of_turn>
