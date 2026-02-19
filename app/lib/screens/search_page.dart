@@ -109,7 +109,20 @@ class _SearchPageState extends State<SearchPage> {
 
   /// Request the model to generate a response — calls into Android code
   Future<void> _generateResponse(String prompt) async {
-    if (prompt.trim().isEmpty || _isGenerating) return;
+    if (prompt.trim().isEmpty) return;
+    // Cancel any in-flight generation before starting a new one
+    if (_isGenerating) {
+      try {
+        await platform.invokeMethod("cancelGeneration");
+      } on PlatformException catch (e) {
+        debugPrint('Platform error while cancelling previous generation: $e');
+      }
+      _isGenerating = false;
+      // Remove the in-progress assistant message
+      if (_messages.isNotEmpty && _messages.last.role == 'assistant') {
+        _messages.removeLast();
+      }
+    }
     final (history, historyTruncated) = _buildHistory();
     setState(() {
       _isGenerating = true;
