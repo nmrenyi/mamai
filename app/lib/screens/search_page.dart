@@ -128,8 +128,10 @@ class _SearchPageState extends State<SearchPage> {
           }
         } else {
           // Partial response exists — keep the pair, mark as cancelled
-          _messages[_messages.length - 1] =
-              last.copyWith(isLoading: false, wasCancelled: true);
+          _messages[_messages.length - 1] = last.copyWith(
+            isLoading: false,
+            wasCancelled: true,
+          );
         }
       }
     }
@@ -257,7 +259,6 @@ class _SearchPageState extends State<SearchPage> {
 
   @override
   Widget build(BuildContext context) {
-
     const examples = [
       "Baby continuous crying",
       "Preparing for home birth",
