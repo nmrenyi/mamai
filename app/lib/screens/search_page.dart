@@ -9,24 +9,28 @@ class ChatMessage {
   final String text;
   final List<String> retrievedDocs;
   final bool isLoading;
+  final bool wasCancelled;
 
   const ChatMessage({
     required this.role,
     required this.text,
     this.retrievedDocs = const [],
     this.isLoading = false,
+    this.wasCancelled = false,
   });
 
   ChatMessage copyWith({
     String? text,
     List<String>? retrievedDocs,
     bool? isLoading,
+    bool? wasCancelled,
   }) {
     return ChatMessage(
       role: role,
       text: text ?? this.text,
       retrievedDocs: retrievedDocs ?? this.retrievedDocs,
       isLoading: isLoading ?? this.isLoading,
+      wasCancelled: wasCancelled ?? this.wasCancelled,
     );
   }
 }
@@ -138,11 +142,10 @@ class _SearchPageState extends State<SearchPage> {
       _isGenerating = false;
       if (_messages.isNotEmpty && _messages.last.role == 'assistant') {
         final last = _messages.last;
-        if (last.text.isEmpty) {
-          _messages.removeLast();
-        } else {
-          _messages[_messages.length - 1] = last.copyWith(isLoading: false);
-        }
+        _messages[_messages.length - 1] = last.copyWith(
+          isLoading: false,
+          wasCancelled: true,
+        );
       }
     });
   }
@@ -529,10 +532,10 @@ class _AssistantCardState extends State<_AssistantCard> {
                   _ThinkingIndicator(hasDocs: message.retrievedDocs.isNotEmpty)
                 else if (message.text.isNotEmpty)
                   Padding(
-                    padding: const EdgeInsetsDirectional.only(
+                    padding: EdgeInsetsDirectional.only(
                       start: 16,
                       end: 24,
-                      bottom: 16,
+                      bottom: message.wasCancelled ? 8 : 16,
                     ),
                     child: SelectionContainer.disabled(
                       child: MarkdownBlock(
@@ -542,6 +545,22 @@ class _AssistantCardState extends State<_AssistantCard> {
                             PConfig(textStyle: const TextStyle(fontSize: 18)),
                           ],
                         ),
+                      ),
+                    ),
+                  ),
+                if (message.wasCancelled)
+                  const Padding(
+                    padding: EdgeInsetsDirectional.only(
+                      start: 16,
+                      end: 24,
+                      bottom: 12,
+                    ),
+                    child: Text(
+                      'Response was interrupted.',
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontSize: 14,
+                        fontStyle: FontStyle.italic,
                       ),
                     ),
                   ),

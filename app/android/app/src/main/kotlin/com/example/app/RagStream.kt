@@ -3,6 +3,7 @@ package com.example.app
 import android.app.Application
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.lifecycle.LifecycleCoroutineScope
 import com.google.ai.edge.localagents.rag.models.LanguageModelResponse
 import io.flutter.plugin.common.EventChannel
@@ -51,8 +52,11 @@ class RagStream(application: Application, val lifecycleScope: LifecycleCoroutine
     // Cancel any in-progress generation
     fun cancel() {
         synchronized(this) {
-            currentJob?.cancel()
-            currentJob = null
+            if (currentJob != null) {
+                Log.w("mam-ai", "[CANCEL] generation cancelled by user")
+                currentJob?.cancel()
+                currentJob = null
+            }
         }
     }
 
