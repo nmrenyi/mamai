@@ -610,14 +610,6 @@ class _SearchPageState extends State<SearchPage> {
                     },
                   ),
           ),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 6),
-            child: Text(
-              'MAM-AI can make mistakes. Please double-check responses.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: Colors.black45),
-            ),
-          ),
           _buildInputBar(),
         ],
       ),
@@ -911,6 +903,15 @@ class _AssistantCardState extends State<_AssistantCard> {
               ],
             ),
           ),
+          // Disclaimer shown once generation is complete
+          if (!message.isLoading && !message.wasCancelled && message.text.isNotEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 4, left: 4),
+              child: Text(
+                'MAM-AI can make mistakes. Always verify with a senior clinician.',
+                style: TextStyle(fontSize: 11, color: Colors.black38),
+              ),
+            ),
         ],
       ),
     );
