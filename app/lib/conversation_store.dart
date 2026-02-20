@@ -85,6 +85,15 @@ class ConversationStore {
     }
   }
 
+  /// Delete all conversations.
+  Future<void> clearAll() async {
+    try {
+      await _write([]);
+    } catch (e) {
+      debugPrint('[ConversationStore] Error clearing: $e');
+    }
+  }
+
   /// Delete a conversation by id.
   Future<void> delete(String id) async {
     try {

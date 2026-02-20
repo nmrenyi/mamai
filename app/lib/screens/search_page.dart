@@ -897,6 +897,47 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
                     },
                   ),
           ),
+          if (_conversations.isNotEmpty) ...[
+            const Divider(height: 1),
+            SafeArea(
+              top: false,
+              child: ListTile(
+                leading: const Icon(Icons.delete_forever, color: Colors.red),
+                title: const Text(
+                  'Clear all conversations',
+                  style: TextStyle(color: Colors.red),
+                ),
+                onTap: () async {
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Clear all conversations?'),
+                      content: const Text(
+                        'This will permanently delete all past conversations.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: const Text('Cancel'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, true),
+                          child: const Text(
+                            'Clear all',
+                            style: TextStyle(color: Colors.red),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) {
+                    await widget.store.clearAll();
+                    await reload();
+                  }
+                },
+              ),
+            ),
+          ],
         ],
       ),
     );
