@@ -74,6 +74,14 @@ class _SearchPageState extends State<SearchPage> {
   String? _currentConversationId;
   final GlobalKey<_ConversationDrawerState> _drawerKey = GlobalKey();
 
+  // Background generation state — active when the user navigates away while
+  // generation is still running. Incoming events are routed here instead of
+  // _messages so the response is captured and saved without interruption.
+  bool _backgroundGenerating = false;
+  String? _backgroundConvId;
+  String _backgroundConvTitle = '';
+  List<Map<String, String>> _backgroundMessages = [];
+
   static const _modelContextTokens = 32000; // Gemma 3n E4B context window
   static const _charsPerToken = 4; // rough estimate for English text
   static const _reservedChars =
@@ -114,6 +122,37 @@ class _SearchPageState extends State<SearchPage> {
   /// Request the model to generate a response — calls into Android code
   Future<void> _generateResponse(String prompt) async {
     if (prompt.trim().isEmpty) return;
+    // If a previous conversation is still generating in the background, ask
+    // the user to cancel it before sending a new message here.
+    if (_backgroundGenerating && context.mounted) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Cancel previous generation?'),
+          content: const Text(
+            'A response is still being generated for a previous conversation. '
+            'Cancel it to send this message?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Wait'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Cancel and send'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+      try {
+        await platform.invokeMethod("cancelGeneration");
+      } on PlatformException catch (e) {
+        debugPrint('Platform error while cancelling background generation: $e');
+      }
+      await _saveAndClearBackground();
+    }
     // Cancel any in-flight generation before starting a new one
     if (_isGenerating) {
       try {
@@ -188,38 +227,9 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Future<void> _startNewConversation() async {
-    if (_isGenerating && context.mounted) {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Stop current generation?'),
-          content: const Text(
-            'Starting a new conversation will stop the response currently being generated.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Stop and start new'),
-            ),
-          ],
-        ),
-      );
-      if (confirmed != true) return;
-    }
     await _saveCurrentConversation();
-    if (_isGenerating) {
-      try {
-        await platform.invokeMethod("cancelGeneration");
-      } on PlatformException catch (e) {
-        debugPrint('Platform error while cancelling on new conversation: $e');
-      }
-    }
+    if (_isGenerating) _setupBackgroundTracking(); // continues in background
     setState(() {
-      _isGenerating = false;
       _currentConversationId = null;
       _messages.clear();
     });
@@ -255,41 +265,93 @@ class _SearchPageState extends State<SearchPage> {
     );
   }
 
+  /// Moves the ongoing generation to background tracking so the user can
+  /// navigate away without losing the in-progress response.
+  /// [_saveCurrentConversation] must have been called first so that
+  /// [_currentConversationId] is already set.
+  void _setupBackgroundTracking() {
+    if (_currentConversationId == null) return; // defensive: no content to track
+    _backgroundConvId = _currentConversationId;
+    final firstUser = _messages.firstWhere(
+      (m) => m.role == 'user',
+      orElse: () => const ChatMessage(role: 'user', text: ''),
+    );
+    _backgroundConvTitle = firstUser.text.length > 60
+        ? '${firstUser.text.substring(0, 60)}…'
+        : firstUser.text;
+    _backgroundMessages = _messages
+        .where((m) => m.text.isNotEmpty && !m.isLoading)
+        .map((m) => <String, String>{'role': m.role, 'text': m.text})
+        .toList();
+    // Ensure an assistant slot exists to receive further streaming tokens.
+    if (_backgroundMessages.isEmpty ||
+        _backgroundMessages.last['role'] != 'assistant') {
+      _backgroundMessages.add(<String, String>{'role': 'assistant', 'text': ''});
+    }
+    _backgroundGenerating = true;
+    _isGenerating = false; // hide stop button in the new conversation view
+  }
+
+  /// Saves the background buffer to disk and clears background state.
+  Future<void> _saveAndClearBackground() async {
+    final id = _backgroundConvId;
+    final title = _backgroundConvTitle;
+    final messages = List<Map<String, String>>.from(_backgroundMessages);
+    _backgroundGenerating = false;
+    _backgroundConvId = null;
+    _backgroundConvTitle = '';
+    _backgroundMessages = [];
+    if (id == null) return;
+    final completed = messages.where((m) => m['text']!.isNotEmpty).toList();
+    if (completed.every((m) => m['role'] != 'user')) return;
+    await _store.save(Conversation(
+      id: id,
+      title: title,
+      timestamp: DateTime.now(),
+      messages: completed,
+    ));
+  }
+
   /// Restore a past conversation and close the drawer.
   Future<void> _loadConversation(
     BuildContext drawerContext,
     Conversation conversation,
   ) async {
-    if (_isGenerating && context.mounted) {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Stop current generation?'),
-          content: const Text(
-            'Loading a past conversation will stop the response currently being generated.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Stop and load'),
-            ),
-          ],
-        ),
-      );
-      if (confirmed != true) return;
-      try {
-        await platform.invokeMethod("cancelGeneration");
-      } on PlatformException catch (e) {
-        debugPrint('Platform error while cancelling on load: $e');
-      }
+    if (_isGenerating) {
+      await _saveCurrentConversation();
+      _setupBackgroundTracking(); // continues in background
     }
     if (context.mounted) Navigator.pop(drawerContext);
+
+    // If loading the conversation that is currently generating in background,
+    // bring it back to the foreground so the response is visible again.
+    if (_backgroundGenerating && _backgroundConvId == conversation.id) {
+      final bgMessages = List<Map<String, String>>.from(_backgroundMessages);
+      setState(() {
+        _currentConversationId = conversation.id;
+        _backgroundGenerating = false;
+        _backgroundConvId = null;
+        _backgroundConvTitle = '';
+        _backgroundMessages = [];
+        _isGenerating = true;
+        _messages
+          ..clear()
+          ..addAll(
+            bgMessages.map(
+              (m) => ChatMessage(role: m['role']!, text: m['text']!),
+            ),
+          );
+        // Re-attach the loading indicator to the last assistant message.
+        if (_messages.isNotEmpty && _messages.last.role == 'assistant') {
+          _messages[_messages.length - 1] =
+              _messages.last.copyWith(isLoading: true);
+        }
+      });
+      _scrollToBottom();
+      return;
+    }
+
     setState(() {
-      _isGenerating = false;
       _currentConversationId = conversation.id;
       _messages
         ..clear()
@@ -318,17 +380,41 @@ class _SearchPageState extends State<SearchPage> {
         .receiveBroadcastStream()
         .listen(
           _onLatestMessageUpdate,
-          onError: (_) => setState(() => _isGenerating = false),
+          onError: (_) {
+            _saveAndClearBackground(); // fire-and-forget
+            if (mounted) setState(() => _isGenerating = false);
+          },
         );
   }
 
-  /// Update the latest assistant message as the model streams tokens
+  /// Update the latest assistant message as the model streams tokens.
+  /// Routes events to the background buffer when the user has navigated away.
   void _onLatestMessageUpdate(dynamic value) {
     if (value is! Map) return; // guard against unexpected non-Map events
-    if (!_isGenerating) return; // ignore stray events after cancel
+    if (!_isGenerating && !_backgroundGenerating) return; // stray event
+
+    if (_backgroundGenerating) {
+      // User navigated away — update background buffer (no setState needed).
+      if (value.containsKey("done")) {
+        _saveAndClearBackground(); // fire-and-forget
+        if (mounted) _drawerKey.currentState?.reload();
+        return;
+      }
+      if (value.containsKey("response")) {
+        final text = value["response"] as String;
+        if (_backgroundMessages.isNotEmpty &&
+            _backgroundMessages.last['role'] == 'assistant') {
+          _backgroundMessages[_backgroundMessages.length - 1] =
+              <String, String>{'role': 'assistant', 'text': text};
+        }
+      }
+      return;
+    }
+
+    // _isGenerating == true: update the visible conversation.
     if (value.containsKey("done")) {
       setState(() => _isGenerating = false);
-      _saveCurrentConversation(); // fire-and-forget background save
+      _saveCurrentConversation(); // fire-and-forget
       return;
     }
     setState(() {
