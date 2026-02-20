@@ -3,26 +3,17 @@ package com.example.app
 import android.app.Application
 import android.content.Context
 import android.util.Log
-import com.google.ai.edge.localagents.rag.chains.ChainConfig
-import com.google.ai.edge.localagents.rag.chains.RetrievalAndInferenceChain
 import com.google.ai.edge.localagents.rag.memory.DefaultSemanticTextMemory
 import com.google.ai.edge.localagents.rag.memory.SqliteVectorStore
-import com.google.ai.edge.localagents.rag.models.AsyncProgressListener
 import com.google.ai.edge.localagents.rag.models.Embedder
 import com.google.ai.edge.localagents.rag.models.GeckoEmbeddingModel
-import com.google.ai.edge.localagents.rag.models.LanguageModelResponse
-import com.google.ai.edge.localagents.rag.models.MediaPipeLlmBackend
-import com.google.ai.edge.localagents.rag.prompt.PromptBuilder
 import com.google.ai.edge.localagents.rag.retrieval.RetrievalConfig
 import com.google.ai.edge.localagents.rag.retrieval.RetrievalConfig.TaskType
 import com.google.ai.edge.localagents.rag.retrieval.RetrievalRequest
 import com.google.common.collect.ImmutableList
-import com.google.common.util.concurrent.FutureCallback
-import com.google.common.util.concurrent.Futures
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import com.google.mediapipe.tasks.genai.llminference.LlmInference.LlmInferenceOptions
 import com.google.mediapipe.tasks.genai.llminference.LlmInferenceSession
-import io.flutter.plugin.common.EventChannel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.guava.await
@@ -36,27 +27,28 @@ import kotlin.jvm.optionals.getOrNull
 class RagPipeline(application: Application) {
     private val baseFolder = application.getExternalFilesDir(null).toString() + "/"
     private val mediaPipeLanguageModelOptions: LlmInferenceOptions =
-        LlmInferenceOptions.builder().setModelPath(
-            baseFolder + GEMMA_MODEL
-        ).setPreferredBackend(LlmInference.Backend.CPU).setMaxTokens(4096).build()
+        LlmInferenceOptions.builder()
+            .setModelPath(baseFolder + GEMMA_MODEL)
+            .setPreferredBackend(LlmInference.Backend.CPU)
+            .setMaxTokens(32000)  // Gemma 3n E4B IT has 32k context window
+            .build()
     private val mediaPipeLanguageModelSessionOptions: LlmInferenceSession.LlmInferenceSessionOptions =
-        LlmInferenceSession.LlmInferenceSessionOptions.builder().setTemperature(1.0f)
-            .setTopP(0.95f).setTopK(64).build()
-    private val mediaPipeLanguageModel: MediaPipeLlmBackend
+        LlmInferenceSession.LlmInferenceSessionOptions.builder()
+            .setTemperature(1.0f)
+            .setTopP(0.95f)
+            .setTopK(64)
+            .build()
+
+    // Owned directly so we can create/cancel sessions and call cancelGenerateResponseAsync()
+    @Volatile private lateinit var llmInference: LlmInference
+    @Volatile private var currentSession: LlmInferenceSession? = null
+
     private val embedder: Embedder<String>
     private val textMemory: DefaultSemanticTextMemory
-    private val config: ChainConfig<String>
-    private val retrievalAndInferenceChain: RetrievalAndInferenceChain
 
     init {
         val t0 = System.currentTimeMillis()
         Log.w("mam-ai", "[TIMING] Thread: ${Thread.currentThread().name} — starting heavy init")
-
-        mediaPipeLanguageModel = MediaPipeLlmBackend(
-            application.applicationContext, mediaPipeLanguageModelOptions,
-            mediaPipeLanguageModelSessionOptions
-        )
-        Log.w("mam-ai", "[TIMING] MediaPipeLlmBackend constructor: ${System.currentTimeMillis() - t0}ms")
 
         val t1 = System.currentTimeMillis()
         embedder = GeckoEmbeddingModel(
@@ -70,12 +62,7 @@ class RagPipeline(application: Application) {
         textMemory = DefaultSemanticTextMemory(
             SqliteVectorStore(768, baseFolder + "embeddings.sqlite"), embedder
         )
-        config = ChainConfig.create(
-            mediaPipeLanguageModel, PromptBuilder(PROMPT_TEMPLATE),
-            textMemory
-        )
-        retrievalAndInferenceChain = RetrievalAndInferenceChain(config)
-        Log.w("mam-ai", "[TIMING] Remaining init (memory+config+chain): ${System.currentTimeMillis() - t2}ms")
+        Log.w("mam-ai", "[TIMING] Remaining init (memory): ${System.currentTimeMillis() - t2}ms")
         Log.w("mam-ai", "[TIMING] Total main-thread init: ${System.currentTimeMillis() - t0}ms")
         val rt = Runtime.getRuntime()
         Log.w("mam-ai", "[MEMORY] heap: ${rt.totalMemory() / 1024 / 1024}MB used, ${rt.freeMemory() / 1024 / 1024}MB free, ${rt.maxMemory() / 1024 / 1024}MB max")
@@ -91,34 +78,38 @@ class RagPipeline(application: Application) {
 
     private val initStartTime = System.currentTimeMillis()
 
-    /// Load the model
+    // LlmInference.createFromOptions() is a blocking call that loads the model file.
+    // Run it on a background thread so we don't block the main thread.
     init {
-        Futures.addCallback(
-            mediaPipeLanguageModel.initialize(),
-            object : FutureCallback<Boolean> {
-                override fun onSuccess(result: Boolean) {
-                    Log.w("mam-ai", "[TIMING] LLM initialize() completed: ${System.currentTimeMillis() - initStartTime}ms after construction")
-                    val rt = Runtime.getRuntime()
-                    Log.w("mam-ai", "[MEMORY] post-init heap: ${rt.totalMemory() / 1024 / 1024}MB used, ${rt.freeMemory() / 1024 / 1024}MB free, ${rt.maxMemory() / 1024 / 1024}MB max")
-                    Log.i("mam-ai", "LLM initialized!")
-                    // UNCOMMENT IF YOU WANT TO ADD MORE CONTEXT
-                    // memorizeChunks(application.applicationContext, "mamai_trim.txt")
-                    // Log.i("mam-ai", "Chunks loaded!")
+        Executors.newSingleThreadExecutor().execute {
+            try {
+                Log.w("mam-ai", "[TIMING] LlmInference.createFromOptions starting...")
+                llmInference = LlmInference.createFromOptions(
+                    application.applicationContext,
+                    mediaPipeLanguageModelOptions
+                )
+                Log.w("mam-ai", "[TIMING] LlmInference ready: ${System.currentTimeMillis() - initStartTime}ms after construction")
+                val rt = Runtime.getRuntime()
+                Log.w("mam-ai", "[MEMORY] post-init heap: ${rt.totalMemory() / 1024 / 1024}MB used, ${rt.freeMemory() / 1024 / 1024}MB free, ${rt.maxMemory() / 1024 / 1024}MB max")
+                Log.i("mam-ai", "LLM initialized!")
+                // UNCOMMENT IF YOU WANT TO ADD MORE CONTEXT
+                // memorizeChunks(application.applicationContext, "mamai_trim.txt")
+                // Log.i("mam-ai", "Chunks loaded!")
 
-                    llmReady = true
-                    onLlmReady.trySend(Unit)
-                }
+                llmReady = true
+                onLlmReady.trySend(Unit)
+            } catch (t: Throwable) {
+                Log.e("mam-ai", "[ERROR] LLM initialization failed after ${System.currentTimeMillis() - initStartTime}ms", t)
+                Log.e("mam-ai", "[ERROR] LLM will not be available. App may crash on query attempts.")
+                // Signal anyway to unblock waiting coroutines
+                onLlmReady.trySend(Unit)
+            }
+        }
+    }
 
-                override fun onFailure(t: Throwable) {
-                    Log.e("mam-ai", "[ERROR] LLM initialization failed after ${System.currentTimeMillis() - initStartTime}ms", t)
-                    Log.e("mam-ai", "[ERROR] LLM will not be available. App may crash on query attempts.")
-                    // Signal the channel anyway to unblock waiting coroutines
-                    // They will fail later when trying to use the uninitialized model
-                    onLlmReady.trySend(Unit)
-                }
-            },
-            Executors.newSingleThreadExecutor(),
-        )
+    /** Abort the currently running session's native inference. */
+    fun cancelGeneration() {
+        currentSession?.cancelGenerateResponseAsync()
     }
 
     // Memorise the given file (from inside the app context)
@@ -161,15 +152,16 @@ class RagPipeline(application: Application) {
 
     /** Stores input texts in the semantic text memory. */
     private fun memorize(facts: List<String>) {
-        val future = config.semanticMemory.getOrNull()?.recordBatchedMemoryItems(ImmutableList.copyOf(facts))
-        future?.get()
+        textMemory.recordBatchedMemoryItems(ImmutableList.copyOf(facts)).get()
     }
 
-    /** Generates the response from the LLM. */
+    /** Generates the response from the LLM with conversation history support. */
     suspend fun generateResponse(
         prompt: String,
+        history: List<Map<String, String>>,
+        useRetrieval: Boolean = true,
         retrievalListener: (docs: List<String>) -> Unit,
-        generationListener: AsyncProgressListener<LanguageModelResponse>?,
+        generationListener: (partial: String, done: Boolean) -> Unit,
     ): String =
         coroutineScope {
             // Wait for llm to be ready via rendezvous channel
@@ -181,28 +173,104 @@ class RagPipeline(application: Application) {
                 }
             }
 
-            Log.w("mam-ai", "[QUERY] prompt: \"${prompt.take(80)}...\"")
+            Log.w("mam-ai", "[QUERY] prompt: \"${prompt.take(80)}...\", history turns: ${history.size}, retrieval: $useRetrieval")
             val qStart = System.currentTimeMillis()
 
-            // Get relevant docs - this is actually duplicated by the retrievalAndInferenceChain.invoke
-            // call but we also want to show the docs themselves to the user, so we have to do it
-            // twice to get the actual output (usually it's passed to the model only)
-            val retrievalRequest =
-                RetrievalRequest.create(
+            val docs = if (useRetrieval) {
+                val retrievalRequest = RetrievalRequest.create(
                     prompt,
                     RetrievalConfig.create(3, 0.0f, TaskType.RETRIEVAL_QUERY)
                 )
-            val retrievalResults = textMemory.retrieveResults(retrievalRequest).await().getEntities().map { e -> e.data }.toList()
-            Log.w("mam-ai", "[TIMING] retrieval (embed + vector search): ${System.currentTimeMillis() - qStart}ms, ${retrievalResults.size} docs")
-            retrievalListener(retrievalResults);
+                val results = textMemory.retrieveResults(retrievalRequest).await().getEntities().map { e -> e.data }.toList()
+                Log.w("mam-ai", "[TIMING] retrieval (embed + vector search): ${System.currentTimeMillis() - qStart}ms, ${results.size} docs")
+                retrievalListener(results)
+                Log.w("mam-ai", "[RETRIEVAL] docs sent to Flutter, starting generation")
+                results
+            } else {
+                Log.w("mam-ai", "[RETRIEVAL] skipped by user")
+                emptyList()
+            }
 
-            // Get the model output
+            // Construct the full prompt using Gemma IT chat template
+            val contextStr = docs.joinToString("\n\n")
+            val fullPrompt = buildPrompt(contextStr, history, prompt)
+
+            if (BuildConfig.DEBUG) {
+                Log.w("mam-ai", "[PROMPT] full prompt sent to LLM:\n$fullPrompt")
+            } else {
+                Log.w("mam-ai", "[PROMPT] length=${fullPrompt.length} history=${history.size} docs=${docs.size}")
+            }
+
             val genStart = System.currentTimeMillis()
-            val result = retrievalAndInferenceChain.invoke(retrievalRequest, generationListener).await().text
-            Log.w("mam-ai", "[TIMING] generation: ${System.currentTimeMillis() - genStart}ms, ${result.length} chars")
-            Log.w("mam-ai", "[TIMING] total query: ${System.currentTimeMillis() - qStart}ms")
-            result
+
+            // Create a fresh session for each query. We build the full Gemma IT prompt ourselves
+            // (including all history), so the session must not accumulate its own context.
+            val session = LlmInferenceSession.createFromOptions(
+                llmInference,
+                mediaPipeLanguageModelSessionOptions
+            )
+
+            try {
+                session.addQueryChunk(fullPrompt)
+                // Expose the session only after addQueryChunk so cancelGeneration()
+                // cannot call cancelGenerateResponseAsync() before generation starts
+                currentSession = session
+                val result = session.generateResponseAsync { partial, done ->
+                    generationListener(partial, done)
+                }.await()
+                Log.w("mam-ai", "[TIMING] generation: ${System.currentTimeMillis() - genStart}ms, ${result.length} chars")
+                Log.w("mam-ai", "[TIMING] total query: ${System.currentTimeMillis() - qStart}ms")
+                result
+            } finally {
+                // Null out before close so cancelGeneration() on the main thread cannot
+                // call cancelGenerateResponseAsync() on an already-closed session
+                currentSession = null
+                session.close()
+            }
         }
+
+    /**
+     * Builds a prompt using the Gemma IT chat template.
+     * Format: <start_of_turn>user / <end_of_turn> / <start_of_turn>model
+     * System instructions go in the first user turn. Retrieved context is placed
+     * immediately before the query it was retrieved for (the current/final user turn).
+     */
+    private fun buildPrompt(context: String, history: List<Map<String, String>>, query: String): String {
+        val sb = StringBuilder()
+
+        // First user turn — system instructions only
+        sb.append("<start_of_turn>user\n")
+        sb.append(SYSTEM_INSTRUCTIONS)
+
+        if (history.isEmpty()) {
+            // No history: context + current query go in the first (and only) user turn
+            if (context.isNotEmpty()) {
+                sb.append("\nRELEVANT CONTEXT FROM MEDICAL GUIDELINES:\n$context\n")
+            }
+            sb.append("\nQuestion: $query<end_of_turn>\n")
+        } else {
+            // History: first historical user message closes the first turn (system instructions only)
+            sb.append("\nQuestion: ${history.first()["text"]}<end_of_turn>\n")
+            // Remaining history turns alternate model/user
+            for (turn in history.drop(1)) {
+                if (turn["role"] == "user") {
+                    sb.append("<start_of_turn>user\nQuestion: ${turn["text"]}<end_of_turn>\n")
+                } else {
+                    sb.append("<start_of_turn>model\n${turn["text"]}<end_of_turn>\n")
+                }
+            }
+            // Current query as the final user turn, with retrieved context immediately before it
+            sb.append("<start_of_turn>user\n")
+            if (context.isNotEmpty()) {
+                sb.append("RELEVANT CONTEXT FROM MEDICAL GUIDELINES:\n$context\n\n")
+            }
+            sb.append("Question: $query<end_of_turn>\n")
+        }
+
+        // Trigger generation — no closing <end_of_turn>
+        sb.append("<start_of_turn>model\n")
+        return sb.toString()
+    }
 
     companion object {
         private const val USE_GPU_FOR_EMBEDDINGS = false
@@ -212,27 +280,30 @@ class RagPipeline(application: Application) {
         private const val TOKENIZER_MODEL = "sentencepiece.model"
         private const val GECKO_MODEL = "Gecko_1024_quant.tflite"
 
-        // The prompt template for the RetrievalAndInferenceChain. It takes two inputs: {0}, which is the retrieved context, and {1}, which is the user's query.
-        private const val PROMPT_TEMPLATE: String =
-            "CONTEXT FOR THE QUERY BELOW: {0}.\n" +
-                    "<separator>\n" +
-                    "You are a smart search engine designed to support nurses and midwives in neonatal care. Speak in simple, clear English suitable for a second-language speaker. Be impartial and impersonal - you are creating a summary for the user, not chatting with them. Give accurate, medically grounded information from reliable sources, orienting toward actionable steps for practical care. Keep answers short (prioritise conciseness and  and easy to understand, making use of bullet points.\n" +
-                    "\n" +
-                    "THE CONTEXT MAY OR MAY NOT BE RELEVANT, ONLY THE 3 MOST SIMILAR DOCUMENTS ARE RETRIEVED. IF NONE ARE RELEVANT, 3 IRRELEVANT DOCUMENTS WILL BE RETRIEVED. IGNORE THEM IN THIS CASE AND SAY THAT NOTHING RELEVANT WAS FOUND!\n" +
-                    "\n" +
-                    "If a user describes symptoms that could be urgent or dangerous—such as bleeding, severe pain, trouble breathing, fever in a newborn, or anything that sounds serious—tell them to contact a doctor, nurse, or emergency service right away. Do not try to diagnose emergencies.\n" +
-                    "\n" +
-                    "If you're unsure or don’t have enough information, say: “I'm not sure. It's best to ask a doctor or nurse.”\n" +
-                    "\n" +
-                    "Use the context provided to answer questions. If no context is available, give general advice based on trusted health guidelines.\n" +
-                    "\n" +
-                    "Never make guesses. Always prioritize safety and clarity. Remember that you have no physical body as an LLM and therefore in an emergency you need to ask the mother to ask a doctor or nurse.\n" +
-                    "\n" +
-                    "You can ONLY REPLY ONCE with a FULL summary. The user therefore CANNOT ask clarifying questions. Include ALL info in your first AND ONLY answer. In this way, you act like a more intelligent Google search.\n" +
-                    "\n" +
-                    "<separator>\n" +
-                    "Here is the user's question: {1}.\n" +
-                    "<separator>\n" +
-                    "INCLUDE ALL INFORMATION IN YOUR CONCISE, MINIMAL SUMMARY, SIMILAR TO A SEARCH ENGINE SUMMARY.\n"
+        private const val SYSTEM_INSTRUCTIONS =
+            "You are a medical assistant supporting nurses and midwives in Zanzibar. You help with neonatal care, maternal health, obstetrics, and related clinical topics.\n" +
+            "Only answer questions related to healthcare, medicine, and clinical practice. For unrelated topics, politely decline and redirect to medical questions.\n" +
+            "\n" +
+            "CONVERSATION: You may have access to previous messages in this conversation — use them to maintain context and avoid repeating information already covered.\n" +
+            "\n" +
+            "LANGUAGE & TONE: Use simple, short sentences. Avoid idioms and complex words. Answer in the language that the user is speaking. Be supportive, professional, and calm.\n" +
+            "\n" +
+            "FORMAT: Use markdown. Use bullet points for lists. Use **bold** for important terms. Use numbered steps for procedures. Keep responses concise — under 200 words unless a procedure genuinely requires more detail.\n" +
+            "\n" +
+            "USING CONTEXT: If retrieved context is provided, use it to answer. If the context is not relevant to the question, say so and answer from established medical knowledge instead.\n" +
+            "\n" +
+            "EMERGENCIES — if any of these are present, immediately tell the user to call a doctor or emergency service and state why:\n" +
+            "- Heavy bleeding (postpartum haemorrhage, antepartum haemorrhage)\n" +
+            "- Convulsions or loss of consciousness (eclampsia)\n" +
+            "- Cord prolapse or abnormal fetal presentation\n" +
+            "- Shoulder dystocia\n" +
+            "- Severe difficulty breathing (mother or newborn)\n" +
+            "- Fever in a newborn or signs of neonatal sepsis\n" +
+            "- Signs of maternal sepsis (fever, rapid pulse, confusion in the mother)\n" +
+            "- Severe abdominal pain\n" +
+            "\n" +
+            "MEDICATIONS: Do not recommend specific drug doses unless the retrieved context explicitly states them. If asked about dosing, advise the user to consult a senior clinician or the local formulary.\n" +
+            "\n" +
+            "UNCERTAINTY: If you are not sure, admit it clearly (e.g., \u201cI\u2019m not sure. Please ask a doctor or senior nurse.\u201d). Do not guess. Prioritize patient safety above all else."
     }
 }

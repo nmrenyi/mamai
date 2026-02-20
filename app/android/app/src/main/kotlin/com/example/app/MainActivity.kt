@@ -18,8 +18,7 @@ class MainActivity : FlutterActivity() {
         // Initialise the RAG output stream
         ragStream = RagStream(application, lifecycleScope)
 
-        // Two methods can be invoked from dart - one to make the LLM load, and one to get a
-        // response to a search query
+        // Three methods can be invoked from dart: ensureInit, generateResponse, cancelGeneration
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channel).setMethodCallHandler {
                 call, result ->
             when (call.method) {
@@ -30,8 +29,23 @@ class MainActivity : FlutterActivity() {
                     }
                 }
                 "generateResponse" -> {
-                    ragStream.generateResponse(call.arguments<String>()!!)
+                    @Suppress("UNCHECKED_CAST")
+                    val args = call.arguments<Map<String, Any>>()!!
+                    val prompt = args["prompt"] as String
+                    val history = (args["history"] as? List<*>)?.mapNotNull { item ->
+                        (item as? Map<*, *>)?.mapNotNull { (k, v) ->
+                            val key = k as? String ?: return@mapNotNull null
+                            val value = v as? String ?: return@mapNotNull null
+                            key to value
+                        }?.toMap()
+                    } ?: emptyList()
+                    val useRetrieval = args["useRetrieval"] as? Boolean ?: true
+                    ragStream.generateResponse(prompt, history, useRetrieval)
                     result.success(0)
+                }
+                "cancelGeneration" -> {
+                    ragStream.cancel()
+                    result.success(null)
                 }
                 else -> {
                     result.notImplemented()
