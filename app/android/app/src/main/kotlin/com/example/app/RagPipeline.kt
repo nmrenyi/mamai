@@ -5,18 +5,12 @@ import android.content.Context
 import android.util.Log
 import com.google.ai.edge.localagents.rag.memory.DefaultSemanticTextMemory
 import com.google.ai.edge.localagents.rag.memory.SqliteVectorStore
-import com.google.ai.edge.localagents.rag.models.AsyncProgressListener
 import com.google.ai.edge.localagents.rag.models.Embedder
 import com.google.ai.edge.localagents.rag.models.GeckoEmbeddingModel
-import com.google.ai.edge.localagents.rag.models.LanguageModelRequest
-import com.google.ai.edge.localagents.rag.models.LanguageModelResponse
-import com.google.ai.edge.localagents.rag.models.MediaPipeLlmBackend
 import com.google.ai.edge.localagents.rag.retrieval.RetrievalConfig
 import com.google.ai.edge.localagents.rag.retrieval.RetrievalConfig.TaskType
 import com.google.ai.edge.localagents.rag.retrieval.RetrievalRequest
 import com.google.common.collect.ImmutableList
-import com.google.common.util.concurrent.FutureCallback
-import com.google.common.util.concurrent.Futures
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import com.google.mediapipe.tasks.genai.llminference.LlmInference.LlmInferenceOptions
 import com.google.mediapipe.tasks.genai.llminference.LlmInferenceSession
@@ -33,26 +27,28 @@ import kotlin.jvm.optionals.getOrNull
 class RagPipeline(application: Application) {
     private val baseFolder = application.getExternalFilesDir(null).toString() + "/"
     private val mediaPipeLanguageModelOptions: LlmInferenceOptions =
-        LlmInferenceOptions.builder().setModelPath(
-            baseFolder + GEMMA_MODEL
-        ).setPreferredBackend(LlmInference.Backend.CPU).setMaxTokens(32000).build()  // Gemma 3n E4B IT has 32k context window
+        LlmInferenceOptions.builder()
+            .setModelPath(baseFolder + GEMMA_MODEL)
+            .setPreferredBackend(LlmInference.Backend.CPU)
+            .setMaxTokens(32000)  // Gemma 3n E4B IT has 32k context window
+            .build()
     private val mediaPipeLanguageModelSessionOptions: LlmInferenceSession.LlmInferenceSessionOptions =
-        LlmInferenceSession.LlmInferenceSessionOptions.builder().setTemperature(1.0f)
-            .setTopP(0.95f).setTopK(64).build()
-    private val mediaPipeLanguageModel: MediaPipeLlmBackend
+        LlmInferenceSession.LlmInferenceSessionOptions.builder()
+            .setTemperature(1.0f)
+            .setTopP(0.95f)
+            .setTopK(64)
+            .build()
+
+    // Owned directly so we can create/cancel sessions and call cancelGenerateResponseAsync()
+    @Volatile private lateinit var llmInference: LlmInference
+    @Volatile private var currentSession: LlmInferenceSession? = null
+
     private val embedder: Embedder<String>
     private val textMemory: DefaultSemanticTextMemory
-    private val llmExecutor = Executors.newSingleThreadExecutor()
 
     init {
         val t0 = System.currentTimeMillis()
         Log.w("mam-ai", "[TIMING] Thread: ${Thread.currentThread().name} — starting heavy init")
-
-        mediaPipeLanguageModel = MediaPipeLlmBackend(
-            application.applicationContext, mediaPipeLanguageModelOptions,
-            mediaPipeLanguageModelSessionOptions
-        )
-        Log.w("mam-ai", "[TIMING] MediaPipeLlmBackend constructor: ${System.currentTimeMillis() - t0}ms")
 
         val t1 = System.currentTimeMillis()
         embedder = GeckoEmbeddingModel(
@@ -82,34 +78,38 @@ class RagPipeline(application: Application) {
 
     private val initStartTime = System.currentTimeMillis()
 
-    /// Load the model
+    // LlmInference.createFromOptions() is a blocking call that loads the model file.
+    // Run it on a background thread so we don't block the main thread.
     init {
-        Futures.addCallback(
-            mediaPipeLanguageModel.initialize(),
-            object : FutureCallback<Boolean> {
-                override fun onSuccess(result: Boolean) {
-                    Log.w("mam-ai", "[TIMING] LLM initialize() completed: ${System.currentTimeMillis() - initStartTime}ms after construction")
-                    val rt = Runtime.getRuntime()
-                    Log.w("mam-ai", "[MEMORY] post-init heap: ${rt.totalMemory() / 1024 / 1024}MB used, ${rt.freeMemory() / 1024 / 1024}MB free, ${rt.maxMemory() / 1024 / 1024}MB max")
-                    Log.i("mam-ai", "LLM initialized!")
-                    // UNCOMMENT IF YOU WANT TO ADD MORE CONTEXT
-                    // memorizeChunks(application.applicationContext, "mamai_trim.txt")
-                    // Log.i("mam-ai", "Chunks loaded!")
+        Executors.newSingleThreadExecutor().execute {
+            try {
+                Log.w("mam-ai", "[TIMING] LlmInference.createFromOptions starting...")
+                llmInference = LlmInference.createFromOptions(
+                    application.applicationContext,
+                    mediaPipeLanguageModelOptions
+                )
+                Log.w("mam-ai", "[TIMING] LlmInference ready: ${System.currentTimeMillis() - initStartTime}ms after construction")
+                val rt = Runtime.getRuntime()
+                Log.w("mam-ai", "[MEMORY] post-init heap: ${rt.totalMemory() / 1024 / 1024}MB used, ${rt.freeMemory() / 1024 / 1024}MB free, ${rt.maxMemory() / 1024 / 1024}MB max")
+                Log.i("mam-ai", "LLM initialized!")
+                // UNCOMMENT IF YOU WANT TO ADD MORE CONTEXT
+                // memorizeChunks(application.applicationContext, "mamai_trim.txt")
+                // Log.i("mam-ai", "Chunks loaded!")
 
-                    llmReady = true
-                    onLlmReady.trySend(Unit)
-                }
+                llmReady = true
+                onLlmReady.trySend(Unit)
+            } catch (t: Throwable) {
+                Log.e("mam-ai", "[ERROR] LLM initialization failed after ${System.currentTimeMillis() - initStartTime}ms", t)
+                Log.e("mam-ai", "[ERROR] LLM will not be available. App may crash on query attempts.")
+                // Signal anyway to unblock waiting coroutines
+                onLlmReady.trySend(Unit)
+            }
+        }
+    }
 
-                override fun onFailure(t: Throwable) {
-                    Log.e("mam-ai", "[ERROR] LLM initialization failed after ${System.currentTimeMillis() - initStartTime}ms", t)
-                    Log.e("mam-ai", "[ERROR] LLM will not be available. App may crash on query attempts.")
-                    // Signal the channel anyway to unblock waiting coroutines
-                    // They will fail later when trying to use the uninitialized model
-                    onLlmReady.trySend(Unit)
-                }
-            },
-            Executors.newSingleThreadExecutor(),
-        )
+    /** Abort the currently running session's native inference. */
+    fun cancelGeneration() {
+        currentSession?.cancelGenerateResponseAsync()
     }
 
     // Memorise the given file (from inside the app context)
@@ -161,7 +161,7 @@ class RagPipeline(application: Application) {
         history: List<Map<String, String>>,
         useRetrieval: Boolean = true,
         retrievalListener: (docs: List<String>) -> Unit,
-        generationListener: AsyncProgressListener<LanguageModelResponse>?,
+        generationListener: (partial: String, done: Boolean) -> Unit,
     ): String =
         coroutineScope {
             // Wait for llm to be ready via rendezvous channel
@@ -197,13 +197,28 @@ class RagPipeline(application: Application) {
 
             Log.w("mam-ai", "[PROMPT] full prompt sent to LLM:\n$fullPrompt")
 
-            // Generate via LLM directly (bypasses RetrievalAndInferenceChain)
             val genStart = System.currentTimeMillis()
-            val request = LanguageModelRequest.builder().setPrompt(fullPrompt).build()
-            val result = mediaPipeLanguageModel.generateResponse(request, llmExecutor, generationListener).await().text
-            Log.w("mam-ai", "[TIMING] generation: ${System.currentTimeMillis() - genStart}ms, ${result.length} chars")
-            Log.w("mam-ai", "[TIMING] total query: ${System.currentTimeMillis() - qStart}ms")
-            result
+
+            // Create a fresh session for each query. We build the full Gemma IT prompt ourselves
+            // (including all history), so the session must not accumulate its own context.
+            val session = LlmInferenceSession.createFromOptions(
+                llmInference,
+                mediaPipeLanguageModelSessionOptions
+            )
+            currentSession = session
+
+            try {
+                session.addQueryChunk(fullPrompt)
+                val result = session.generateResponseAsync { partial, done ->
+                    generationListener(partial, done)
+                }.await()
+                Log.w("mam-ai", "[TIMING] generation: ${System.currentTimeMillis() - genStart}ms, ${result.length} chars")
+                Log.w("mam-ai", "[TIMING] total query: ${System.currentTimeMillis() - qStart}ms")
+                result
+            } finally {
+                session.close()
+                currentSession = null
+            }
         }
 
     /**

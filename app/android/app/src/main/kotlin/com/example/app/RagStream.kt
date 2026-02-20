@@ -5,7 +5,6 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import androidx.lifecycle.LifecycleCoroutineScope
-import com.google.ai.edge.localagents.rag.models.LanguageModelResponse
 import io.flutter.plugin.common.EventChannel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -54,6 +53,7 @@ class RagStream(application: Application, val lifecycleScope: LifecycleCoroutine
         synchronized(this) {
             if (currentJob != null) {
                 Log.w("mam-ai", "[CANCEL] generation cancelled by user")
+                ragPipeline.cancelGeneration() // abort native MediaPipe inference
                 currentJob?.cancel()
                 currentJob = null
             }
@@ -67,16 +67,12 @@ class RagStream(application: Application, val lifecycleScope: LifecycleCoroutine
 
             currentJob = lifecycleScope.launch {
                 withContext(backgroundExecutor.asCoroutineDispatcher()) {
-                    fun onGenerate(response: LanguageModelResponse, done: Boolean) {
+                    fun onGenerate(partial: String, done: Boolean) {
                         // We are off the ui thread at the moment. You can only send
                         // messages through event channels while on ui thread.
                         // The `post` puts the sending part back onto the ui thread
                         Handler(Looper.getMainLooper()).post {
-                            latestGeneration?.success(
-                                hashMapOf(
-                                    "response" to response.text
-                                )
-                            )
+                            latestGeneration?.success(hashMapOf("response" to partial))
 
                             if (done) {
                                 latestGeneration?.success(hashMapOf("done" to true))
@@ -103,7 +99,7 @@ class RagStream(application: Application, val lifecycleScope: LifecycleCoroutine
                             history,
                             useRetrieval,
                             { results -> onRetrieve(results) },
-                            { response, done -> onGenerate(response, done) }
+                            { partial, done -> onGenerate(partial, done) }
                         )
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         // Normal cancellation — don't send error to Flutter,
