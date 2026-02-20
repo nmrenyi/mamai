@@ -913,7 +913,7 @@ class _AssistantCardState extends State<_AssistantCard> {
             const Padding(
               padding: EdgeInsets.only(top: 4, left: 4),
               child: Text(
-                'MAM-AI can make mistakes. Always verify with a senior clinician.',
+                'MAM-AI can make mistakes. Please double-check responses.',
                 style: TextStyle(fontSize: 11, color: Colors.black38),
               ),
             ),
