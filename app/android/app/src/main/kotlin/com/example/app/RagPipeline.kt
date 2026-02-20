@@ -3,6 +3,7 @@ package com.example.app
 import android.app.Application
 import android.content.Context
 import android.util.Log
+import com.example.app.BuildConfig
 import com.google.ai.edge.localagents.rag.memory.DefaultSemanticTextMemory
 import com.google.ai.edge.localagents.rag.memory.SqliteVectorStore
 import com.google.ai.edge.localagents.rag.models.Embedder
