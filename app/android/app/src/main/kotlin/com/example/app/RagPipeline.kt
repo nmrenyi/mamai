@@ -195,7 +195,11 @@ class RagPipeline(application: Application) {
             val contextStr = docs.joinToString("\n\n")
             val fullPrompt = buildPrompt(contextStr, history, prompt)
 
-            Log.w("mam-ai", "[PROMPT] full prompt sent to LLM:\n$fullPrompt")
+            if (BuildConfig.DEBUG) {
+                Log.w("mam-ai", "[PROMPT] full prompt sent to LLM:\n$fullPrompt")
+            } else {
+                Log.w("mam-ai", "[PROMPT] length=${fullPrompt.length} history=${history.size} docs=${docs.size}")
+            }
 
             val genStart = System.currentTimeMillis()
 
