@@ -211,10 +211,11 @@ class RagPipeline(application: Application) {
             )
 
             try {
-                session.addQueryChunk(fullPrompt)
-                // Expose the session only after addQueryChunk so cancelGeneration()
-                // cannot call cancelGenerateResponseAsync() before generation starts
+                // Expose the session before addQueryChunk so that a cancelGeneration()
+                // call arriving on the main thread during addQueryChunk or generateResponseAsync
+                // can still reach cancelGenerateResponseAsync() and abort the native inference.
                 currentSession = session
+                session.addQueryChunk(fullPrompt)
                 val result = session.generateResponseAsync { partial, done ->
                     generationListener(partial, done)
                 }.await()

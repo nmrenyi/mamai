@@ -89,7 +89,7 @@ class _SearchPageState extends State<SearchPage> {
   static const _modelContextTokens = 32000; // Gemma 3n E4B context window
   static const _charsPerToken = 4; // rough estimate for English text
   static const _reservedChars =
-      4000; // system prompt + retrieved docs + current query + response
+      16000; // system prompt (~1800) + 3 retrieved docs (~6000) + query + response headroom
   static const _historyCharThreshold =
       (_modelContextTokens * _charsPerToken) - _reservedChars;
 
