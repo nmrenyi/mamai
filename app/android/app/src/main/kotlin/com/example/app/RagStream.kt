@@ -70,12 +70,19 @@ class RagStream(application: Application, val lifecycleScope: LifecycleCoroutine
 
             currentJob = lifecycleScope.launch {
                 withContext(backgroundExecutor.asCoroutineDispatcher()) {
+                    // Accumulate tokens so Flutter always receives the full text so far,
+                    // not just the latest delta. LlmInferenceSession sends deltas;
+                    // the old MediaPipeLlmBackend sent accumulated text.
+                    val accumulatedText = StringBuilder()
+
                     fun onGenerate(partial: String, done: Boolean) {
+                        accumulatedText.append(partial)
+                        val fullText = accumulatedText.toString()
                         // We are off the ui thread at the moment. You can only send
                         // messages through event channels while on ui thread.
                         // The `post` puts the sending part back onto the ui thread
                         Handler(Looper.getMainLooper()).post {
-                            latestGeneration?.success(hashMapOf("response" to partial))
+                            latestGeneration?.success(hashMapOf("response" to fullText))
 
                             if (done) {
                                 latestGeneration?.success(hashMapOf("done" to true))
