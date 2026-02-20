@@ -230,7 +230,8 @@ class _SearchPageState extends State<SearchPage> {
     final userMessages = _messages.where((m) => m.role == 'user').toList();
     if (userMessages.isEmpty) return;
 
-    final id = _currentConversationId ??
+    final id =
+        _currentConversationId ??
         DateTime.now().millisecondsSinceEpoch.toString();
     _currentConversationId = id;
 
@@ -244,12 +245,14 @@ class _SearchPageState extends State<SearchPage> {
         .map((m) => {'role': m.role, 'text': m.text})
         .toList();
 
-    await _store.save(Conversation(
-      id: id,
-      title: title,
-      timestamp: DateTime.now(),
-      messages: saved,
-    ));
+    await _store.save(
+      Conversation(
+        id: id,
+        title: title,
+        timestamp: DateTime.now(),
+        messages: saved,
+      ),
+    );
   }
 
   /// Restore a past conversation and close the drawer.
@@ -290,9 +293,11 @@ class _SearchPageState extends State<SearchPage> {
       _currentConversationId = conversation.id;
       _messages
         ..clear()
-        ..addAll(conversation.messages.map(
-          (m) => ChatMessage(role: m['role']!, text: m['text']!),
-        ));
+        ..addAll(
+          conversation.messages.map(
+            (m) => ChatMessage(role: m['role']!, text: m['text']!),
+          ),
+        );
     });
   }
 
@@ -913,13 +918,11 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
                                 content: Text('Delete "${c.title}"?'),
                                 actions: [
                                   TextButton(
-                                    onPressed: () =>
-                                        Navigator.pop(ctx, false),
+                                    onPressed: () => Navigator.pop(ctx, false),
                                     child: const Text('Cancel'),
                                   ),
                                   TextButton(
-                                    onPressed: () =>
-                                        Navigator.pop(ctx, true),
+                                    onPressed: () => Navigator.pop(ctx, true),
                                     child: const Text(
                                       'Delete',
                                       style: TextStyle(color: Colors.red),
