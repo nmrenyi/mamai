@@ -274,7 +274,8 @@ class _SearchPageState extends State<SearchPage> {
   /// [_saveCurrentConversation] must have been called first so that
   /// [_currentConversationId] is already set.
   void _setupBackgroundTracking() {
-    if (_currentConversationId == null) return; // defensive: no content to track
+    if (_currentConversationId == null)
+      return; // defensive: no content to track
     _backgroundConvId = _currentConversationId;
     final firstUser = _messages.firstWhere(
       (m) => m.role == 'user',
@@ -290,7 +291,10 @@ class _SearchPageState extends State<SearchPage> {
     // Ensure an assistant slot exists to receive further streaming tokens.
     if (_backgroundMessages.isEmpty ||
         _backgroundMessages.last['role'] != 'assistant') {
-      _backgroundMessages.add(<String, String>{'role': 'assistant', 'text': ''});
+      _backgroundMessages.add(<String, String>{
+        'role': 'assistant',
+        'text': '',
+      });
     }
     _backgroundGenerating = true;
     _isGenerating = false; // hide stop button in the new conversation view
@@ -308,12 +312,14 @@ class _SearchPageState extends State<SearchPage> {
     if (id == null) return;
     final completed = messages.where((m) => m['text']!.isNotEmpty).toList();
     if (completed.every((m) => m['role'] != 'user')) return;
-    await _store.save(Conversation(
-      id: id,
-      title: title,
-      timestamp: DateTime.now(),
-      messages: completed,
-    ));
+    await _store.save(
+      Conversation(
+        id: id,
+        title: title,
+        timestamp: DateTime.now(),
+        messages: completed,
+      ),
+    );
   }
 
   /// Restore a past conversation and close the drawer.
@@ -348,8 +354,9 @@ class _SearchPageState extends State<SearchPage> {
           );
         // Re-attach the loading indicator to the last assistant message.
         if (_messages.isNotEmpty && _messages.last.role == 'assistant') {
-          _messages[_messages.length - 1] =
-              _messages.last.copyWith(isLoading: true);
+          _messages[_messages.length - 1] = _messages.last.copyWith(
+            isLoading: true,
+          );
         }
       });
       _scrollToBottom();
@@ -915,7 +922,7 @@ class _ConversationDrawer extends StatefulWidget {
   final ConversationStore store;
   final String? currentId;
   final String? backgroundConvId; // conversation generating in background
-  final Set<String> unreadIds;    // conversations with unread responses
+  final Set<String> unreadIds; // conversations with unread responses
   final Future<void> Function(BuildContext, Conversation) onLoad;
   final Future<void> Function() onNewConversation;
 
@@ -1024,9 +1031,7 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
                           width: 10,
                           height: 10,
                           decoration: BoxDecoration(
-                            color: isUnread
-                                ? Colors.blue
-                                : Colors.transparent,
+                            color: isUnread ? Colors.blue : Colors.transparent,
                             shape: BoxShape.circle,
                           ),
                         ),
@@ -1047,18 +1052,17 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
                               )
                             : IconButton(
                                 icon: const Icon(
-                                    Icons.delete_outline,
-                                    size: 20),
+                                  Icons.delete_outline,
+                                  size: 20,
+                                ),
                                 color: Colors.grey,
                                 tooltip: 'Delete',
                                 onPressed: () async {
                                   final confirmed = await showDialog<bool>(
                                     context: context,
                                     builder: (ctx) => AlertDialog(
-                                      title:
-                                          const Text('Delete conversation?'),
-                                      content:
-                                          Text('Delete "${c.title}"?'),
+                                      title: const Text('Delete conversation?'),
+                                      content: Text('Delete "${c.title}"?'),
                                       actions: [
                                         TextButton(
                                           onPressed: () =>
@@ -1070,8 +1074,7 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
                                               Navigator.pop(ctx, true),
                                           child: const Text(
                                             'Delete',
-                                            style: TextStyle(
-                                                color: Colors.red),
+                                            style: TextStyle(color: Colors.red),
                                           ),
                                         ),
                                       ],
