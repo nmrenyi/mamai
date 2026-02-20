@@ -205,10 +205,12 @@ class RagPipeline(application: Application) {
                 llmInference,
                 mediaPipeLanguageModelSessionOptions
             )
-            currentSession = session
 
             try {
                 session.addQueryChunk(fullPrompt)
+                // Expose the session only after addQueryChunk so cancelGeneration()
+                // cannot call cancelGenerateResponseAsync() before generation starts
+                currentSession = session
                 val result = session.generateResponseAsync { partial, done ->
                     generationListener(partial, done)
                 }.await()
@@ -216,8 +218,10 @@ class RagPipeline(application: Application) {
                 Log.w("mam-ai", "[TIMING] total query: ${System.currentTimeMillis() - qStart}ms")
                 result
             } finally {
-                session.close()
+                // Null out before close so cancelGeneration() on the main thread cannot
+                // call cancelGenerateResponseAsync() on an already-closed session
                 currentSession = null
+                session.close()
             }
         }
 

@@ -63,7 +63,10 @@ class RagStream(application: Application, val lifecycleScope: LifecycleCoroutine
     // Generate a response to the prompt, sending updates to Flutter as it is being generated
     fun generateResponse(prompt: String, history: List<Map<String, String>>, useRetrieval: Boolean = true) {
         synchronized(this) {
-            currentJob?.cancel()
+            if (currentJob != null) {
+                ragPipeline.cancelGeneration() // abort native inference if one is running
+                currentJob?.cancel()
+            }
 
             currentJob = lifecycleScope.launch {
                 withContext(backgroundExecutor.asCoroutineDispatcher()) {
