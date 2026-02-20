@@ -188,6 +188,28 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Future<void> _startNewConversation() async {
+    if (_isGenerating && context.mounted) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Stop current generation?'),
+          content: const Text(
+            'Starting a new conversation will stop the response currently being generated.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Stop and start new'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
     await _saveCurrentConversation();
     if (_isGenerating) {
       try {
@@ -235,7 +257,27 @@ class _SearchPageState extends State<SearchPage> {
     BuildContext drawerContext,
     Conversation conversation,
   ) async {
-    if (_isGenerating) {
+    if (_isGenerating && context.mounted) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Stop current generation?'),
+          content: const Text(
+            'Loading a past conversation will stop the response currently being generated.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Stop and load'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
       try {
         await platform.invokeMethod("cancelGeneration");
       } on PlatformException catch (e) {
