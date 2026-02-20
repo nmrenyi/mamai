@@ -209,6 +209,24 @@ class _SearchPageState extends State<SearchPage> {
       });
     } on PlatformException catch (e) {
       debugPrint('Platform error while generating response: $e');
+      if (!mounted) return;
+      setState(() {
+        _isGenerating = false;
+        if (_messages.isNotEmpty && _messages.last.role == 'assistant') {
+          final last = _messages.last;
+          if (last.text.isEmpty && last.retrievedDocs.isEmpty) {
+            _messages.removeLast();
+            if (_messages.isNotEmpty && _messages.last.role == 'user') {
+              _messages.removeLast();
+            }
+          } else {
+            _messages[_messages.length - 1] = last.copyWith(
+              isLoading: false,
+              wasCancelled: true,
+            );
+          }
+        }
+      });
     }
   }
 
@@ -403,9 +421,20 @@ class _SearchPageState extends State<SearchPage> {
         .receiveBroadcastStream()
         .listen(
           _onLatestMessageUpdate,
-          onError: (_) {
-            _saveAndClearBackground(); // fire-and-forget
-            if (mounted) setState(() => _isGenerating = false);
+          onError: (error) {
+            debugPrint('Error in latestMessageStream: $error');
+            if (_backgroundGenerating) _saveAndClearBackground();
+            if (!mounted) return;
+            setState(() {
+              _isGenerating = false;
+              if (_messages.isNotEmpty && _messages.last.role == 'assistant') {
+                final last = _messages.last;
+                _messages[_messages.length - 1] = last.copyWith(
+                  isLoading: false,
+                  wasCancelled: true,
+                );
+              }
+            });
           },
         );
   }
