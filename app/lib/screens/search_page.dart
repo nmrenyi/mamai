@@ -72,6 +72,7 @@ class _SearchPageState extends State<SearchPage> {
   bool _isGenerating = false;
   final ConversationStore _store = ConversationStore();
   String? _currentConversationId;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey();
   final GlobalKey<_ConversationDrawerState> _drawerKey = GlobalKey();
 
   // Background generation state — active when the user navigates away while
@@ -81,6 +82,9 @@ class _SearchPageState extends State<SearchPage> {
   String? _backgroundConvId;
   String _backgroundConvTitle = '';
   List<Map<String, String>> _backgroundMessages = [];
+
+  // IDs of conversations that finished generating while the user was elsewhere.
+  final Set<String> _unreadConvIds = {};
 
   static const _modelContextTokens = 32000; // Gemma 3n E4B context window
   static const _charsPerToken = 4; // rough estimate for English text
@@ -334,6 +338,7 @@ class _SearchPageState extends State<SearchPage> {
         _backgroundConvTitle = '';
         _backgroundMessages = [];
         _isGenerating = true;
+        _unreadConvIds.remove(conversation.id);
         _messages
           ..clear()
           ..addAll(
@@ -353,6 +358,7 @@ class _SearchPageState extends State<SearchPage> {
 
     setState(() {
       _currentConversationId = conversation.id;
+      _unreadConvIds.remove(conversation.id);
       _messages
         ..clear()
         ..addAll(
@@ -396,8 +402,25 @@ class _SearchPageState extends State<SearchPage> {
     if (_backgroundGenerating) {
       // User navigated away — update background buffer (no setState needed).
       if (value.containsKey("done")) {
+        final convId = _backgroundConvId!;
+        final convTitle = _backgroundConvTitle;
         _saveAndClearBackground(); // fire-and-forget
-        if (mounted) _drawerKey.currentState?.reload();
+        if (mounted) {
+          setState(() => _unreadConvIds.add(convId));
+          _drawerKey.currentState?.reload();
+          final display = convTitle.length > 40
+              ? '${convTitle.substring(0, 40)}…'
+              : convTitle;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Response ready: "$display"'),
+              action: SnackBarAction(
+                label: 'View',
+                onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+              ),
+            ),
+          );
+        }
         return;
       }
       if (value.containsKey("response")) {
@@ -460,6 +483,7 @@ class _SearchPageState extends State<SearchPage> {
     ];
 
     return Scaffold(
+      key: _scaffoldKey,
       onDrawerChanged: (isOpened) {
         if (isOpened) _drawerKey.currentState?.reload();
       },
@@ -467,6 +491,8 @@ class _SearchPageState extends State<SearchPage> {
         key: _drawerKey,
         store: _store,
         currentId: _currentConversationId,
+        backgroundConvId: _backgroundConvId,
+        unreadIds: _unreadConvIds,
         onLoad: _loadConversation,
         onNewConversation: _startNewConversation,
       ),
@@ -888,6 +914,8 @@ class _ThinkingIndicatorState extends State<_ThinkingIndicator>
 class _ConversationDrawer extends StatefulWidget {
   final ConversationStore store;
   final String? currentId;
+  final String? backgroundConvId; // conversation generating in background
+  final Set<String> unreadIds;    // conversations with unread responses
   final Future<void> Function(BuildContext, Conversation) onLoad;
   final Future<void> Function() onNewConversation;
 
@@ -895,6 +923,8 @@ class _ConversationDrawer extends StatefulWidget {
     super.key,
     required this.store,
     required this.currentId,
+    required this.backgroundConvId,
+    required this.unreadIds,
     required this.onLoad,
     required this.onNewConversation,
   });
@@ -983,46 +1013,76 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
                     itemBuilder: (context, index) {
                       final c = _conversations[index];
                       final isActive = c.id == widget.currentId;
+                      final isGenerating = c.id == widget.backgroundConvId;
+                      final isUnread = widget.unreadIds.contains(c.id);
                       return ListTile(
                         selected: isActive,
                         selectedTileColor: Colors.orange[50],
+                        // Blue dot for unread; transparent placeholder keeps
+                        // alignment consistent across all rows.
+                        leading: Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: isUnread
+                                ? Colors.blue
+                                : Colors.transparent,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
                         title: Text(
                           c.title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                         subtitle: Text(_formatTimestamp(c.timestamp)),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete_outline, size: 20),
-                          color: Colors.grey,
-                          tooltip: 'Delete',
-                          onPressed: () async {
-                            final confirmed = await showDialog<bool>(
-                              context: context,
-                              builder: (ctx) => AlertDialog(
-                                title: const Text('Delete conversation?'),
-                                content: Text('Delete "${c.title}"?'),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(ctx, false),
-                                    child: const Text('Cancel'),
-                                  ),
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(ctx, true),
-                                    child: const Text(
-                                      'Delete',
-                                      style: TextStyle(color: Colors.red),
+                        // Spinner while generating; delete button otherwise.
+                        trailing: isGenerating
+                            ? const SizedBox.square(
+                                dimension: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.deepOrange,
+                                ),
+                              )
+                            : IconButton(
+                                icon: const Icon(
+                                    Icons.delete_outline,
+                                    size: 20),
+                                color: Colors.grey,
+                                tooltip: 'Delete',
+                                onPressed: () async {
+                                  final confirmed = await showDialog<bool>(
+                                    context: context,
+                                    builder: (ctx) => AlertDialog(
+                                      title:
+                                          const Text('Delete conversation?'),
+                                      content:
+                                          Text('Delete "${c.title}"?'),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.pop(ctx, false),
+                                          child: const Text('Cancel'),
+                                        ),
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.pop(ctx, true),
+                                          child: const Text(
+                                            'Delete',
+                                            style: TextStyle(
+                                                color: Colors.red),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ),
-                                ],
+                                  );
+                                  if (confirmed == true) {
+                                    await widget.store.delete(c.id);
+                                    await reload();
+                                  }
+                                },
                               ),
-                            );
-                            if (confirmed == true) {
-                              await widget.store.delete(c.id);
-                              await reload();
-                            }
-                          },
-                        ),
                         onTap: () => widget.onLoad(context, c),
                       );
                     },
