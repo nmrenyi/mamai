@@ -512,6 +512,8 @@ class _SearchPageState extends State<SearchPage> {
         unreadIds: _unreadConvIds,
         onLoad: _loadConversation,
         onNewConversation: _startNewConversation,
+        onCurrentConversationDeleted: () =>
+            setState(() => _currentConversationId = null),
       ),
       appBar: AppBar(
         toolbarHeight: 64,
@@ -935,6 +937,7 @@ class _ConversationDrawer extends StatefulWidget {
   final Set<String> unreadIds; // conversations with unread responses
   final Future<void> Function(BuildContext, Conversation) onLoad;
   final Future<void> Function() onNewConversation;
+  final void Function() onCurrentConversationDeleted;
 
   const _ConversationDrawer({
     super.key,
@@ -944,6 +947,7 @@ class _ConversationDrawer extends StatefulWidget {
     required this.unreadIds,
     required this.onLoad,
     required this.onNewConversation,
+    required this.onCurrentConversationDeleted,
   });
 
   @override
@@ -1092,6 +1096,9 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
                                   );
                                   if (confirmed == true) {
                                     await widget.store.delete(c.id);
+                                    if (c.id == widget.currentId) {
+                                      widget.onCurrentConversationDeleted();
+                                    }
                                     await reload();
                                   }
                                 },
@@ -1136,6 +1143,7 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
                   );
                   if (confirmed == true) {
                     await widget.store.clearAll();
+                    widget.onCurrentConversationDeleted();
                     await reload();
                   }
                 },
