@@ -445,6 +445,10 @@ class _SearchPageState extends State<SearchPage> {
         );
   }
 
+  /// Strips Gemma control tokens the model may include at the end of output.
+  String _stripModelTokens(String text) =>
+      text.trimRight().replaceAll(RegExp(r'(<end_of_turn>)+$'), '').trimRight();
+
   /// Update the latest assistant message as the model streams tokens.
   /// Routes events to the background buffer when the user has navigated away.
   void _onLatestMessageUpdate(dynamic value) {
@@ -476,7 +480,7 @@ class _SearchPageState extends State<SearchPage> {
         return;
       }
       if (value.containsKey("response")) {
-        final text = value["response"] as String;
+        final text = _stripModelTokens(value["response"] as String);
         if (_backgroundMessages.isNotEmpty &&
             _backgroundMessages.last['role'] == 'assistant') {
           _backgroundMessages[_backgroundMessages.length - 1] =
@@ -497,7 +501,7 @@ class _SearchPageState extends State<SearchPage> {
       if (lastIdx < 0 || _messages[lastIdx].role != 'assistant') return;
       if (value.containsKey("response")) {
         _messages[lastIdx] = _messages[lastIdx].copyWith(
-          text: value["response"],
+          text: _stripModelTokens(value["response"] as String),
           isLoading: false,
         );
       } else if (value.containsKey("results")) {
