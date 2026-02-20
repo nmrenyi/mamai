@@ -173,14 +173,14 @@ class _SearchPageState extends State<SearchPage> {
       _isGenerating = false;
       if (_messages.isNotEmpty && _messages.last.role == 'assistant') {
         final last = _messages.last;
-        if (last.text.isEmpty) {
-          // No response yet — remove both placeholder and its user message
+        if (last.text.isEmpty && last.retrievedDocs.isEmpty) {
+          // No content at all — remove both placeholder and its user message
           _messages.removeLast();
           if (_messages.isNotEmpty && _messages.last.role == 'user') {
             _messages.removeLast();
           }
         } else {
-          // Partial response exists — keep the pair, mark as cancelled
+          // Some content visible — keep the pair, mark as cancelled
           _messages[_messages.length - 1] = last.copyWith(
             isLoading: false,
             wasCancelled: true,
