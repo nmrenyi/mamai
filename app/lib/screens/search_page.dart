@@ -222,10 +222,19 @@ class _SearchPageState extends State<SearchPage> {
       _isGenerating = false;
       if (_messages.isNotEmpty && _messages.last.role == 'assistant') {
         final last = _messages.last;
-        _messages[_messages.length - 1] = last.copyWith(
-          isLoading: false,
-          wasCancelled: true,
-        );
+        if (last.text.isEmpty && last.retrievedDocs.isEmpty) {
+          // No content arrived yet — remove the empty assistant placeholder
+          // and the preceding user message so the UI stays clean.
+          _messages.removeLast();
+          if (_messages.isNotEmpty && _messages.last.role == 'user') {
+            _messages.removeLast();
+          }
+        } else {
+          _messages[_messages.length - 1] = last.copyWith(
+            isLoading: false,
+            wasCancelled: true,
+          );
+        }
       }
     });
   }
