@@ -347,7 +347,7 @@ class _SearchPageState extends State<SearchPage> {
           ),
         ),
         title: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             CircleAvatar(
               radius: 24,
