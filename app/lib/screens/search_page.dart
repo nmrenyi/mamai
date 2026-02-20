@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:markdown_widget/markdown_widget.dart';
+import '../conversation_store.dart';
 
 /// A single message in the conversation
 class ChatMessage {
@@ -69,6 +70,9 @@ class _SearchPageState extends State<SearchPage> {
   final ScrollController _scrollController = ScrollController();
   bool _useRetrieval = true;
   bool _isGenerating = false;
+  final ConversationStore _store = ConversationStore();
+  String? _currentConversationId;
+  final GlobalKey<_ConversationDrawerState> _drawerKey = GlobalKey();
 
   static const _modelContextTokens = 32000; // Gemma 3n E4B context window
   static const _charsPerToken = 4; // rough estimate for English text
@@ -143,6 +147,7 @@ class _SearchPageState extends State<SearchPage> {
     });
     _textController.clear();
     _scrollToBottom();
+    await _saveCurrentConversation();
     if (historyTruncated && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -183,6 +188,7 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Future<void> _startNewConversation() async {
+    await _saveCurrentConversation();
     if (_isGenerating) {
       try {
         await platform.invokeMethod("cancelGeneration");
@@ -192,7 +198,59 @@ class _SearchPageState extends State<SearchPage> {
     }
     setState(() {
       _isGenerating = false;
+      _currentConversationId = null;
       _messages.clear();
+    });
+  }
+
+  /// Saves the current conversation to disk (upsert). No-op if no user messages.
+  Future<void> _saveCurrentConversation() async {
+    final userMessages = _messages.where((m) => m.role == 'user').toList();
+    if (userMessages.isEmpty) return;
+
+    final id = _currentConversationId ??
+        DateTime.now().millisecondsSinceEpoch.toString();
+    _currentConversationId = id;
+
+    final title = userMessages.first.text.length > 60
+        ? '${userMessages.first.text.substring(0, 60)}…'
+        : userMessages.first.text;
+
+    // Save only completed messages (role + text). Skip loading placeholders.
+    final saved = _messages
+        .where((m) => m.text.isNotEmpty && !m.isLoading)
+        .map((m) => {'role': m.role, 'text': m.text})
+        .toList();
+
+    await _store.save(Conversation(
+      id: id,
+      title: title,
+      timestamp: DateTime.now(),
+      messages: saved,
+    ));
+  }
+
+  /// Restore a past conversation and close the drawer.
+  Future<void> _loadConversation(
+    BuildContext drawerContext,
+    Conversation conversation,
+  ) async {
+    if (_isGenerating) {
+      try {
+        await platform.invokeMethod("cancelGeneration");
+      } on PlatformException catch (e) {
+        debugPrint('Platform error while cancelling on load: $e');
+      }
+    }
+    if (context.mounted) Navigator.pop(drawerContext);
+    setState(() {
+      _isGenerating = false;
+      _currentConversationId = conversation.id;
+      _messages
+        ..clear()
+        ..addAll(conversation.messages.map(
+          (m) => ChatMessage(role: m['role']!, text: m['text']!),
+        ));
     });
   }
 
@@ -223,6 +281,7 @@ class _SearchPageState extends State<SearchPage> {
     if (!_isGenerating) return; // ignore stray events after cancel
     if (value.containsKey("done")) {
       setState(() => _isGenerating = false);
+      _saveCurrentConversation(); // fire-and-forget background save
       return;
     }
     setState(() {
@@ -268,8 +327,25 @@ class _SearchPageState extends State<SearchPage> {
     ];
 
     return Scaffold(
+      onDrawerChanged: (isOpened) {
+        if (isOpened) _drawerKey.currentState?.reload();
+      },
+      drawer: _ConversationDrawer(
+        key: _drawerKey,
+        store: _store,
+        currentId: _currentConversationId,
+        onLoad: _loadConversation,
+        onNewConversation: _startNewConversation,
+      ),
       appBar: AppBar(
         toolbarHeight: 64,
+        leading: Builder(
+          builder: (ctx) => IconButton(
+            icon: const Icon(Icons.menu, color: Colors.white),
+            tooltip: 'Conversation history',
+            onPressed: () => Scaffold.of(ctx).openDrawer(),
+          ),
+        ),
         title: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -667,6 +743,158 @@ class _ThinkingIndicatorState extends State<_ThinkingIndicator>
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+/// Sidebar drawer listing past conversations.
+class _ConversationDrawer extends StatefulWidget {
+  final ConversationStore store;
+  final String? currentId;
+  final Future<void> Function(BuildContext, Conversation) onLoad;
+  final Future<void> Function() onNewConversation;
+
+  const _ConversationDrawer({
+    super.key,
+    required this.store,
+    required this.currentId,
+    required this.onLoad,
+    required this.onNewConversation,
+  });
+
+  @override
+  State<_ConversationDrawer> createState() => _ConversationDrawerState();
+}
+
+class _ConversationDrawerState extends State<_ConversationDrawer> {
+  List<Conversation> _conversations = [];
+
+  @override
+  void initState() {
+    super.initState();
+    reload();
+  }
+
+  Future<void> reload() async {
+    final conversations = await widget.store.loadAll();
+    if (mounted) setState(() => _conversations = conversations);
+  }
+
+  String _formatTimestamp(DateTime dt) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final date = DateTime(dt.year, dt.month, dt.day);
+    if (date == today) {
+      final h = dt.hour.toString().padLeft(2, '0');
+      final m = dt.minute.toString().padLeft(2, '0');
+      return 'Today $h:$m';
+    } else if (date == yesterday) {
+      return 'Yesterday';
+    } else {
+      return '${dt.day}/${dt.month}/${dt.year}';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Drawer(
+      child: Column(
+        children: [
+          DrawerHeader(
+            decoration: const BoxDecoration(color: Colors.deepOrange),
+            padding: const EdgeInsets.fromLTRB(16, 16, 8, 16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Past conversations',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.add_comment, color: Colors.deepOrange),
+            title: const Text('New conversation'),
+            onTap: () {
+              Navigator.pop(context);
+              widget.onNewConversation();
+            },
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: _conversations.isEmpty
+                ? const Center(
+                    child: Text(
+                      'No conversations yet',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: _conversations.length,
+                    itemBuilder: (context, index) {
+                      final c = _conversations[index];
+                      final isActive = c.id == widget.currentId;
+                      return ListTile(
+                        selected: isActive,
+                        selectedTileColor: Colors.orange[50],
+                        title: Text(
+                          c.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(_formatTimestamp(c.timestamp)),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete_outline, size: 20),
+                          color: Colors.grey,
+                          tooltip: 'Delete',
+                          onPressed: () async {
+                            final confirmed = await showDialog<bool>(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                title: const Text('Delete conversation?'),
+                                content: Text('Delete "${c.title}"?'),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.pop(ctx, false),
+                                    child: const Text('Cancel'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.pop(ctx, true),
+                                    child: const Text(
+                                      'Delete',
+                                      style: TextStyle(color: Colors.red),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (confirmed == true) {
+                              await widget.store.delete(c.id);
+                              await reload();
+                            }
+                          },
+                        ),
+                        onTap: () => widget.onLoad(context, c),
+                      );
+                    },
+                  ),
+          ),
+        ],
       ),
     );
   }
