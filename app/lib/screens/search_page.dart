@@ -101,9 +101,15 @@ class _SearchPageState extends State<SearchPage> {
         .toList();
 
     var truncated = false;
-    while (history.length > 1) {
+    while (history.isNotEmpty) {
       final chars = history.fold<int>(0, (sum, m) => sum + m["text"]!.length);
       if (chars <= _historyCharThreshold) break;
+      if (history.length == 1) {
+        // Even a single message exceeds the threshold — drop all history.
+        history = [];
+        truncated = true;
+        break;
+      }
       history = history.sublist(1); // drop oldest message
       truncated = true;
     }
