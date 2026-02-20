@@ -365,7 +365,7 @@ class _SearchPageState extends State<SearchPage> {
       await _saveCurrentConversation();
       _setupBackgroundTracking(); // continues in background
     }
-    if (context.mounted) Navigator.pop(drawerContext);
+    if (drawerContext.mounted) Navigator.pop(drawerContext);
 
     // If loading the conversation that is currently generating in background,
     // bring it back to the foreground so the response is visible again.
