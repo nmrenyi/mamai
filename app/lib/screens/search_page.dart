@@ -605,7 +605,11 @@ class _SearchPageState extends State<SearchPage> {
                       if (message.role == 'user') {
                         return _UserBubble(text: message.text);
                       } else {
-                        return _AssistantCard(message: message);
+                        final isLastMessage = index == _messages.length - 1;
+                        return _AssistantCard(
+                          message: message,
+                          showDisclaimer: isLastMessage && !_isGenerating,
+                        );
                       }
                     },
                   ),
@@ -830,7 +834,8 @@ class _UserBubble extends StatelessWidget {
 /// Assistant message card with markdown response and collapsible retrieved docs
 class _AssistantCard extends StatefulWidget {
   final ChatMessage message;
-  const _AssistantCard({required this.message});
+  final bool showDisclaimer;
+  const _AssistantCard({required this.message, this.showDisclaimer = false});
 
   @override
   State<_AssistantCard> createState() => _AssistantCardState();
@@ -903,8 +908,8 @@ class _AssistantCardState extends State<_AssistantCard> {
               ],
             ),
           ),
-          // Disclaimer shown once generation is complete
-          if (!message.isLoading && !message.wasCancelled && message.text.isNotEmpty)
+          // Disclaimer shown on the latest response once generation is complete
+          if (widget.showDisclaimer)
             const Padding(
               padding: EdgeInsets.only(top: 4, left: 4),
               child: Text(
