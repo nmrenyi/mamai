@@ -274,8 +274,9 @@ class _SearchPageState extends State<SearchPage> {
   /// [_saveCurrentConversation] must have been called first so that
   /// [_currentConversationId] is already set.
   void _setupBackgroundTracking() {
-    if (_currentConversationId == null)
+    if (_currentConversationId == null) {
       return; // defensive: no content to track
+    }
     _backgroundConvId = _currentConversationId;
     final firstUser = _messages.firstWhere(
       (m) => m.role == 'user',
