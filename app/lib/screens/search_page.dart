@@ -355,9 +355,12 @@ class _SearchPageState extends State<SearchPage> {
               child: Image.asset('images/logo.png', height: 42),
             ),
             const SizedBox(width: 10),
-            const Text(
-              'MAM-AI clinical search',
-              style: TextStyle(color: Colors.white),
+            const Flexible(
+              child: Text(
+                'MAM-AI clinical search',
+                style: TextStyle(color: Colors.white),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
