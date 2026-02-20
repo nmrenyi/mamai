@@ -272,6 +272,29 @@ class _SearchPageState extends State<SearchPage> {
     });
   }
 
+  /// Cancels any in-flight generation, deletes all saved conversations, and
+  /// resets the chat to a blank state. Called from the drawer's "Clear all".
+  Future<void> _onClearAll() async {
+    if (_isGenerating || _backgroundGenerating) {
+      try {
+        await platform.invokeMethod("cancelGeneration");
+      } on PlatformException catch (e) {
+        debugPrint('Platform error while cancelling for clear-all: $e');
+      }
+    }
+    await _store.clearAll();
+    if (!mounted) return;
+    setState(() {
+      _isGenerating = false;
+      _backgroundGenerating = false;
+      _backgroundConvId = null;
+      _backgroundConvTitle = '';
+      _backgroundMessages = [];
+      _currentConversationId = null;
+      _messages.clear();
+    });
+  }
+
   /// Saves the current conversation to disk (upsert). No-op if no user messages.
   Future<void> _saveCurrentConversation() async {
     final userMessages = _messages.where((m) => m.role == 'user').toList();
@@ -549,10 +572,12 @@ class _SearchPageState extends State<SearchPage> {
         currentId: _currentConversationId,
         backgroundConvId: _backgroundConvId,
         unreadIds: _unreadConvIds,
+        isGenerating: _isGenerating,
         onLoad: _loadConversation,
         onNewConversation: _startNewConversation,
         onCurrentConversationDeleted: () =>
             setState(() => _currentConversationId = null),
+        onClearAll: _onClearAll,
       ),
       appBar: AppBar(
         toolbarHeight: 64,
@@ -980,9 +1005,11 @@ class _ConversationDrawer extends StatefulWidget {
   final String? currentId;
   final String? backgroundConvId; // conversation generating in background
   final Set<String> unreadIds; // conversations with unread responses
+  final bool isGenerating; // foreground generation in progress
   final Future<void> Function(BuildContext, Conversation) onLoad;
   final Future<void> Function() onNewConversation;
   final void Function() onCurrentConversationDeleted;
+  final Future<void> Function() onClearAll;
 
   const _ConversationDrawer({
     super.key,
@@ -990,9 +1017,11 @@ class _ConversationDrawer extends StatefulWidget {
     required this.currentId,
     required this.backgroundConvId,
     required this.unreadIds,
+    required this.isGenerating,
     required this.onLoad,
     required this.onNewConversation,
     required this.onCurrentConversationDeleted,
+    required this.onClearAll,
   });
 
   @override
@@ -1079,7 +1108,10 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
                     itemBuilder: (context, index) {
                       final c = _conversations[index];
                       final isActive = c.id == widget.currentId;
-                      final isGenerating = c.id == widget.backgroundConvId;
+                      final isBackgroundGenerating =
+                          c.id == widget.backgroundConvId;
+                      final isForegroundGenerating =
+                          isActive && widget.isGenerating;
                       final isUnread = widget.unreadIds.contains(c.id);
                       return ListTile(
                         selected: isActive,
@@ -1100,8 +1132,9 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
                           overflow: TextOverflow.ellipsis,
                         ),
                         subtitle: Text(_formatTimestamp(c.timestamp)),
-                        // Spinner while generating; delete button otherwise.
-                        trailing: isGenerating
+                        // Spinner for background generation; nothing for
+                        // foreground generation; delete button otherwise.
+                        trailing: isBackgroundGenerating
                             ? const SizedBox.square(
                                 dimension: 24,
                                 child: CircularProgressIndicator(
@@ -1109,6 +1142,8 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
                                   color: Colors.deepOrange,
                                 ),
                               )
+                            : isForegroundGenerating
+                            ? const SizedBox.shrink()
                             : IconButton(
                                 icon: const Icon(
                                   Icons.delete_outline,
@@ -1187,8 +1222,7 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
                     ),
                   );
                   if (confirmed == true) {
-                    await widget.store.clearAll();
-                    widget.onCurrentConversationDeleted();
+                    await widget.onClearAll();
                     await reload();
                   }
                 },
