@@ -1,8 +1,11 @@
 """
 Run MedGemma 4B locally with the same config as the mobile app.
-Usage: python3 run_medgemma.py
+Usage:
+  python3 run_medgemma.py              # default: bfloat16
+  python3 run_medgemma.py --int4       # int4 quantized
 """
 
+import argparse
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 
@@ -35,16 +38,28 @@ QUESTION = "What are the danger signs in a newborn in the first 24 hours?"
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--int4", action="store_true", help="Load model in int4 quantization (~4 GB)")
+    args = parser.parse_args()
+
     print("Loading tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
 
-    print("Loading model (int4 quantized, ~4 GB)...")
-    quantization_config = BitsAndBytesConfig(load_in_4bit=True)
-    model = AutoModelForCausalLM.from_pretrained(
-        MODEL_PATH,
-        quantization_config=quantization_config,
-        device_map="auto",
-    )
+    if args.int4:
+        print("Loading model (int4 quantized, ~4 GB)...")
+        quantization_config = BitsAndBytesConfig(load_in_4bit=True)
+        model = AutoModelForCausalLM.from_pretrained(
+            MODEL_PATH,
+            quantization_config=quantization_config,
+            device_map="auto",
+        )
+    else:
+        print("Loading model (bfloat16, ~8 GB)...")
+        model = AutoModelForCausalLM.from_pretrained(
+            MODEL_PATH,
+            dtype=torch.bfloat16,
+            device_map="auto",
+        )
     print("Model loaded.")
 
     # Build prompt using Gemma IT chat template (same as mobile app)
