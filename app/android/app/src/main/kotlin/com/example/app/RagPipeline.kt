@@ -202,6 +202,7 @@ class RagPipeline(application: Application) {
             }
 
             val genStart = System.currentTimeMillis()
+            var firstTokenTime = 0L
 
             // Create a fresh session for each query. We build the full Gemma IT prompt ourselves
             // (including all history), so the session must not accumulate its own context.
@@ -217,9 +218,17 @@ class RagPipeline(application: Application) {
                 currentSession = session
                 session.addQueryChunk(fullPrompt)
                 val result = session.generateResponseAsync { partial, done ->
+                    if (firstTokenTime == 0L && partial.isNotEmpty()) {
+                        firstTokenTime = System.currentTimeMillis()
+                        Log.w("mam-ai", "[TIMING] TTFT (time-to-first-token): ${firstTokenTime - genStart}ms")
+                    }
                     generationListener(partial, done)
                 }.await()
-                Log.w("mam-ai", "[TIMING] generation: ${System.currentTimeMillis() - genStart}ms, ${result.length} chars")
+                val genEnd = System.currentTimeMillis()
+                Log.w("mam-ai", "[TIMING] generation total: ${genEnd - genStart}ms, ${result.length} chars")
+                if (firstTokenTime > 0) {
+                    Log.w("mam-ai", "[TIMING] prefill (to 1st token): ${firstTokenTime - genStart}ms, decode: ${genEnd - firstTokenTime}ms")
+                }
                 Log.w("mam-ai", "[TIMING] total query: ${System.currentTimeMillis() - qStart}ms")
                 result
             } finally {
