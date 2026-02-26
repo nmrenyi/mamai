@@ -32,6 +32,9 @@ dist/
 venv/
 *.egg
 
+# Native C++ / llama.cpp (only used on llama-cpp branch)
+app/android/app/src/main/cpp/
+
 # Model files & large artifacts
 *.tflite
 *.task
