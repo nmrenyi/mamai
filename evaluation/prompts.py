@@ -47,7 +47,7 @@ SYSTEM_PROMPT = (
 TEMPERATURE = 1.0
 TOP_P = 0.95
 TOP_K = 64
-N_CTX = 32000
+N_CTX = 4096  # the whole conversation is not going to exceed 4096, less context window could save memory
 
 
 def build_mcq_prompt(question: str, options: str) -> str:
