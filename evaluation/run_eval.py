@@ -17,7 +17,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from inference import load_model
-from prompts import build_mcq_prompt, build_open_prompt
+from prompts import TEMPERATURE, TOP_P, TOP_K, N_CTX, build_mcq_prompt, build_open_prompt
 from scoring import create_judge_client, extract_letter, judge_response, score_mcq
 
 # Dataset registry: name -> (filename, type, question_col, options_col, answer_col, reference_col)
@@ -128,7 +128,7 @@ def main():
     parser.add_argument("--model-dir", default="models", help="Directory containing model files")
     parser.add_argument("--datasets", required=True, help="Comma-separated dataset names, or 'all'")
     parser.add_argument("--output-dir", default="results", help="Directory for output JSON files")
-    parser.add_argument("--max-tokens", type=int, default=512, help="Max tokens to generate")
+    parser.add_argument("--max-tokens", type=int, default=1024, help="Max tokens to generate")
     parser.add_argument("--max-questions", type=int, default=None, help="Limit questions per dataset (for debugging)")
     parser.add_argument("--judge", action="store_true", help="Enable LLM-as-judge for open-ended datasets")
     parser.add_argument("--judge-model", default="gemini-3-flash-preview", help="Gemini model for judging")
@@ -183,8 +183,14 @@ def main():
             "dataset": ds_name,
             "dataset_type": ds_type,
             "n_questions": min(len(df), args.max_questions or len(df)),
-            "max_tokens": args.max_tokens,
             "timestamp": timestamp,
+            "generation_params": {
+                "temperature": TEMPERATURE,
+                "top_p": TOP_P,
+                "top_k": TOP_K,
+                "n_ctx": N_CTX,
+                "max_tokens": args.max_tokens,
+            },
         }
 
         t0 = time.time()
