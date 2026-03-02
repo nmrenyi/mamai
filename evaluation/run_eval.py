@@ -44,6 +44,10 @@ def run_mcq(model, df, question_col, options_col, answer_col, max_tokens, max_qu
     ground_truth = []
 
     for i, (_, row) in enumerate(tqdm(df.iterrows(), total=len(df), desc="MCQ inference"), 1):
+        if pd.isna(row[question_col]) or pd.isna(row[options_col]) or pd.isna(row[answer_col]):
+            print(f"  Skipping row {i}: missing question/options/answer")
+            continue
+
         question = str(row[question_col])
         options = str(row[options_col])
         correct = str(row[answer_col]).strip()
@@ -97,8 +101,12 @@ def run_open(model, df, question_col, reference_col, max_tokens, max_questions, 
     judge_scores = []
 
     for i, (_, row) in enumerate(tqdm(df.iterrows(), total=len(df), desc="Open inference"), 1):
+        if pd.isna(row[question_col]):
+            print(f"  Skipping row {i}: missing question")
+            continue
+
         question = str(row[question_col])
-        reference = str(row[reference_col]) if reference_col and reference_col in row.index else ""
+        reference = str(row[reference_col]) if reference_col and reference_col in row.index and pd.notna(row[reference_col]) else ""
 
         prompt = build_open_prompt(question)
         t0 = time.time()

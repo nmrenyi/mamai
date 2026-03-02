@@ -33,8 +33,8 @@ def extract_letter(response: str) -> str:
     if m:
         return m.group(1).upper()
 
-    # 4. First standalone capital letter A-H found
-    m = re.search(r"\b([A-H])\b", text)
+    # 4. Letter followed by ) or . anywhere (e.g., "the correct option is B.")
+    m = re.search(r"\b([A-H])[.)]", text)
     if m:
         return m.group(1)
 
