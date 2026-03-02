@@ -702,13 +702,31 @@ class _SearchPageState extends State<SearchPage> {
               ),
             ),
             const SizedBox(width: 4),
-            IconButton(
-              tooltip: _useRetrieval ? 'Search enabled' : 'Search disabled',
-              icon: Icon(
-                Icons.search,
-                color: _useRetrieval ? const Color(0xffcc5500) : Colors.grey,
+            GestureDetector(
+              onTap: () => setState(() => _useRetrieval = !_useRetrieval),
+              child: Tooltip(
+                message: _useRetrieval ? 'Search enabled' : 'Search disabled',
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _useRetrieval ? const Color(0xffcc5500) : Colors.grey[400],
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _useRetrieval ? 'Search ON' : 'Search OFF',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              onPressed: () => setState(() => _useRetrieval = !_useRetrieval),
             ),
             const SizedBox(width: 4),
             if (_isGenerating)
