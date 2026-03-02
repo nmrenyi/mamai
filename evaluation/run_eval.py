@@ -33,7 +33,8 @@ DATASETS = {
 CHECKPOINT_INTERVAL = 100
 
 
-def run_mcq(model, df, question_col, options_col, answer_col, max_tokens, max_questions):
+def run_mcq(model, df, question_col, options_col, answer_col, max_tokens, max_questions,
+            output_path=None, metadata=None):
     """Run MCQ evaluation: inference + letter extraction + accuracy."""
     if max_questions:
         df = df.head(max_questions)
@@ -42,7 +43,7 @@ def run_mcq(model, df, question_col, options_col, answer_col, max_tokens, max_qu
     predictions = []
     ground_truth = []
 
-    for _, row in tqdm(df.iterrows(), total=len(df), desc="MCQ inference"):
+    for i, (_, row) in enumerate(tqdm(df.iterrows(), total=len(df), desc="MCQ inference"), 1):
         question = str(row[question_col])
         options = str(row[options_col])
         correct = str(row[answer_col]).strip()
@@ -66,11 +67,28 @@ def run_mcq(model, df, question_col, options_col, answer_col, max_tokens, max_qu
             "inference_time_s": round(elapsed, 2),
         })
 
+        if output_path and i % CHECKPOINT_INTERVAL == 0:
+            scores = score_mcq(predictions, ground_truth)
+            save_checkpoint(output_path, metadata or {}, scores, results)
+            print(f"  Checkpoint saved at {i}/{len(df)}")
+
     scores = score_mcq(predictions, ground_truth)
     return results, scores
 
 
-def run_open(model, df, question_col, reference_col, max_tokens, max_questions, judge_client, judge_model):
+def _open_scores(judge_scores):
+    """Compute aggregate judge scores."""
+    if not judge_scores:
+        return {}
+    return {
+        "mean_judge_score": round(sum(judge_scores) / len(judge_scores), 2),
+        "judge_scores_distribution": {i: judge_scores.count(i) for i in range(1, 6)},
+        "n_judged": len(judge_scores),
+    }
+
+
+def run_open(model, df, question_col, reference_col, max_tokens, max_questions, judge_client, judge_model,
+             output_path=None, metadata=None):
     """Run open-ended evaluation: inference + optional LLM-as-judge scoring."""
     if max_questions:
         df = df.head(max_questions)
@@ -78,7 +96,7 @@ def run_open(model, df, question_col, reference_col, max_tokens, max_questions, 
     results = []
     judge_scores = []
 
-    for _, row in tqdm(df.iterrows(), total=len(df), desc="Open inference"):
+    for i, (_, row) in enumerate(tqdm(df.iterrows(), total=len(df), desc="Open inference"), 1):
         question = str(row[question_col])
         reference = str(row[reference_col]) if reference_col and reference_col in row.index else ""
 
@@ -104,15 +122,11 @@ def run_open(model, df, question_col, reference_col, max_tokens, max_questions, 
 
         results.append(result)
 
-    scores = {}
-    if judge_scores:
-        scores = {
-            "mean_judge_score": round(sum(judge_scores) / len(judge_scores), 2),
-            "judge_scores_distribution": {i: judge_scores.count(i) for i in range(1, 6)},
-            "n_judged": len(judge_scores),
-        }
+        if output_path and i % CHECKPOINT_INTERVAL == 0:
+            save_checkpoint(output_path, metadata or {}, _open_scores(judge_scores), results)
+            print(f"  Checkpoint saved at {i}/{len(df)}")
 
-    return results, scores
+    return results, _open_scores(judge_scores)
 
 
 def save_checkpoint(output_path, metadata, scores, results):
@@ -195,9 +209,11 @@ def main():
 
         t0 = time.time()
         if ds_type == "mcq":
-            results, scores = run_mcq(model, df, q_col, opt_col, ans_col, args.max_tokens, args.max_questions)
+            results, scores = run_mcq(model, df, q_col, opt_col, ans_col, args.max_tokens, args.max_questions,
+                                      output_path, metadata)
         else:
-            results, scores = run_open(model, df, q_col, ref_col, args.max_tokens, args.max_questions, judge_client, judge_model)
+            results, scores = run_open(model, df, q_col, ref_col, args.max_tokens, args.max_questions,
+                                       judge_client, judge_model, output_path, metadata)
 
         elapsed = time.time() - t0
         metadata["total_inference_time_s"] = round(elapsed, 1)

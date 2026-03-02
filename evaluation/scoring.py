@@ -5,6 +5,7 @@ Scoring utilities for MCQ accuracy and LLM-as-judge (Gemini).
 import json
 import os
 import re
+import time
 
 
 def extract_letter(response: str) -> str:
@@ -123,7 +124,19 @@ def judge_response(
         question=question, reference=reference, response=response
     )
 
-    result = client.models.generate_content(model=model, contents=prompt)
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            result = client.models.generate_content(model=model, contents=prompt)
+            break
+        except Exception as e:
+            if attempt < max_retries - 1:
+                wait = 2 ** attempt
+                print(f"  Judge API error (attempt {attempt + 1}/{max_retries}): {e}. Retrying in {wait}s...")
+                time.sleep(wait)
+            else:
+                print(f"  Judge API failed after {max_retries} attempts: {e}")
+                return {"score": None, "justification": f"API error: {e}"}
     text = result.text.strip()
 
     # Parse JSON from response (handle markdown code blocks)

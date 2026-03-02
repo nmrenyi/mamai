@@ -58,7 +58,8 @@ runai submit \
   -e OUTPUT_DIR=/mloscratch/users/$GASPAR/eval_results \
   -e GEMINI_API_KEY_FILE_AT=/mloscratch/users/$GASPAR/keys/gemini_key.txt \
   -- python3 run_eval.py --model gemma3n-e4b --datasets all --judge \
-     --model-dir $MODEL_DIR --output-dir $OUTPUT_DIR
+     --model-dir /mloscratch/users/$GASPAR/models \
+     --output-dir /mloscratch/users/$GASPAR/eval_results
 ```
 
 **Interactive debugging:**
