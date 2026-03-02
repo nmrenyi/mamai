@@ -1293,28 +1293,43 @@ class _RetrievalDisclosure extends StatelessWidget {
           ),
         ),
         if (expanded)
-          ...docs.map(
-            (doc) => Card(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const ListTile(
-                    leading: Icon(Icons.book),
-                    title: Text('Information from guidelines'),
-                    contentPadding: EdgeInsetsDirectional.only(
-                      start: 16,
-                      end: 24,
+          ...docs.asMap().entries.map(
+            (entry) => Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                color: Colors.orange[50],
+                border: const Border(
+                  left: BorderSide(color: Color(0xffcc5500), width: 3),
+                ),
+                borderRadius: const BorderRadius.only(
+                  topRight: Radius.circular(8),
+                  bottomRight: Radius.circular(8),
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 14, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Guideline ${entry.key + 1} of ${docs.length}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.orange[800],
+                      ),
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsetsDirectional.only(
-                      start: 16,
-                      end: 24,
-                      bottom: 16,
+                    const SizedBox(height: 6),
+                    Text(
+                      entry.value,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        height: 1.5,
+                        color: Colors.black87,
+                      ),
                     ),
-                    child: Text(doc, style: const TextStyle(fontSize: 16)),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
