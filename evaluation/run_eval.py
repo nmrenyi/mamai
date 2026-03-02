@@ -1,0 +1,226 @@
+"""
+Batch evaluation pipeline for medical QA benchmarks.
+
+Usage:
+  python run_eval.py --model gemma3n-e4b --datasets afrimedqa_mcq --max-questions 5
+  python run_eval.py --model gemma3n-e4b --datasets all --judge
+  python run_eval.py --model gemma3n-e2b --model-dir /mloscratch/users/$USER/models --datasets all
+"""
+
+import argparse
+import json
+import os
+import time
+from datetime import datetime, timezone
+
+import pandas as pd
+from tqdm import tqdm
+
+from inference import load_model
+from prompts import build_mcq_prompt, build_open_prompt
+from scoring import create_judge_client, extract_letter, judge_response, score_mcq
+
+# Dataset registry: name -> (filename, type, question_col, options_col, answer_col, reference_col)
+DATASETS = {
+    "afrimedqa_mcq": ("afrimedqa_mcq.tsv", "mcq", "question_clean", "options_formatted", "correct_letter", None),
+    "medqa_usmle": ("medqa_usmle.tsv", "mcq", "question", "options_formatted", "correct_letter", None),
+    "medmcqa_mcq": ("medmcqa_mcq.tsv", "mcq", "question", "options_formatted", "correct_letter", None),
+    "kenya_vignettes": ("kenya_vignettes.tsv", "open", "scenario", None, None, "clinician_response"),
+    "whb_stumps": ("whb_stumps.tsv", "open", "question_clean", None, None, "expert_justification"),
+    "afrimedqa_saq": ("afrimedqa_saq.tsv", "open", "question_clean", None, None, "answer_rationale"),
+}
+
+CHECKPOINT_INTERVAL = 100
+
+
+def run_mcq(model, df, question_col, options_col, answer_col, max_tokens, max_questions):
+    """Run MCQ evaluation: inference + letter extraction + accuracy."""
+    if max_questions:
+        df = df.head(max_questions)
+
+    results = []
+    predictions = []
+    ground_truth = []
+
+    for _, row in tqdm(df.iterrows(), total=len(df), desc="MCQ inference"):
+        question = str(row[question_col])
+        options = str(row[options_col])
+        correct = str(row[answer_col]).strip()
+
+        prompt = build_mcq_prompt(question, options)
+        t0 = time.time()
+        response = model.generate(prompt, max_tokens=max_tokens)
+        elapsed = time.time() - t0
+
+        extracted = extract_letter(response)
+        predictions.append(extracted)
+        ground_truth.append(correct)
+
+        results.append({
+            "question": question,
+            "options": options,
+            "ground_truth": correct,
+            "model_response": response,
+            "extracted_answer": extracted,
+            "correct": extracted.upper() == correct.upper(),
+            "inference_time_s": round(elapsed, 2),
+        })
+
+    scores = score_mcq(predictions, ground_truth)
+    return results, scores
+
+
+def run_open(model, df, question_col, reference_col, max_tokens, max_questions, judge_client, judge_model):
+    """Run open-ended evaluation: inference + optional LLM-as-judge scoring."""
+    if max_questions:
+        df = df.head(max_questions)
+
+    results = []
+    judge_scores = []
+
+    for _, row in tqdm(df.iterrows(), total=len(df), desc="Open inference"):
+        question = str(row[question_col])
+        reference = str(row[reference_col]) if reference_col and reference_col in row.index else ""
+
+        prompt = build_open_prompt(question)
+        t0 = time.time()
+        response = model.generate(prompt, max_tokens=max_tokens)
+        elapsed = time.time() - t0
+
+        result = {
+            "question": question,
+            "reference": reference,
+            "model_response": response,
+            "inference_time_s": round(elapsed, 2),
+        }
+
+        # LLM-as-judge scoring
+        if judge_client is not None and reference:
+            judgment = judge_response(question, response, reference, judge_client, judge_model)
+            result["judge_score"] = judgment.get("score") if judgment else None
+            result["judge_justification"] = judgment.get("justification") if judgment else None
+            if judgment and judgment.get("score") is not None:
+                judge_scores.append(judgment["score"])
+
+        results.append(result)
+
+    scores = {}
+    if judge_scores:
+        scores = {
+            "mean_judge_score": round(sum(judge_scores) / len(judge_scores), 2),
+            "judge_scores_distribution": {i: judge_scores.count(i) for i in range(1, 6)},
+            "n_judged": len(judge_scores),
+        }
+
+    return results, scores
+
+
+def save_checkpoint(output_path, metadata, scores, results):
+    """Save current results to a JSON checkpoint file."""
+    data = {"metadata": metadata, "aggregate_scores": scores, "results": results}
+    with open(output_path, "w") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Medical QA Evaluation Pipeline")
+    parser.add_argument("--model", required=True, help="Model name (e.g., gemma3n-e4b, gemma3n-e2b)")
+    parser.add_argument("--model-dir", default="models", help="Directory containing model files")
+    parser.add_argument("--datasets", required=True, help="Comma-separated dataset names, or 'all'")
+    parser.add_argument("--output-dir", default="results", help="Directory for output JSON files")
+    parser.add_argument("--max-tokens", type=int, default=512, help="Max tokens to generate")
+    parser.add_argument("--max-questions", type=int, default=None, help="Limit questions per dataset (for debugging)")
+    parser.add_argument("--judge", action="store_true", help="Enable LLM-as-judge for open-ended datasets")
+    parser.add_argument("--judge-model", default="gemini-3-flash-preview", help="Gemini model for judging")
+    parser.add_argument("--n-gpu-layers", type=int, default=None, help="GPU layers for GGUF (-1 = all, 0 = CPU, default: auto-detect)")
+    parser.add_argument("--data-dir", default="data", help="Directory containing dataset TSV files")
+    args = parser.parse_args()
+
+    os.makedirs(args.output_dir, exist_ok=True)
+
+    # Resolve dataset list
+    if args.datasets == "all":
+        dataset_names = list(DATASETS.keys())
+    else:
+        dataset_names = [d.strip() for d in args.datasets.split(",")]
+        for name in dataset_names:
+            if name not in DATASETS:
+                parser.error(f"Unknown dataset: {name}. Available: {list(DATASETS.keys())}")
+
+    # Load model once
+    model = load_model(args.model, args.model_dir, n_gpu_layers=args.n_gpu_layers)
+
+    # Set up judge if requested
+    judge_client, judge_model = None, None
+    if args.judge:
+        judge_client, judge_model = create_judge_client(args.judge_model)
+        if judge_client is None:
+            print("WARNING: --judge requested but no GEMINI_API_KEY found. Skipping judge scoring.")
+
+    # Run evaluation for each dataset
+    summary = []
+    for ds_name in dataset_names:
+        filename, ds_type, q_col, opt_col, ans_col, ref_col = DATASETS[ds_name]
+        filepath = os.path.join(args.data_dir, filename)
+
+        if not os.path.exists(filepath):
+            print(f"SKIP: {filepath} not found")
+            continue
+
+        print(f"\n{'='*60}")
+        print(f"Dataset: {ds_name} ({ds_type})")
+        print(f"{'='*60}")
+
+        df = pd.read_csv(filepath, sep="\t")
+        print(f"Loaded {len(df)} rows")
+
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+        output_path = os.path.join(args.output_dir, f"{args.model}_{ds_name}_{timestamp}.json")
+
+        metadata = {
+            "model": args.model,
+            "model_dir": args.model_dir,
+            "dataset": ds_name,
+            "dataset_type": ds_type,
+            "n_questions": min(len(df), args.max_questions or len(df)),
+            "max_tokens": args.max_tokens,
+            "timestamp": timestamp,
+        }
+
+        t0 = time.time()
+        if ds_type == "mcq":
+            results, scores = run_mcq(model, df, q_col, opt_col, ans_col, args.max_tokens, args.max_questions)
+        else:
+            results, scores = run_open(model, df, q_col, ref_col, args.max_tokens, args.max_questions, judge_client, judge_model)
+
+        elapsed = time.time() - t0
+        metadata["total_inference_time_s"] = round(elapsed, 1)
+        metadata["avg_time_per_question_s"] = round(elapsed / len(results), 2) if results else 0
+
+        save_checkpoint(output_path, metadata, scores, results)
+        print(f"Saved: {output_path}")
+
+        # Print summary
+        if ds_type == "mcq":
+            acc = scores.get("accuracy", 0)
+            print(f"Accuracy: {acc:.1%} ({scores.get('correct', 0)}/{scores.get('total', 0)})")
+            summary.append(f"  {ds_name}: {acc:.1%}")
+        else:
+            mean_score = scores.get("mean_judge_score")
+            if mean_score is not None:
+                print(f"Mean judge score: {mean_score}/5 (n={scores.get('n_judged', 0)})")
+                summary.append(f"  {ds_name}: {mean_score}/5")
+            else:
+                print(f"Responses saved (no judge scoring)")
+                summary.append(f"  {ds_name}: {len(results)} responses saved")
+
+    # Final summary
+    print(f"\n{'='*60}")
+    print(f"SUMMARY — {args.model}")
+    print(f"{'='*60}")
+    for line in summary:
+        print(line)
+
+
+if __name__ == "__main__":
+    main()
