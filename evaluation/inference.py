@@ -13,10 +13,10 @@ from prompts import TEMPERATURE, TOP_P, TOP_K, N_CTX
 def _detect_gpu_layers() -> int:
     """Return -1 (all layers on GPU) if CUDA is available, else 0 (CPU only)."""
     try:
-        import llama_cpp
-        if sys.platform == "linux":
-            return -1
-    except ImportError:
+        import ctypes
+        ctypes.CDLL("libcuda.so")
+        return -1
+    except OSError:
         pass
     return 0
 
