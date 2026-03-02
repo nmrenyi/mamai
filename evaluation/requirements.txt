@@ -1,7 +1,4 @@
-torch>=2.7
-transformers>=4.50
-accelerate>=1.9
-bitsandbytes>=0.45
+llama-cpp-python
 pandas
 google-genai>=1.0.0
 tqdm
