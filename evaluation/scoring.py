@@ -11,32 +11,49 @@ import time
 def extract_letter(response: str) -> str:
     """Extract the answer letter (A-H) from a model response.
 
-    Handles:
-      - "A" (clean single letter)
-      - "The answer is B" / "answer: C"
-      - "A. Hysterectomy" (letter + option text)
-      - Multi-line where letter appears first
+    Conservative: returns "" rather than risk a false positive.
+    Medical text is full of standalone letters (vitamin A, hepatitis B,
+    group A streptococcus) so we only match clear answer patterns.
+
+    Designed against real Gemma 3n outputs which heavily use markdown bold:
+      "**D**", "**A**.", "The correct answer is **D**.", "B\\n\\n..."
     """
     text = response.strip()
 
-    # 1. Exact single letter
-    if re.fullmatch(r"[A-H]", text):
-        return text
+    # Strip markdown bold — the model wraps answers in **X** constantly
+    clean = text.replace("**", "")
 
-    # 2. Starts with a letter followed by punctuation or whitespace
-    m = re.match(r"^([A-H])[.\s:)\-,]", text)
+    # Check first line separately — model often puts just the letter on line 1
+    first_line = clean.split("\n")[0].strip()
+
+    # 1. First line is a single letter ("B\n\nExplanation...", "**A**\n\n...")
+    if re.fullmatch(r"[A-H]", first_line):
+        return first_line
+
+    # 2. First line starts with letter + punctuation ("A.", "C. Levonorgestrel")
+    m = re.match(r"^([A-H])[.:)\-,]", first_line)
     if m:
         return m.group(1)
 
-    # 3. "answer is X" / "answer: X" pattern
-    m = re.search(r"answer\s*(?:is|:)\s*([A-H])\b", text, re.IGNORECASE)
+    # 3. "answer is/:/= X" ("The correct answer is D.", "answer: C")
+    m = re.search(r"answer\s*(?:is|:|=)\s*([A-H])\b", clean, re.IGNORECASE)
     if m:
         return m.group(1).upper()
 
-    # 4. Letter followed by ) or . anywhere (e.g., "the correct option is B.")
-    m = re.search(r"\b([A-H])[.)]", text)
+    # 4. "option/choice X" or "choose/select X"
+    m = re.search(r"(?:option|choice|choose|select)\s+([A-H])\b", clean, re.IGNORECASE)
+    if m:
+        return m.group(1).upper()
+
+    # 5. Letter in parentheses: "(B)"
+    m = re.search(r"\(([A-H])\)", clean)
     if m:
         return m.group(1)
+
+    # 6. "X is correct" / "X is the answer"
+    m = re.search(r"\b([A-H])\s+is\s+(?:the\s+)?(?:correct|answer)", clean, re.IGNORECASE)
+    if m:
+        return m.group(1).upper()
 
     return ""
 
