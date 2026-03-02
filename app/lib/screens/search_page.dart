@@ -195,6 +195,7 @@ class _SearchPageState extends State<SearchPage> {
       _messages.add(ChatMessage(role: 'assistant', text: '', isLoading: true));
     });
     _textController.clear();
+    FocusManager.instance.primaryFocus?.unfocus();
     _scrollToBottom();
     await _saveCurrentConversation();
     if (historyTruncated && mounted) {
@@ -616,31 +617,34 @@ class _SearchPageState extends State<SearchPage> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: _messages.isEmpty
-                ? _buildSuggestionChips(examples)
-                : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _messages.length,
-                    itemBuilder: (context, index) {
-                      final message = _messages[index];
-                      if (message.role == 'user') {
-                        return _UserBubble(text: message.text);
-                      } else {
-                        final isLastMessage = index == _messages.length - 1;
-                        return _AssistantCard(
-                          message: message,
-                          showDisclaimer: isLastMessage && !_isGenerating,
-                        );
-                      }
-                    },
-                  ),
-          ),
-          _buildInputBar(),
-        ],
+      body: GestureDetector(
+        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+        child: Column(
+          children: [
+            Expanded(
+              child: _messages.isEmpty
+                  ? _buildSuggestionChips(examples)
+                  : ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _messages.length,
+                      itemBuilder: (context, index) {
+                        final message = _messages[index];
+                        if (message.role == 'user') {
+                          return _UserBubble(text: message.text);
+                        } else {
+                          final isLastMessage = index == _messages.length - 1;
+                          return _AssistantCard(
+                            message: message,
+                            showDisclaimer: isLastMessage && !_isGenerating,
+                          );
+                        }
+                      },
+                    ),
+            ),
+            _buildInputBar(),
+          ],
+        ),
       ),
     );
   }
@@ -707,9 +711,14 @@ class _SearchPageState extends State<SearchPage> {
               child: Tooltip(
                 message: _useRetrieval ? 'Search enabled' : 'Search disabled',
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
-                    color: _useRetrieval ? const Color(0xffcc5500) : Colors.grey[400],
+                    color: _useRetrieval
+                        ? const Color(0xffcc5500)
+                        : Colors.grey[400],
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Row(
