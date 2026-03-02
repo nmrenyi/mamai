@@ -16,7 +16,7 @@ WORKDIR /app
 # Python dependencies (llama-cpp-python compiled with CUDA support)
 COPY requirements.txt .
 RUN CMAKE_ARGS="-DGGML_CUDA=on" FORCE_CMAKE=1 \
-    pip install --no-cache-dir -r requirements.txt
+    pip3 install --no-cache-dir -r requirements.txt
 
 # Evaluation code and data (not models — those mount from PVC)
 COPY prompts.py inference.py scoring.py run_eval.py rescore.py ./

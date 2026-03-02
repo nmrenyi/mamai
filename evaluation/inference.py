@@ -5,7 +5,6 @@ Generation parameters match the on-device config in RagPipeline.kt:37-39.
 """
 
 import os
-import sys
 
 from prompts import TEMPERATURE, TOP_P, TOP_K, N_CTX
 
