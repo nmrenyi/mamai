@@ -134,28 +134,29 @@ def score_mcq(predictions: list[str], ground_truth: list[str]) -> dict:
     }
 
 
-def _load_gemini_api_key() -> str | None:
-    """Load Gemini API key from environment or key file."""
-    key = os.environ.get("GEMINI_API_KEY")
+def _load_api_key() -> str | None:
+    """Load OpenAI API key from environment or key file."""
+    key = os.environ.get("OPENAI_API_KEY")
     if key:
         return key
 
-    key_file = os.environ.get("GEMINI_API_KEY_FILE_AT")
+    key_file = os.environ.get("OPENAI_API_KEY_FILE_AT")
     if key_file and os.path.isfile(key_file):
-        return open(key_file).read().strip()
+        with open(key_file) as f:
+            return f.read().strip()
 
     return None
 
 
-def create_judge_client(model: str = "gemini-3-flash-preview"):
-    """Create a Gemini client for LLM-as-judge scoring. Returns None if no API key."""
-    api_key = _load_gemini_api_key()
+def create_judge_client(model: str = "gpt-5.2"):
+    """Create an OpenAI client for LLM-as-judge scoring. Returns None if no API key."""
+    api_key = _load_api_key()
     if not api_key:
         return None, None
 
-    from google import genai
+    from openai import OpenAI
 
-    client = genai.Client(api_key=api_key)
+    client = OpenAI(api_key=api_key)
     return client, model
 
 
@@ -240,7 +241,7 @@ def judge_response(
     client,
     model: str,
 ) -> dict | None:
-    """Score a response using Gemini as judge.
+    """Score a response using an OpenAI model as judge.
 
     Returns dict with per-dimension scores (accuracy, safety, completeness,
     helpfulness, clarity), a weighted_score, and justification.
@@ -255,7 +256,11 @@ def judge_response(
     max_retries = 3
     for attempt in range(max_retries):
         try:
-            result = client.models.generate_content(model=model, contents=prompt)
+            result = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.0,
+            )
             break
         except Exception as e:
             if attempt < max_retries - 1:
@@ -265,7 +270,7 @@ def judge_response(
             else:
                 print(f"  Judge API failed after {max_retries} attempts: {e}")
                 return {"weighted_score": None, "justification": f"API error: {e}"}
-    text = result.text.strip()
+    text = result.choices[0].message.content.strip()
 
     # Parse JSON from response (handle markdown code blocks)
     if text.startswith("```"):

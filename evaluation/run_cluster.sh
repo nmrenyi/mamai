@@ -4,7 +4,7 @@ echo "=== INSTALLING DEPENDENCIES ==="
 apt-get update && apt-get install -y python3.10 python3-pip ninja-build > /dev/null 2>&1
 ln -sf /usr/bin/python3.10 /usr/bin/python3
 echo "=== INSTALLING PYTHON PACKAGES ==="
-CMAKE_ARGS="-DGGML_CUDA=on" FORCE_CMAKE=1 pip3 install --no-cache-dir llama-cpp-python pandas "google-genai>=1.0.0" tqdm > /dev/null 2>&1
+CMAKE_ARGS="-DGGML_CUDA=on" FORCE_CMAKE=1 pip3 install --no-cache-dir llama-cpp-python pandas "openai>=1.0.0" tqdm > /dev/null 2>&1
 echo "=== DEPS DONE ==="
 
 cd /lightscratch/users/yiren/eval_code

@@ -185,7 +185,7 @@ def main():
     parser.add_argument("--max-tokens", type=int, default=2048, help="Max tokens to generate")
     parser.add_argument("--max-questions", type=int, default=None, help="Limit questions per dataset (for debugging)")
     parser.add_argument("--judge", action="store_true", help="Enable LLM-as-judge for open-ended datasets")
-    parser.add_argument("--judge-model", default="gemini-3-flash-preview", help="Gemini model for judging")
+    parser.add_argument("--judge-model", default="gpt-5.2", help="OpenAI model for judging")
     parser.add_argument("--n-gpu-layers", type=int, default=None, help="GPU layers for GGUF (-1 = all, 0 = CPU, default: auto-detect)")
     parser.add_argument("--data-dir", default="data", help="Directory containing dataset TSV files")
     args = parser.parse_args()
@@ -209,7 +209,7 @@ def main():
     if args.judge:
         judge_client, judge_model = create_judge_client(args.judge_model)
         if judge_client is None:
-            print("WARNING: --judge requested but no GEMINI_API_KEY found. Skipping judge scoring.")
+            print("WARNING: --judge requested but no OPENAI_API_KEY found. Skipping judge scoring.")
 
     # Run evaluation for each dataset
     summary = []

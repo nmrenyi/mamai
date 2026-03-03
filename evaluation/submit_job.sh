@@ -4,7 +4,7 @@
 #
 # Prerequisites:
 #   - SSH alias "light" configured for haas001
-#   - GEMINI_API_KEY set on haas001 (in ~/.bashrc or export)
+#   - OPENAI_API_KEY stored on haas001 (in keys/openai_key.txt)
 #   - PVC permissions: chmod -R g+w /mnt/light/scratch/users/yiren/
 
 JOB_NAME="${1:-mamai-eval-run}"
@@ -19,10 +19,10 @@ fi
 # Base64 encode the script to avoid quoting issues
 B64=$(base64 < "$SCRIPT_PATH" | tr -d '\n')
 
-# Read Gemini API key from cluster
-GEMINI_KEY=$(ssh light 'cat /mnt/light/scratch/users/yiren/keys/gemini_key.txt' 2>/dev/null)
-if [ -z "$GEMINI_KEY" ]; then
-  echo "Error: Could not read Gemini API key from cluster"
+# Read OpenAI API key from cluster
+OPENAI_KEY=$(ssh light 'cat /mnt/light/scratch/users/yiren/keys/openai_key.txt' 2>/dev/null)
+if [ -z "$OPENAI_KEY" ]; then
+  echo "Error: Could not read OpenAI API key from cluster"
   exit 1
 fi
 
@@ -32,7 +32,7 @@ ssh light "runai submit \
   --image nvidia/cuda:12.4.1-devel-ubuntu22.04 \
   --pvc light-scratch:/lightscratch \
   --large-shm \
-  -e GEMINI_API_KEY=$GEMINI_KEY \
+  -e OPENAI_API_KEY=$OPENAI_KEY \
   --gpu 1 \
   --backoff-limit 0 \
   --run-as-gid 84257 \
