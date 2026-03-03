@@ -8,72 +8,124 @@ import re
 import time
 
 
-def extract_letter(response: str) -> str:
-    """Extract the answer letter (A-H) from a model response.
+def extract_letters(response: str) -> set[str]:
+    """Extract answer letter(s) (A-H) from a model response.
 
-    Conservative: returns "" rather than risk a false positive.
-    Medical text is full of standalone letters (vitamin A, hepatitis B,
-    group A streptococcus) so we only match clear answer patterns.
+    Returns a set of uppercase letters. Returns empty set on failure.
 
-    Designed against real Gemma 3n outputs which heavily use markdown bold:
-      "**D**", "**A**.", "The correct answer is **D**.", "B\\n\\n..."
+    Supports single answers ("B"), multi-answer ("A, C, E"), and common
+    model output patterns including markdown bold.
     """
     text = response.strip()
 
     # Strip markdown bold — the model wraps answers in **X** constantly
     clean = text.replace("**", "")
 
-    # Check first line separately — model often puts just the letter on line 1
+    # Check first line separately — model often puts just the answer on line 1
     first_line = clean.split("\n")[0].strip()
 
-    # 1. First line is a single letter ("B\n\nExplanation...", "**A**\n\n...")
-    if re.fullmatch(r"[A-H]", first_line):
-        return first_line
+    # 1. First line is comma/and-separated letters: "A, C, E" or "A and C"
+    m = re.fullmatch(r"([A-H](?:\s*,\s*[A-H]|\s+and\s+[A-H])+)", first_line)
+    if m:
+        return set(re.findall(r"\b([A-H])\b", first_line))
 
-    # 2. First line starts with letter + punctuation ("A.", "C. Levonorgestrel")
+    # 2. First line is a single letter ("B\n\nExplanation...", "**A**\n\n...")
+    if re.fullmatch(r"[A-H]", first_line):
+        return {first_line.upper()}
+
+    # 3. First line starts with letter + punctuation ("A.", "C. Levonorgestrel")
     m = re.match(r"^([A-H])[.:)\-,]", first_line)
     if m:
-        return m.group(1)
+        return {m.group(1).upper()}
 
-    # 3. "answer is/:/= X" ("The correct answer is D.", "answer: C")
+    # 4. "answers are X, Y, Z" or "answer is X, Y"
+    m = re.search(r"answers?\s*(?:are|is|:|=)\s*([A-H](?:\s*,\s*[A-H]|\s+and\s+[A-H])*)", clean, re.IGNORECASE)
+    if m:
+        return set(re.findall(r"\b([A-H])\b", m.group(1)))
+
+    # 5. "answer is/:/= X" (single letter)
     m = re.search(r"answer\s*(?:is|:|=)\s*([A-H])\b", clean, re.IGNORECASE)
     if m:
-        return m.group(1).upper()
+        return {m.group(1).upper()}
 
-    # 4. "option/choice X" or "choose/select X"
+    # 6. "option/choice X" or "choose/select X"
     m = re.search(r"(?:option|choice|choose|select)\s+([A-H])\b", clean, re.IGNORECASE)
     if m:
-        return m.group(1).upper()
+        return {m.group(1).upper()}
 
-    # 5. Letter in parentheses: "(B)"
+    # 7. Letter in parentheses: "(B)"
     m = re.search(r"\(([A-H])\)", clean)
     if m:
-        return m.group(1)
+        return {m.group(1).upper()}
 
-    # 6. "X is correct" / "X is the answer"
+    # 8. "X is correct" / "X is the answer"
     m = re.search(r"\b([A-H])\s+is\s+(?:the\s+)?(?:correct|answer)", clean, re.IGNORECASE)
     if m:
-        return m.group(1).upper()
+        return {m.group(1).upper()}
 
+    return set()
+
+
+def extract_letter(response: str) -> str:
+    """Extract a single answer letter. Backwards-compatible wrapper around extract_letters."""
+    letters = extract_letters(response)
+    if len(letters) == 1:
+        return next(iter(letters))
+    if letters:
+        return ",".join(sorted(letters))
     return ""
 
 
+def _parse_answer_set(answer: str) -> set[str]:
+    """Parse a ground truth or prediction string into a set of uppercase letters."""
+    return set(re.findall(r"[A-H]", answer.upper()))
+
+
 def score_mcq(predictions: list[str], ground_truth: list[str]) -> dict:
-    """Compute MCQ accuracy from extracted letter predictions."""
-    correct = 0
+    """Compute MCQ accuracy with support for multi-answer questions.
+
+    Scoring rules:
+    - Exact match: full credit (1.0)
+    - Partial match (subset of correct, no wrong answers): partial credit (correct_picked / total_correct)
+    - Any wrong answer picked: zero credit
+    """
+    exact_correct = 0
+    partial_credit_sum = 0.0
     per_question = []
+    per_question_partial = []
+
     for pred, gt in zip(predictions, ground_truth):
-        is_correct = pred.upper() == gt.upper()
-        if is_correct:
-            correct += 1
-        per_question.append(is_correct)
+        pred_set = _parse_answer_set(pred)
+        gt_set = _parse_answer_set(gt)
+
+        if not pred_set or not gt_set:
+            per_question.append(False)
+            per_question_partial.append(0.0)
+            continue
+
+        # Exact match
+        is_exact = pred_set == gt_set
+        if is_exact:
+            exact_correct += 1
+        per_question.append(is_exact)
+
+        # Partial credit: any wrong answer → zero credit
+        wrong = pred_set - gt_set
+        if wrong:
+            per_question_partial.append(0.0)
+        else:
+            credit = len(pred_set & gt_set) / len(gt_set)
+            partial_credit_sum += credit
+            per_question_partial.append(credit)
 
     total = len(ground_truth)
     return {
-        "accuracy": correct / total if total > 0 else 0.0,
-        "correct": correct,
+        "accuracy": exact_correct / total if total > 0 else 0.0,
+        "correct": exact_correct,
         "total": total,
+        "partial_credit_accuracy": partial_credit_sum / total if total > 0 else 0.0,
         "per_question": per_question,
+        "per_question_partial": per_question_partial,
     }
 
 
