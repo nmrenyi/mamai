@@ -147,7 +147,7 @@ def _load_gemini_api_key() -> str | None:
     return None
 
 
-def create_judge_client(model: str = "gemini-2.0-flash"):
+def create_judge_client(model: str = "gemini-3-flash-preview"):
     """Create a Gemini client for LLM-as-judge scoring. Returns None if no API key."""
     api_key = _load_gemini_api_key()
     if not api_key:
@@ -229,7 +229,7 @@ def _compute_weighted_score(judgment: dict) -> float | None:
         val = judgment.get(dim)
         if val is None or not isinstance(val, (int, float)):
             return None
-        scores[dim] = val
+        scores[dim] = max(1, min(5, int(val)))  # clamp to 1-5
     return round(sum(scores[dim] * JUDGE_DIMENSIONS[dim] for dim in scores), 2)
 
 
@@ -280,7 +280,7 @@ def judge_response(
         for dim in JUDGE_DIMENSIONS:
             m = re.search(rf'"{dim}"\s*:\s*(\d)', text)
             if m:
-                judgment[dim] = int(m.group(1))
+                judgment[dim] = max(1, min(5, int(m.group(1))))
         if not judgment:
             return {"weighted_score": None, "justification": f"Failed to parse: {text}"}
         judgment["justification"] = text

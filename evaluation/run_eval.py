@@ -18,7 +18,7 @@ from tqdm import tqdm
 
 from inference import load_model
 from prompts import TEMPERATURE, TOP_P, TOP_K, N_CTX, PROMPT_VERSION, build_mcq_prompt, build_open_prompt
-from scoring import JUDGE_DIMENSIONS, create_judge_client, extract_letters, judge_response, score_mcq
+from scoring import JUDGE_DIMENSIONS, _parse_answer_set, create_judge_client, extract_letters, judge_response, score_mcq
 
 # Dataset registry: name -> (filename, type, question_col, options_col, answer_col, reference_col)
 DATASETS = {
@@ -54,7 +54,11 @@ def run_mcq(model, df, question_col, options_col, answer_col, max_tokens, max_qu
 
         prompt = build_mcq_prompt(question, options)
         t0 = time.time()
-        response = model.generate(prompt, max_tokens=max_tokens)
+        try:
+            response = model.generate(prompt, max_tokens=max_tokens)
+        except Exception as e:
+            print(f"  ERROR row {i}: generate() failed: {e}")
+            continue
         elapsed = time.time() - t0
 
         extracted_set = extract_letters(response)
@@ -69,7 +73,7 @@ def run_mcq(model, df, question_col, options_col, answer_col, max_tokens, max_qu
             "model_response": response,
             "extracted_answer": extracted,
             "extracted_answers": sorted(extracted_set),
-            "correct": extracted.upper() == correct.upper(),
+            "correct": extracted_set == _parse_answer_set(correct),
             "inference_time_s": round(elapsed, 2),
         })
 
@@ -82,13 +86,14 @@ def run_mcq(model, df, question_col, options_col, answer_col, max_tokens, max_qu
     return results, scores
 
 
-def _open_scores(judgments):
+def _open_scores(judgments, n_failed=0):
     """Compute aggregate judge scores across all dimensions.
 
     Args:
         judgments: list of judgment dicts, each with per-dimension scores and weighted_score.
+        n_failed: number of judge API calls that failed or returned unparseable results.
     """
-    if not judgments:
+    if not judgments and not n_failed:
         return {}
 
     scores = {}
@@ -105,6 +110,7 @@ def _open_scores(judgments):
         scores["mean_weighted_score"] = round(sum(weighted) / len(weighted), 2)
 
     scores["n_judged"] = len(judgments)
+    scores["n_failed"] = n_failed
     scores["dimension_weights"] = dict(JUDGE_DIMENSIONS)
     return scores
 
@@ -117,6 +123,7 @@ def run_open(model, df, question_col, reference_col, max_tokens, max_questions, 
 
     results = []
     judgments = []
+    n_judge_failed = 0
 
     for i, (_, row) in enumerate(tqdm(df.iterrows(), total=len(df), desc="Open inference"), 1):
         if pd.isna(row[question_col]):
@@ -128,7 +135,11 @@ def run_open(model, df, question_col, reference_col, max_tokens, max_questions, 
 
         prompt = build_open_prompt(question)
         t0 = time.time()
-        response = model.generate(prompt, max_tokens=max_tokens)
+        try:
+            response = model.generate(prompt, max_tokens=max_tokens)
+        except Exception as e:
+            print(f"  ERROR row {i}: generate() failed: {e}")
+            continue
         elapsed = time.time() - t0
 
         result = {
@@ -141,20 +152,21 @@ def run_open(model, df, question_col, reference_col, max_tokens, max_questions, 
         # LLM-as-judge scoring
         if judge_client is not None and reference:
             judgment = judge_response(question, response, reference, judge_client, judge_model)
-            if judgment:
+            if judgment and judgment.get("weighted_score") is not None:
                 result["judge_scores"] = {dim: judgment.get(dim) for dim in JUDGE_DIMENSIONS}
-                result["judge_weighted_score"] = judgment.get("weighted_score")
+                result["judge_weighted_score"] = judgment["weighted_score"]
                 result["judge_justification"] = judgment.get("justification")
-                if judgment.get("weighted_score") is not None:
-                    judgments.append(judgment)
+                judgments.append(judgment)
+            else:
+                n_judge_failed += 1
 
         results.append(result)
 
         if output_path and i % CHECKPOINT_INTERVAL == 0:
-            save_checkpoint(output_path, metadata or {}, _open_scores(judgments), results)
+            save_checkpoint(output_path, metadata or {}, _open_scores(judgments, n_judge_failed), results)
             print(f"  Checkpoint saved at {i}/{len(df)}")
 
-    return results, _open_scores(judgments)
+    return results, _open_scores(judgments, n_judge_failed)
 
 
 def save_checkpoint(output_path, metadata, scores, results):
