@@ -212,6 +212,10 @@ def main():
             print("WARNING: --judge requested but no OPENAI_API_KEY found. Skipping judge scoring.")
 
     # Run evaluation for each dataset
+    run_timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+    run_dir = os.path.join(args.output_dir, args.model, run_timestamp)
+    os.makedirs(run_dir, exist_ok=True)
+
     summary = []
     for ds_name in dataset_names:
         filename, ds_type, q_col, opt_col, ans_col, ref_col = DATASETS[ds_name]
@@ -228,8 +232,7 @@ def main():
         df = pd.read_csv(filepath, sep="\t")
         print(f"Loaded {len(df)} rows")
 
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
-        output_path = os.path.join(args.output_dir, f"{args.model}_{ds_name}_{timestamp}.json")
+        output_path = os.path.join(run_dir, f"{ds_name}.json")
 
         metadata = {
             "model": args.model,
@@ -237,7 +240,7 @@ def main():
             "dataset": ds_name,
             "dataset_type": ds_type,
             "n_questions": min(len(df), args.max_questions or len(df)),
-            "timestamp": timestamp,
+            "timestamp": run_timestamp,
             "prompt_version": PROMPT_VERSION,
             "generation_params": {
                 "temperature": TEMPERATURE,
