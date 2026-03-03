@@ -17,8 +17,8 @@ import pandas as pd
 from tqdm import tqdm
 
 from inference import load_model
-from prompts import TEMPERATURE, TOP_P, TOP_K, N_CTX, build_mcq_prompt, build_open_prompt
-from scoring import create_judge_client, extract_letter, judge_response, score_mcq
+from prompts import TEMPERATURE, TOP_P, TOP_K, N_CTX, PROMPT_VERSION, build_mcq_prompt, build_open_prompt
+from scoring import create_judge_client, extract_letters, judge_response, score_mcq
 
 # Dataset registry: name -> (filename, type, question_col, options_col, answer_col, reference_col)
 DATASETS = {
@@ -57,7 +57,8 @@ def run_mcq(model, df, question_col, options_col, answer_col, max_tokens, max_qu
         response = model.generate(prompt, max_tokens=max_tokens)
         elapsed = time.time() - t0
 
-        extracted = extract_letter(response)
+        extracted_set = extract_letters(response)
+        extracted = ",".join(sorted(extracted_set)) if extracted_set else ""
         predictions.append(extracted)
         ground_truth.append(correct)
 
@@ -67,6 +68,7 @@ def run_mcq(model, df, question_col, options_col, answer_col, max_tokens, max_qu
             "ground_truth": correct,
             "model_response": response,
             "extracted_answer": extracted,
+            "extracted_answers": sorted(extracted_set),
             "correct": extracted.upper() == correct.upper(),
             "inference_time_s": round(elapsed, 2),
         })
@@ -206,6 +208,7 @@ def main():
             "dataset_type": ds_type,
             "n_questions": min(len(df), args.max_questions or len(df)),
             "timestamp": timestamp,
+            "prompt_version": PROMPT_VERSION,
             "generation_params": {
                 "temperature": TEMPERATURE,
                 "top_p": TOP_P,
@@ -233,8 +236,11 @@ def main():
         # Print summary
         if ds_type == "mcq":
             acc = scores.get("accuracy", 0)
+            partial = scores.get("partial_credit_accuracy", acc)
             print(f"Accuracy: {acc:.1%} ({scores.get('correct', 0)}/{scores.get('total', 0)})")
-            summary.append(f"  {ds_name}: {acc:.1%}")
+            if partial != acc:
+                print(f"Partial credit: {partial:.1%}")
+            summary.append(f"  {ds_name}: {acc:.1%} (partial: {partial:.1%})")
         else:
             mean_score = scores.get("mean_judge_score")
             if mean_score is not None:
