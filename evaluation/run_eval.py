@@ -152,7 +152,7 @@ def main():
     parser.add_argument("--model-dir", default="models", help="Directory containing model files")
     parser.add_argument("--datasets", required=True, help="Comma-separated dataset names, or 'all'")
     parser.add_argument("--output-dir", default="results", help="Directory for output JSON files")
-    parser.add_argument("--max-tokens", type=int, default=1024, help="Max tokens to generate")
+    parser.add_argument("--max-tokens", type=int, default=2048, help="Max tokens to generate")
     parser.add_argument("--max-questions", type=int, default=None, help="Limit questions per dataset (for debugging)")
     parser.add_argument("--judge", action="store_true", help="Enable LLM-as-judge for open-ended datasets")
     parser.add_argument("--judge-model", default="gemini-3-flash-preview", help="Gemini model for judging")
