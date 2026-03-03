@@ -64,7 +64,7 @@ def extract_letters(response: str) -> set[str]:
         return {m.group(1).upper()}
 
     # 9. "The [noun] is X." or "is X" at end of line — e.g. "The treatment is D. Phytooestrogens"
-    m = re.search(r"\bis\s+([A-H])(?:\.|$)", clean, re.IGNORECASE | re.MULTILINE)
+    m = re.search(r"\bis\s+([A-H])(?:\.|$)", clean, re.MULTILINE)
     if m:
         return {m.group(1).upper()}
 
