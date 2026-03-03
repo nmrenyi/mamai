@@ -38,8 +38,8 @@ def extract_letters(response: str) -> set[str]:
     if m:
         return {m.group(1).upper()}
 
-    # 4. "answers are X, Y, Z" or "answer is X, Y"
-    m = re.search(r"answers?\s*(?:are|is|:|=)\s*([A-H](?:\s*,\s*[A-H]|\s+and\s+[A-H])*)", clean, re.IGNORECASE)
+    # 4. "answers are X, Y, Z" or "answer is X, Y" — find keyword then grab all nearby letters
+    m = re.search(r"answers?\s*(?:are|is|:|=)\s*([A-H](?:\s*,?\s*(?:and\s+)?[A-H])*)", clean, re.IGNORECASE)
     if m:
         return set(re.findall(r"\b([A-H])\b", m.group(1)))
 
@@ -60,6 +60,11 @@ def extract_letters(response: str) -> set[str]:
 
     # 8. "X is correct" / "X is the answer"
     m = re.search(r"\b([A-H])\s+is\s+(?:the\s+)?(?:correct|answer)", clean, re.IGNORECASE)
+    if m:
+        return {m.group(1).upper()}
+
+    # 9. "The [noun] is X." or "is X" at end of line — e.g. "The treatment is D. Phytooestrogens"
+    m = re.search(r"\bis\s+([A-H])(?:\.|$)", clean, re.IGNORECASE | re.MULTILINE)
     if m:
         return {m.group(1).upper()}
 
