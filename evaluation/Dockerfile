@@ -5,7 +5,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # System dependencies
 RUN apt-get update && apt-get install -y \
     python3.10 python3.10-venv python3-pip \
-    git cmake build-essential \
+    git cmake build-essential ninja-build \
     && rm -rf /var/lib/apt/lists/*
 
 RUN ln -sf /usr/bin/python3.10 /usr/bin/python3 && \

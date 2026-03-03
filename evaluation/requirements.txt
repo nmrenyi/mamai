@@ -1,3 +1,4 @@
+ninja
 llama-cpp-python
 pandas
 google-genai>=1.0.0
