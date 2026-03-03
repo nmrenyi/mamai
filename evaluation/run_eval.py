@@ -18,7 +18,7 @@ from tqdm import tqdm
 
 from inference import load_model
 from prompts import TEMPERATURE, TOP_P, TOP_K, N_CTX, PROMPT_VERSION, build_mcq_prompt, build_open_prompt
-from scoring import create_judge_client, extract_letters, judge_response, score_mcq
+from scoring import JUDGE_DIMENSIONS, create_judge_client, extract_letters, judge_response, score_mcq
 
 # Dataset registry: name -> (filename, type, question_col, options_col, answer_col, reference_col)
 DATASETS = {
@@ -82,15 +82,31 @@ def run_mcq(model, df, question_col, options_col, answer_col, max_tokens, max_qu
     return results, scores
 
 
-def _open_scores(judge_scores):
-    """Compute aggregate judge scores."""
-    if not judge_scores:
+def _open_scores(judgments):
+    """Compute aggregate judge scores across all dimensions.
+
+    Args:
+        judgments: list of judgment dicts, each with per-dimension scores and weighted_score.
+    """
+    if not judgments:
         return {}
-    return {
-        "mean_judge_score": round(sum(judge_scores) / len(judge_scores), 2),
-        "judge_scores_distribution": {i: judge_scores.count(i) for i in range(1, 6)},
-        "n_judged": len(judge_scores),
-    }
+
+    scores = {}
+    # Per-dimension aggregates
+    for dim in JUDGE_DIMENSIONS:
+        dim_scores = [j[dim] for j in judgments if j.get(dim) is not None]
+        if dim_scores:
+            scores[f"mean_{dim}"] = round(sum(dim_scores) / len(dim_scores), 2)
+            scores[f"{dim}_distribution"] = {i: dim_scores.count(i) for i in range(1, 6)}
+
+    # Weighted aggregate
+    weighted = [j["weighted_score"] for j in judgments if j.get("weighted_score") is not None]
+    if weighted:
+        scores["mean_weighted_score"] = round(sum(weighted) / len(weighted), 2)
+
+    scores["n_judged"] = len(judgments)
+    scores["dimension_weights"] = dict(JUDGE_DIMENSIONS)
+    return scores
 
 
 def run_open(model, df, question_col, reference_col, max_tokens, max_questions, judge_client, judge_model,
@@ -100,7 +116,7 @@ def run_open(model, df, question_col, reference_col, max_tokens, max_questions, 
         df = df.head(max_questions)
 
     results = []
-    judge_scores = []
+    judgments = []
 
     for i, (_, row) in enumerate(tqdm(df.iterrows(), total=len(df), desc="Open inference"), 1):
         if pd.isna(row[question_col]):
@@ -125,18 +141,20 @@ def run_open(model, df, question_col, reference_col, max_tokens, max_questions, 
         # LLM-as-judge scoring
         if judge_client is not None and reference:
             judgment = judge_response(question, response, reference, judge_client, judge_model)
-            result["judge_score"] = judgment.get("score") if judgment else None
-            result["judge_justification"] = judgment.get("justification") if judgment else None
-            if judgment and judgment.get("score") is not None:
-                judge_scores.append(judgment["score"])
+            if judgment:
+                result["judge_scores"] = {dim: judgment.get(dim) for dim in JUDGE_DIMENSIONS}
+                result["judge_weighted_score"] = judgment.get("weighted_score")
+                result["judge_justification"] = judgment.get("justification")
+                if judgment.get("weighted_score") is not None:
+                    judgments.append(judgment)
 
         results.append(result)
 
         if output_path and i % CHECKPOINT_INTERVAL == 0:
-            save_checkpoint(output_path, metadata or {}, _open_scores(judge_scores), results)
+            save_checkpoint(output_path, metadata or {}, _open_scores(judgments), results)
             print(f"  Checkpoint saved at {i}/{len(df)}")
 
-    return results, _open_scores(judge_scores)
+    return results, _open_scores(judgments)
 
 
 def save_checkpoint(output_path, metadata, scores, results):
@@ -242,9 +260,13 @@ def main():
                 print(f"Partial credit: {partial:.1%}")
             summary.append(f"  {ds_name}: {acc:.1%} (partial: {partial:.1%})")
         else:
-            mean_score = scores.get("mean_judge_score")
+            mean_score = scores.get("mean_weighted_score")
             if mean_score is not None:
-                print(f"Mean judge score: {mean_score}/5 (n={scores.get('n_judged', 0)})")
+                print(f"Mean weighted score: {mean_score}/5 (n={scores.get('n_judged', 0)})")
+                for dim in JUDGE_DIMENSIONS:
+                    dim_mean = scores.get(f"mean_{dim}")
+                    if dim_mean is not None:
+                        print(f"  {dim}: {dim_mean}/5")
                 summary.append(f"  {ds_name}: {mean_score}/5")
             else:
                 print(f"Responses saved (no judge scoring)")

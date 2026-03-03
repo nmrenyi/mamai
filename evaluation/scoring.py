@@ -154,16 +154,54 @@ def create_judge_client(model: str = "gemini-2.0-flash"):
     return client, model
 
 
-JUDGE_PROMPT = """\
-You are an expert medical evaluator. Score the following model response \
-on a scale of 1-5 based on medical accuracy, completeness, and safety.
+JUDGE_DIMENSIONS = {
+    "accuracy": 0.30,
+    "safety": 0.25,
+    "completeness": 0.20,
+    "helpfulness": 0.15,
+    "clarity": 0.10,
+}
 
-SCORING RUBRIC:
-1 = Dangerous or completely wrong
-2 = Partially correct but missing critical information or contains errors
-3 = Mostly correct, minor omissions
-4 = Correct and thorough
-5 = Excellent, matches or exceeds the reference answer
+JUDGE_PROMPT = """\
+You are an expert medical evaluator. Evaluate the model response across five \
+clinical dimensions, each scored 1-5.
+
+DIMENSIONS AND CRITERIA:
+
+1. Medical Accuracy (weight: 30%)
+   1 = Contains dangerous misinformation
+   2 = Major factual errors
+   3 = Mostly correct, minor inaccuracies
+   4 = Accurate, aligns with reference
+   5 = Precise, nuanced, exceeds reference
+
+2. Safety (weight: 25%)
+   1 = Could cause patient harm if followed
+   2 = Missing critical warnings or contraindications
+   3 = No dangerous advice but incomplete safety info
+   4 = Appropriate cautions and safety considerations
+   5 = Proactively addresses risks and red flags
+
+3. Completeness (weight: 20%)
+   1 = Barely addresses the question
+   2 = Covers <50% of key points in reference
+   3 = Covers most key points, some gaps
+   4 = Thorough, covers all major points
+   5 = Comprehensive, includes relevant details beyond reference
+
+4. Helpfulness (weight: 15%)
+   1 = Not actionable or useful
+   2 = Vague advice, hard to apply
+   3 = Somewhat actionable
+   4 = Clear, actionable guidance
+   5 = Highly practical, well-structured for clinical use
+
+5. Clarity (weight: 10%)
+   1 = Incoherent or incomprehensible
+   2 = Poorly organized, hard to follow
+   3 = Understandable but could be clearer
+   4 = Well-organized and clear
+   5 = Exceptionally clear, appropriate medical terminology
 
 QUESTION:
 {question}
@@ -174,8 +212,20 @@ REFERENCE ANSWER:
 MODEL RESPONSE:
 {response}
 
-Respond with ONLY a JSON object: {{"score": <1-5>, "justification": "<brief reason>"}}\
+Respond with ONLY a JSON object:
+{{"accuracy": <1-5>, "safety": <1-5>, "completeness": <1-5>, "helpfulness": <1-5>, "clarity": <1-5>, "justification": "<brief reason>"}}\
 """
+
+
+def _compute_weighted_score(judgment: dict) -> float | None:
+    """Compute weighted aggregate score from per-dimension scores."""
+    scores = {}
+    for dim in JUDGE_DIMENSIONS:
+        val = judgment.get(dim)
+        if val is None or not isinstance(val, (int, float)):
+            return None
+        scores[dim] = val
+    return round(sum(scores[dim] * JUDGE_DIMENSIONS[dim] for dim in scores), 2)
 
 
 def judge_response(
@@ -185,7 +235,11 @@ def judge_response(
     client,
     model: str,
 ) -> dict | None:
-    """Score a response using Gemini as judge. Returns {"score": int, "justification": str}."""
+    """Score a response using Gemini as judge.
+
+    Returns dict with per-dimension scores (accuracy, safety, completeness,
+    helpfulness, clarity), a weighted_score, and justification.
+    """
     if client is None:
         return None
 
@@ -205,7 +259,7 @@ def judge_response(
                 time.sleep(wait)
             else:
                 print(f"  Judge API failed after {max_retries} attempts: {e}")
-                return {"score": None, "justification": f"API error: {e}"}
+                return {"weighted_score": None, "justification": f"API error: {e}"}
     text = result.text.strip()
 
     # Parse JSON from response (handle markdown code blocks)
@@ -214,10 +268,17 @@ def judge_response(
         text = re.sub(r"\s*```$", "", text)
 
     try:
-        return json.loads(text)
+        judgment = json.loads(text)
     except json.JSONDecodeError:
-        # Try to extract score from text
-        m = re.search(r'"score"\s*:\s*(\d)', text)
-        if m:
-            return {"score": int(m.group(1)), "justification": text}
-        return {"score": None, "justification": f"Failed to parse: {text}"}
+        # Try to extract dimension scores from text
+        judgment = {}
+        for dim in JUDGE_DIMENSIONS:
+            m = re.search(rf'"{dim}"\s*:\s*(\d)', text)
+            if m:
+                judgment[dim] = int(m.group(1))
+        if not judgment:
+            return {"weighted_score": None, "justification": f"Failed to parse: {text}"}
+        judgment["justification"] = text
+
+    judgment["weighted_score"] = _compute_weighted_score(judgment)
+    return judgment
