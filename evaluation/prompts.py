@@ -13,9 +13,8 @@ import hashlib
 
 MCQ_SYSTEM_PROMPT = (
     "You are a medical expert taking a clinical exam. "
-    "Answer each multiple-choice question by selecting the correct option(s). "
-    "If there is one correct answer, reply with just the letter (e.g., 'A'). "
-    "If multiple answers are correct, reply with the letters separated by commas (e.g., 'A, C, E'). "
+    "Answer each multiple-choice question by selecting the single best answer. "
+    "Reply with ONLY the letter of the correct option (e.g., 'B'). "
     "Do not add explanations or disclaimers."
 )
 
