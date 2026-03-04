@@ -68,7 +68,6 @@ class OpenAIBackend:
             ],
             max_completion_tokens=max_tokens,
             temperature=TEMPERATURE,
-            top_p=TOP_P,
         )
         return result.choices[0].message.content.strip()
 
