@@ -75,6 +75,12 @@ def run_mcq(model, df, question_col, options_col, answer_col, max_tokens, max_qu
                 else:
                     messages = build_mcq_messages(question, options)
                 response = model.generate(messages, max_tokens=max_tokens)
+            elif hasattr(model, 'supports_chat') and model.supports_chat:
+                if context_str:
+                    messages = build_rag_mcq_messages(question, options, context_str)
+                else:
+                    messages = build_mcq_messages(question, options)
+                response = model.generate_chat(messages, max_tokens=max_tokens)
             else:
                 if context_str:
                     prompt = build_rag_mcq_prompt(question, options, context_str)
@@ -185,6 +191,12 @@ def run_open(model, df, question_col, reference_col, max_tokens, max_questions, 
                 else:
                     messages = build_open_messages(question)
                 response = model.generate(messages, max_tokens=max_tokens)
+            elif hasattr(model, 'supports_chat') and model.supports_chat:
+                if context_str:
+                    messages = build_rag_open_messages(question, context_str)
+                else:
+                    messages = build_open_messages(question)
+                response = model.generate_chat(messages, max_tokens=max_tokens)
             else:
                 if context_str:
                     prompt = build_rag_open_prompt(question, context_str)
