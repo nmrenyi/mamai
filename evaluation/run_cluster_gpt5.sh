@@ -8,6 +8,7 @@ pip3 install --no-cache-dir pandas "openai>=1.0.0" tqdm > /dev/null 2>&1
 echo "=== DEPS DONE ==="
 
 cd /lightscratch/users/yiren/eval_code
+git config --global --add safe.directory /lightscratch/users/yiren/eval_code
 git pull origin eval
 OUT=/lightscratch/users/yiren/eval_output
 mkdir -p $OUT
