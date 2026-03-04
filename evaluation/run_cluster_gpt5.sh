@@ -7,9 +7,10 @@ echo "=== INSTALLING PYTHON PACKAGES ==="
 pip3 install --no-cache-dir pandas "openai>=1.0.0" tqdm > /dev/null 2>&1
 echo "=== DEPS DONE ==="
 
-cd /lightscratch/users/yiren/eval_code
-git config --global --add safe.directory /lightscratch/users/yiren/eval_code
-git pull origin eval
+rm -rf /tmp/eval_code
+git clone --branch eval --depth 1 https://github.com/nmrenyi/mamai.git /tmp/eval_code
+cd /tmp/eval_code/evaluation
+ln -s /lightscratch/users/yiren/eval_code/data data
 OUT=/lightscratch/users/yiren/eval_output
 mkdir -p $OUT
 
