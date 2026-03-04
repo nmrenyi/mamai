@@ -81,25 +81,37 @@ def _prompt_hash(*prompts: str) -> str:
 PROMPT_VERSION = _prompt_hash(MCQ_SYSTEM_PROMPT, OPEN_SYSTEM_PROMPT)
 
 
-def build_mcq_prompt(question: str, options: str) -> str:
-    """Build a Gemma IT prompt for a multiple-choice question.
-
-    Uses a focused exam-style prompt that supports single and multi-answer questions.
-    """
+def _format_gemma_it(system: str, user: str) -> str:
+    """Wrap system + user content in Gemma IT chat template."""
     return (
-        f"<start_of_turn>user\n"
-        f"{MCQ_SYSTEM_PROMPT}\n"
-        f"\nQuestion: {question}\n"
-        f"Options:\n{options}<end_of_turn>\n"
+        f"<start_of_turn>user\n{system}\n\n{user}<end_of_turn>\n"
         f"<start_of_turn>model\n"
     )
+
+
+def build_mcq_messages(question: str, options: str) -> dict:
+    """Return model-agnostic {system, user} messages for MCQ."""
+    return {
+        "system": MCQ_SYSTEM_PROMPT,
+        "user": f"Question: {question}\nOptions:\n{options}",
+    }
+
+
+def build_open_messages(question: str) -> dict:
+    """Return model-agnostic {system, user} messages for open-ended."""
+    return {
+        "system": OPEN_SYSTEM_PROMPT,
+        "user": question,
+    }
+
+
+def build_mcq_prompt(question: str, options: str) -> str:
+    """Build a Gemma IT prompt for a multiple-choice question."""
+    msgs = build_mcq_messages(question, options)
+    return _format_gemma_it(msgs["system"], msgs["user"])
 
 
 def build_open_prompt(question: str) -> str:
     """Build a Gemma IT prompt for an open-ended clinical question."""
-    return (
-        f"<start_of_turn>user\n"
-        f"{OPEN_SYSTEM_PROMPT}\n"
-        f"\n{question}<end_of_turn>\n"
-        f"<start_of_turn>model\n"
-    )
+    msgs = build_open_messages(question)
+    return _format_gemma_it(msgs["system"], msgs["user"])

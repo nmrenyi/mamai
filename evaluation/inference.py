@@ -47,19 +47,55 @@ class GGUFBackend:
         return output["choices"][0]["text"].strip()
 
 
+class OpenAIBackend:
+    """OpenAI API backend for chat models (GPT-5, GPT-4o, etc.)."""
+
+    is_api = True
+
+    def __init__(self, model: str):
+        from openai import OpenAI
+
+        self.client = OpenAI()  # uses OPENAI_API_KEY env var
+        self.model = model
+        print(f"Using OpenAI API model: {model}")
+
+    def generate(self, messages: dict, max_tokens: int = 512) -> str:
+        result = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": messages["system"]},
+                {"role": "user", "content": messages["user"]},
+            ],
+            max_tokens=max_tokens,
+            temperature=TEMPERATURE,
+            top_p=TOP_P,
+        )
+        return result.choices[0].message.content.strip()
+
+
 MODEL_REGISTRY = {
-    "gemma3n-e4b": "gemma-3n/gemma-3n-E4B-it-Q4_0.gguf",
-    "gemma3n-e2b": "gemma-3n/gemma-3n-E2B-it-Q4_0.gguf",
-    "medgemma-gguf": "medgemma-4b/medgemma-4b-it-Q4_0.gguf",
+    # Local GGUF models
+    "gemma3n-e4b": ("gguf", "gemma-3n/gemma-3n-E4B-it-Q4_0.gguf"),
+    "gemma3n-e2b": ("gguf", "gemma-3n/gemma-3n-E2B-it-Q4_0.gguf"),
+    "medgemma-gguf": ("gguf", "medgemma-4b/medgemma-4b-it-Q4_0.gguf"),
+    # OpenAI API models
+    "gpt-5": ("openai", "gpt-5"),
+    "gpt-4o": ("openai", "gpt-4o"),
 }
 
 
-def load_model(name: str, model_dir: str, n_gpu_layers: int | None = None) -> GGUFBackend:
+def load_model(name: str, model_dir: str = "", n_gpu_layers: int | None = None):
     """Load a model by name from the registry."""
     if name not in MODEL_REGISTRY:
         raise ValueError(f"Unknown model: {name}. Available: {list(MODEL_REGISTRY.keys())}")
 
-    full_path = os.path.join(model_dir, MODEL_REGISTRY[name])
+    backend_type, model_path = MODEL_REGISTRY[name]
+
+    if backend_type == "openai":
+        return OpenAIBackend(model_path)
+
+    # GGUF backend
+    full_path = os.path.join(model_dir, model_path)
     layers = n_gpu_layers if n_gpu_layers is not None else _detect_gpu_layers()
     print(f"  GPU layers: {layers} ({'all on GPU' if layers == -1 else 'CPU only'})")
     return GGUFBackend(full_path, n_gpu_layers=layers)

@@ -5,6 +5,7 @@ Usage:
   python run_eval.py --model gemma3n-e4b --datasets afrimedqa_mcq --max-questions 5
   python run_eval.py --model gemma3n-e4b --datasets all --judge
   python run_eval.py --model gemma3n-e2b --model-dir /mloscratch/users/$USER/models --datasets all
+  python run_eval.py --model gpt-5 --datasets all --judge  # OpenAI API (needs OPENAI_API_KEY)
 """
 
 import argparse
@@ -17,7 +18,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from inference import load_model
-from prompts import TEMPERATURE, TOP_P, TOP_K, N_CTX, PROMPT_VERSION, build_mcq_prompt, build_open_prompt
+from prompts import TEMPERATURE, TOP_P, TOP_K, N_CTX, PROMPT_VERSION, build_mcq_prompt, build_mcq_messages, build_open_prompt, build_open_messages
 from scoring import JUDGE_DIMENSIONS, _parse_answer_set, create_judge_client, extract_letters, judge_response, score_mcq
 
 # Dataset registry: name -> (filename, type, question_col, options_col, answer_col, reference_col)
@@ -52,10 +53,14 @@ def run_mcq(model, df, question_col, options_col, answer_col, max_tokens, max_qu
         options = str(row[options_col])
         correct = str(row[answer_col]).strip()
 
-        prompt = build_mcq_prompt(question, options)
         t0 = time.time()
         try:
-            response = model.generate(prompt, max_tokens=max_tokens)
+            if hasattr(model, 'is_api') and model.is_api:
+                messages = build_mcq_messages(question, options)
+                response = model.generate(messages, max_tokens=max_tokens)
+            else:
+                prompt = build_mcq_prompt(question, options)
+                response = model.generate(prompt, max_tokens=max_tokens)
         except Exception as e:
             print(f"  ERROR row {i}: generate() failed: {e}")
             continue
@@ -133,10 +138,14 @@ def run_open(model, df, question_col, reference_col, max_tokens, max_questions, 
         question = str(row[question_col])
         reference = str(row[reference_col]) if reference_col and reference_col in row.index and pd.notna(row[reference_col]) else ""
 
-        prompt = build_open_prompt(question)
         t0 = time.time()
         try:
-            response = model.generate(prompt, max_tokens=max_tokens)
+            if hasattr(model, 'is_api') and model.is_api:
+                messages = build_open_messages(question)
+                response = model.generate(messages, max_tokens=max_tokens)
+            else:
+                prompt = build_open_prompt(question)
+                response = model.generate(prompt, max_tokens=max_tokens)
         except Exception as e:
             print(f"  ERROR row {i}: generate() failed: {e}")
             continue
@@ -179,7 +188,7 @@ def save_checkpoint(output_path, metadata, scores, results):
 def main():
     parser = argparse.ArgumentParser(description="Medical QA Evaluation Pipeline")
     parser.add_argument("--model", required=True, help="Model name (e.g., gemma3n-e4b, gemma3n-e2b)")
-    parser.add_argument("--model-dir", default="models", help="Directory containing model files")
+    parser.add_argument("--model-dir", default="models", help="Directory containing model files (not needed for API models)")
     parser.add_argument("--datasets", required=True, help="Comma-separated dataset names, or 'all'")
     parser.add_argument("--output-dir", default="results", help="Directory for output JSON files")
     parser.add_argument("--max-tokens", type=int, default=2048, help="Max tokens to generate")
