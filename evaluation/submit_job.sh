@@ -1,6 +1,10 @@
 #!/bin/bash
 # Submit eval job to EPFL RunAI cluster
-# Usage: ./submit_job.sh [job-name]
+# Usage: ./submit_job.sh [job-name] [script-name]
+#
+# Examples:
+#   ./submit_job.sh mamai-eval-v5                         # runs run_cluster.sh (GGUF models)
+#   ./submit_job.sh mamai-gpt5-eval run_cluster_gpt5.sh   # runs GPT-5 via OpenAI API
 #
 # Prerequisites:
 #   - SSH alias "light" configured for haas001
@@ -8,8 +12,9 @@
 #   - PVC permissions: chmod -R g+w /mnt/light/scratch/users/yiren/
 
 JOB_NAME="${1:-mamai-eval-run}"
+SCRIPT_NAME="${2:-run_cluster.sh}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SCRIPT_PATH="$SCRIPT_DIR/run_cluster.sh"
+SCRIPT_PATH="$SCRIPT_DIR/$SCRIPT_NAME"
 
 if [ ! -f "$SCRIPT_PATH" ]; then
   echo "Error: run_cluster.sh not found at $SCRIPT_PATH"
