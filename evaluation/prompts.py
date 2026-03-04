@@ -115,3 +115,39 @@ def build_open_prompt(question: str) -> str:
     """Build a Gemma IT prompt for an open-ended clinical question."""
     msgs = build_open_messages(question)
     return _format_gemma_it(msgs["system"], msgs["user"])
+
+
+# --- RAG-augmented prompt builders ---
+
+def build_rag_mcq_messages(question: str, options: str, context: str) -> dict:
+    """MCQ prompt with RAG context. Same system prompt, context injected in user message."""
+    return {
+        "system": MCQ_SYSTEM_PROMPT,
+        "user": (
+            f"RELEVANT CONTEXT FROM MEDICAL GUIDELINES:\n{context}\n\n"
+            f"Question: {question}\nOptions:\n{options}"
+        ),
+    }
+
+
+def build_rag_open_messages(question: str, context: str) -> dict:
+    """Open-ended prompt with RAG context."""
+    return {
+        "system": OPEN_SYSTEM_PROMPT,
+        "user": (
+            f"RELEVANT CONTEXT FROM MEDICAL GUIDELINES:\n{context}\n\n"
+            f"Question: {question}"
+        ),
+    }
+
+
+def build_rag_mcq_prompt(question: str, options: str, context: str) -> str:
+    """Gemma IT prompt for MCQ with RAG context."""
+    msgs = build_rag_mcq_messages(question, options, context)
+    return _format_gemma_it(msgs["system"], msgs["user"])
+
+
+def build_rag_open_prompt(question: str, context: str) -> str:
+    """Gemma IT prompt for open-ended with RAG context."""
+    msgs = build_rag_open_messages(question, context)
+    return _format_gemma_it(msgs["system"], msgs["user"])

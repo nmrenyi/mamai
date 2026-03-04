@@ -18,7 +18,9 @@ import pandas as pd
 from tqdm import tqdm
 
 from inference import load_model
-from prompts import TEMPERATURE, TOP_P, TOP_K, N_CTX, PROMPT_VERSION, build_mcq_prompt, build_mcq_messages, build_open_prompt, build_open_messages
+from prompts import (TEMPERATURE, TOP_P, TOP_K, N_CTX, PROMPT_VERSION,
+                     build_mcq_prompt, build_mcq_messages, build_open_prompt, build_open_messages,
+                     build_rag_mcq_prompt, build_rag_mcq_messages, build_rag_open_prompt, build_rag_open_messages)
 from scoring import JUDGE_DIMENSIONS, _parse_answer_set, create_judge_client, extract_letters, judge_response, score_mcq
 
 # Dataset registry: name -> (filename, type, question_col, options_col, answer_col, reference_col)
@@ -35,7 +37,7 @@ CHECKPOINT_INTERVAL = 100
 
 
 def run_mcq(model, df, question_col, options_col, answer_col, max_tokens, max_questions,
-            output_path=None, metadata=None):
+            output_path=None, metadata=None, rag_contexts=None):
     """Run MCQ evaluation: inference + letter extraction + accuracy."""
     if max_questions:
         df = df.head(max_questions)
@@ -53,13 +55,25 @@ def run_mcq(model, df, question_col, options_col, answer_col, max_tokens, max_qu
         options = str(row[options_col])
         correct = str(row[answer_col]).strip()
 
+        # RAG context injection
+        context_str = ""
+        if rag_contexts and (i - 1) < len(rag_contexts):
+            chunks = rag_contexts[i - 1].get("chunks", [])
+            context_str = "\n\n".join(chunks)
+
         t0 = time.time()
         try:
             if hasattr(model, 'is_api') and model.is_api:
-                messages = build_mcq_messages(question, options)
+                if context_str:
+                    messages = build_rag_mcq_messages(question, options, context_str)
+                else:
+                    messages = build_mcq_messages(question, options)
                 response = model.generate(messages, max_tokens=max_tokens)
             else:
-                prompt = build_mcq_prompt(question, options)
+                if context_str:
+                    prompt = build_rag_mcq_prompt(question, options, context_str)
+                else:
+                    prompt = build_mcq_prompt(question, options)
                 response = model.generate(prompt, max_tokens=max_tokens)
         except Exception as e:
             print(f"  ERROR row {i}: generate() failed: {e}")
@@ -75,6 +89,7 @@ def run_mcq(model, df, question_col, options_col, answer_col, max_tokens, max_qu
             "question": question,
             "options": options,
             "ground_truth": correct,
+            "rag_context": context_str[:200] + "..." if context_str else "",
             "model_response": response,
             "extracted_answer": extracted,
             "extracted_answers": sorted(extracted_set),
@@ -121,7 +136,7 @@ def _open_scores(judgments, n_failed=0):
 
 
 def run_open(model, df, question_col, reference_col, max_tokens, max_questions, judge_client, judge_model,
-             output_path=None, metadata=None):
+             output_path=None, metadata=None, rag_contexts=None):
     """Run open-ended evaluation: inference + optional LLM-as-judge scoring."""
     if max_questions:
         df = df.head(max_questions)
@@ -138,13 +153,25 @@ def run_open(model, df, question_col, reference_col, max_tokens, max_questions, 
         question = str(row[question_col])
         reference = str(row[reference_col]) if reference_col and reference_col in row.index and pd.notna(row[reference_col]) else ""
 
+        # RAG context injection
+        context_str = ""
+        if rag_contexts and (i - 1) < len(rag_contexts):
+            chunks = rag_contexts[i - 1].get("chunks", [])
+            context_str = "\n\n".join(chunks)
+
         t0 = time.time()
         try:
             if hasattr(model, 'is_api') and model.is_api:
-                messages = build_open_messages(question)
+                if context_str:
+                    messages = build_rag_open_messages(question, context_str)
+                else:
+                    messages = build_open_messages(question)
                 response = model.generate(messages, max_tokens=max_tokens)
             else:
-                prompt = build_open_prompt(question)
+                if context_str:
+                    prompt = build_rag_open_prompt(question, context_str)
+                else:
+                    prompt = build_open_prompt(question)
                 response = model.generate(prompt, max_tokens=max_tokens)
         except Exception as e:
             print(f"  ERROR row {i}: generate() failed: {e}")
@@ -197,6 +224,7 @@ def main():
     parser.add_argument("--judge-model", default="gpt-5.2", help="OpenAI model for judging")
     parser.add_argument("--n-gpu-layers", type=int, default=None, help="GPU layers for GGUF (-1 = all, 0 = CPU, default: auto-detect)")
     parser.add_argument("--data-dir", default="data", help="Directory containing dataset TSV files")
+    parser.add_argument("--rag", default=None, help="Path to pre-computed RAG contexts dir (from precompute_retrieval.py)")
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -243,6 +271,18 @@ def main():
 
         output_path = os.path.join(run_dir, f"{ds_name}.json")
 
+        # Load pre-computed RAG contexts if available
+        rag_contexts = None
+        if args.rag:
+            rag_path = os.path.join(args.rag, f"{ds_name}.json")
+            if os.path.exists(rag_path):
+                with open(rag_path) as f:
+                    rag_data = json.load(f)
+                rag_contexts = rag_data["retrievals"]
+                print(f"RAG contexts loaded: {len(rag_contexts)} entries (top-{rag_data['config']['top_k']})")
+            else:
+                print(f"WARNING: --rag specified but {rag_path} not found. Running without RAG.")
+
         metadata = {
             "model": args.model,
             "model_dir": args.model_dir,
@@ -251,6 +291,7 @@ def main():
             "n_questions": min(len(df), args.max_questions or len(df)),
             "timestamp": run_timestamp,
             "prompt_version": PROMPT_VERSION,
+            "rag": rag_contexts is not None,
             "generation_params": {
                 "temperature": TEMPERATURE,
                 "top_p": TOP_P,
@@ -263,10 +304,10 @@ def main():
         t0 = time.time()
         if ds_type == "mcq":
             results, scores = run_mcq(model, df, q_col, opt_col, ans_col, args.max_tokens, args.max_questions,
-                                      output_path, metadata)
+                                      output_path, metadata, rag_contexts=rag_contexts)
         else:
             results, scores = run_open(model, df, q_col, ref_col, args.max_tokens, args.max_questions,
-                                       judge_client, judge_model, output_path, metadata)
+                                       judge_client, judge_model, output_path, metadata, rag_contexts=rag_contexts)
 
         elapsed = time.time() - t0
         metadata["total_inference_time_s"] = round(elapsed, 1)
