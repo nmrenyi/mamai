@@ -175,13 +175,25 @@ class BenchmarkActivity : Activity() {
         // Execution loop
         val results = mutableListOf<JSONObject>()
         var runIndex = 0
+        val loopStart = System.currentTimeMillis()
 
         for (query in queries) {
             for (useRetrieval in retrievalModes) {
                 for (rep in 1..repeats) {
                     runIndex++
+
+                    // Estimate time remaining based on average time per completed run
+                    val etaStr = if (runIndex > 1) {
+                        val elapsedMs = System.currentTimeMillis() - loopStart
+                        val avgPerRun = elapsedMs.toDouble() / (runIndex - 1)
+                        val remainingMs = (avgPerRun * (totalRuns - runIndex + 1)).toLong()
+                        val remainMin = remainingMs / 60000
+                        val remainSec = (remainingMs % 60000) / 1000
+                        "ETA: ${remainMin}m ${remainSec}s"
+                    } else "ETA: calculating..."
+
                     Log.w(BENCH_TAG, "[BENCHMARK] [$runIndex/$totalRuns] query=${query.id} retrieval=$useRetrieval rep=$rep/$repeats")
-                    logStatus("[$runIndex/$totalRuns] ${query.id}\nretrieval=$useRetrieval rep=$rep/$repeats")
+                    logStatus("[$runIndex/$totalRuns] ${query.id} | retrieval=$useRetrieval rep=$rep | $etaStr")
 
                     val preMemory = collectMemoryInfo()
                     val result = runQuery(pipeline, query.text, useRetrieval)
@@ -214,9 +226,13 @@ class BenchmarkActivity : Activity() {
                     }
                     results.add(entry)
 
-                    val resultLine = "  -> ttft=${result.ttftMs}ms decode=${result.decodeMs}ms total=${result.totalQueryMs}ms chars=${result.responseChars} tps=$decodeTps"
+                    val resultLine = "  -> ttft=${result.ttftMs}ms decode=${result.decodeMs}ms total=${result.totalQueryMs}ms tps=$decodeTps"
                     Log.w(BENCH_TAG, "[BENCHMARK] result: ttft=${result.ttftMs}ms decode=${result.decodeMs}ms total=${result.totalQueryMs}ms chars=${result.responseChars} tps=$decodeTps")
                     logStatus(resultLine)
+
+                    val pct = (runIndex * 100) / totalRuns
+                    val elapsedMin = (System.currentTimeMillis() - loopStart) / 60000
+                    logStatus("  [${"█".repeat(pct / 5)}${"░".repeat(20 - pct / 5)}] $pct% ($elapsedMin min elapsed)")
 
                     // Cooldown between queries (skip after last run)
                     if (runIndex < totalRuns) {
