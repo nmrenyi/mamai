@@ -37,16 +37,22 @@ CHECKPOINT_INTERVAL = 100
 
 
 def run_mcq(model, df, question_col, options_col, answer_col, max_tokens, max_questions,
-            output_path=None, metadata=None, rag_contexts=None):
+            output_path=None, metadata=None, rag_contexts=None, resume_results=None):
     """Run MCQ evaluation: inference + letter extraction + accuracy."""
     if max_questions:
         df = df.head(max_questions)
 
-    results = []
-    predictions = []
-    ground_truth = []
+    # Resume from checkpoint: reuse existing results and skip those rows
+    n_skip = len(resume_results) if resume_results else 0
+    results = list(resume_results) if resume_results else []
+    predictions = [r["extracted_answer"] for r in results]
+    ground_truth = [r["ground_truth"] for r in results]
+    if n_skip:
+        print(f"  Resuming from checkpoint: skipping {n_skip} already-completed rows")
 
-    for i, (_, row) in enumerate(tqdm(df.iterrows(), total=len(df), desc="MCQ inference"), 1):
+    for i, (_, row) in enumerate(tqdm(df.iterrows(), total=len(df), desc="MCQ inference", initial=n_skip), 1):
+        if i <= n_skip:
+            continue
         if pd.isna(row[question_col]) or pd.isna(row[options_col]) or pd.isna(row[answer_col]):
             print(f"  Skipping row {i}: missing question/options/answer")
             continue
@@ -136,16 +142,28 @@ def _open_scores(judgments, n_failed=0):
 
 
 def run_open(model, df, question_col, reference_col, max_tokens, max_questions, judge_client, judge_model,
-             output_path=None, metadata=None, rag_contexts=None):
+             output_path=None, metadata=None, rag_contexts=None, resume_results=None):
     """Run open-ended evaluation: inference + optional LLM-as-judge scoring."""
     if max_questions:
         df = df.head(max_questions)
 
-    results = []
+    # Resume from checkpoint: reuse existing results and skip those rows
+    n_skip = len(resume_results) if resume_results else 0
+    results = list(resume_results) if resume_results else []
     judgments = []
     n_judge_failed = 0
+    # Reconstruct judgments from resumed results
+    for r in results:
+        if r.get("judge_weighted_score") is not None:
+            j = {dim: r["judge_scores"].get(dim) for dim in JUDGE_DIMENSIONS}
+            j["weighted_score"] = r["judge_weighted_score"]
+            judgments.append(j)
+    if n_skip:
+        print(f"  Resuming from checkpoint: skipping {n_skip} already-completed rows")
 
-    for i, (_, row) in enumerate(tqdm(df.iterrows(), total=len(df), desc="Open inference"), 1):
+    for i, (_, row) in enumerate(tqdm(df.iterrows(), total=len(df), desc="Open inference", initial=n_skip), 1):
+        if i <= n_skip:
+            continue
         if pd.isna(row[question_col]):
             print(f"  Skipping row {i}: missing question")
             continue
@@ -225,6 +243,7 @@ def main():
     parser.add_argument("--n-gpu-layers", type=int, default=None, help="GPU layers for GGUF (-1 = all, 0 = CPU, default: auto-detect)")
     parser.add_argument("--data-dir", default="data", help="Directory containing dataset TSV files")
     parser.add_argument("--rag", default=None, help="Path to pre-computed RAG contexts dir (from precompute_retrieval.py)")
+    parser.add_argument("--resume", default=None, help="Path to previous run dir to resume incomplete datasets from")
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -301,13 +320,47 @@ def main():
             },
         }
 
+        # Load previous checkpoint for resume
+        resume_results = None
+        if args.resume:
+            resume_path = os.path.join(args.resume, f"{ds_name}.json")
+            if os.path.exists(resume_path):
+                with open(resume_path) as f:
+                    prev = json.load(f)
+                prev_results = prev.get("results", [])
+                expected = min(len(df), args.max_questions or len(df))
+                if len(prev_results) >= expected:
+                    print(f"  Already complete ({len(prev_results)}/{expected}), skipping")
+                    # Copy the completed file to new run dir
+                    save_checkpoint(output_path, prev.get("metadata", metadata),
+                                    prev.get("aggregate_scores", {}), prev_results)
+                    scores = prev.get("aggregate_scores", {})
+                    results = prev_results
+                    # Print summary and continue to next dataset
+                    if ds_type == "mcq":
+                        acc = scores.get("accuracy", 0)
+                        partial = scores.get("partial_credit_accuracy", acc)
+                        summary.append(f"  {ds_name}: {acc:.1%} (partial: {partial:.1%}) [resumed]")
+                    else:
+                        mean_score = scores.get("mean_weighted_score")
+                        if mean_score is not None:
+                            summary.append(f"  {ds_name}: {mean_score}/5 [resumed]")
+                        else:
+                            summary.append(f"  {ds_name}: {len(results)} responses saved [resumed]")
+                    continue
+                else:
+                    resume_results = prev_results
+                    print(f"  Resuming: {len(resume_results)}/{expected} results from checkpoint")
+
         t0 = time.time()
         if ds_type == "mcq":
             results, scores = run_mcq(model, df, q_col, opt_col, ans_col, args.max_tokens, args.max_questions,
-                                      output_path, metadata, rag_contexts=rag_contexts)
+                                      output_path, metadata, rag_contexts=rag_contexts,
+                                      resume_results=resume_results)
         else:
             results, scores = run_open(model, df, q_col, ref_col, args.max_tokens, args.max_questions,
-                                       judge_client, judge_model, output_path, metadata, rag_contexts=rag_contexts)
+                                       judge_client, judge_model, output_path, metadata, rag_contexts=rag_contexts,
+                                       resume_results=resume_results)
 
         elapsed = time.time() - t0
         metadata["total_inference_time_s"] = round(elapsed, 1)
