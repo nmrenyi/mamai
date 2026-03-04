@@ -66,7 +66,7 @@ class OpenAIBackend:
                 {"role": "system", "content": messages["system"]},
                 {"role": "user", "content": messages["user"]},
             ],
-            max_tokens=max_tokens,
+            max_completion_tokens=max_tokens,
             temperature=TEMPERATURE,
             top_p=TOP_P,
         )
