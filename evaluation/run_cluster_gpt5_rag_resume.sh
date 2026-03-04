@@ -15,12 +15,12 @@ OUT=/lightscratch/users/yiren/eval_output
 RAG=/lightscratch/users/yiren/eval_output/rag_contexts
 mkdir -p $OUT
 
-PREV=$OUT/gpt-5/20260304T114059
+PREV=$OUT/gpt-5/20260304T155201
 echo "=== Resuming from checkpoint: $PREV ==="
 ls -la $PREV/
 
 echo "=== RESUMING GPT-5 + RAG (incomplete datasets) ==="
-for ds in afrimedqa_mcq medqa_usmle kenya_vignettes; do
+for ds in medqa_usmle kenya_vignettes; do
   python3 run_eval.py --model gpt-5 --datasets $ds --judge --rag $RAG --resume $PREV \
     --output-dir $OUT \
     > ${OUT}/eval_gpt5_rag_resume_${ds}.log 2>&1 &
