@@ -195,6 +195,7 @@ class _SearchPageState extends State<SearchPage> {
       _messages.add(ChatMessage(role: 'assistant', text: '', isLoading: true));
     });
     _textController.clear();
+    FocusManager.instance.primaryFocus?.unfocus();
     _scrollToBottom();
     await _saveCurrentConversation();
     if (historyTruncated && mounted) {
@@ -616,31 +617,34 @@ class _SearchPageState extends State<SearchPage> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: _messages.isEmpty
-                ? _buildSuggestionChips(examples)
-                : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _messages.length,
-                    itemBuilder: (context, index) {
-                      final message = _messages[index];
-                      if (message.role == 'user') {
-                        return _UserBubble(text: message.text);
-                      } else {
-                        final isLastMessage = index == _messages.length - 1;
-                        return _AssistantCard(
-                          message: message,
-                          showDisclaimer: isLastMessage && !_isGenerating,
-                        );
-                      }
-                    },
-                  ),
-          ),
-          _buildInputBar(),
-        ],
+      body: GestureDetector(
+        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+        child: Column(
+          children: [
+            Expanded(
+              child: _messages.isEmpty
+                  ? _buildSuggestionChips(examples)
+                  : ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _messages.length,
+                      itemBuilder: (context, index) {
+                        final message = _messages[index];
+                        if (message.role == 'user') {
+                          return _UserBubble(text: message.text);
+                        } else {
+                          final isLastMessage = index == _messages.length - 1;
+                          return _AssistantCard(
+                            message: message,
+                            showDisclaimer: isLastMessage && !_isGenerating,
+                          );
+                        }
+                      },
+                    ),
+            ),
+            _buildInputBar(),
+          ],
+        ),
       ),
     );
   }
@@ -702,13 +706,36 @@ class _SearchPageState extends State<SearchPage> {
               ),
             ),
             const SizedBox(width: 4),
-            IconButton(
-              tooltip: _useRetrieval ? 'Search enabled' : 'Search disabled',
-              icon: Icon(
-                Icons.search,
-                color: _useRetrieval ? const Color(0xffcc5500) : Colors.grey,
+            GestureDetector(
+              onTap: () => setState(() => _useRetrieval = !_useRetrieval),
+              child: Tooltip(
+                message: _useRetrieval ? 'Search enabled' : 'Search disabled',
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _useRetrieval
+                        ? const Color(0xffcc5500)
+                        : Colors.grey[400],
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _useRetrieval ? 'Search ON' : 'Search OFF',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              onPressed: () => setState(() => _useRetrieval = !_useRetrieval),
             ),
             const SizedBox(width: 4),
             if (_isGenerating)
@@ -1275,28 +1302,43 @@ class _RetrievalDisclosure extends StatelessWidget {
           ),
         ),
         if (expanded)
-          ...docs.map(
-            (doc) => Card(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const ListTile(
-                    leading: Icon(Icons.book),
-                    title: Text('Information from guidelines'),
-                    contentPadding: EdgeInsetsDirectional.only(
-                      start: 16,
-                      end: 24,
+          ...docs.asMap().entries.map(
+            (entry) => Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                color: Colors.orange[50],
+                border: const Border(
+                  left: BorderSide(color: Color(0xffcc5500), width: 3),
+                ),
+                borderRadius: const BorderRadius.only(
+                  topRight: Radius.circular(8),
+                  bottomRight: Radius.circular(8),
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 14, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Guideline ${entry.key + 1} of ${docs.length}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.orange[800],
+                      ),
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsetsDirectional.only(
-                      start: 16,
-                      end: 24,
-                      bottom: 16,
+                    const SizedBox(height: 6),
+                    Text(
+                      entry.value,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        height: 1.5,
+                        color: Colors.black87,
+                      ),
                     ),
-                    child: Text(doc, style: const TextStyle(fontSize: 16)),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
