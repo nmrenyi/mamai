@@ -1,0 +1,124 @@
+"""
+Inference backend for GGUF models via llama-cpp-python.
+
+Generation parameters match the on-device config in RagPipeline.kt:37-39.
+"""
+
+import os
+
+from prompts import TEMPERATURE, TOP_P, TOP_K, N_CTX
+
+
+def _detect_gpu_layers() -> int:
+    """Return -1 (all layers on GPU) if CUDA is available, else 0 (CPU only)."""
+    try:
+        import ctypes
+        ctypes.CDLL("libcuda.so")
+        return -1
+    except OSError:
+        pass
+    return 0
+
+
+class GGUFBackend:
+    """llama-cpp-python backend for GGUF models."""
+
+    def __init__(self, model_path: str, n_gpu_layers: int = -1, use_chat: bool = False):
+        from llama_cpp import Llama
+
+        print(f"Loading GGUF model: {model_path}")
+        self.llm = Llama(
+            model_path=model_path,
+            n_ctx=N_CTX,
+            n_gpu_layers=n_gpu_layers,
+            verbose=False,
+        )
+        self.supports_chat = use_chat
+        print("Model loaded.")
+
+    def generate(self, prompt: str, max_tokens: int = 512) -> str:
+        output = self.llm(
+            prompt,
+            max_tokens=max_tokens,
+            temperature=TEMPERATURE,
+            top_p=TOP_P,
+            top_k=TOP_K,
+            stop=["<end_of_turn>"],
+        )
+        return output["choices"][0]["text"].strip()
+
+    def generate_chat(self, messages: dict, max_tokens: int = 512) -> str:
+        """Generate using the model's built-in chat template (for non-Gemma models)."""
+        result = self.llm.create_chat_completion(
+            messages=[
+                {"role": "system", "content": messages["system"]},
+                {"role": "user", "content": messages["user"]},
+            ],
+            max_tokens=max_tokens,
+            temperature=TEMPERATURE,
+            top_p=TOP_P,
+            top_k=TOP_K,
+        )
+        return result["choices"][0]["message"]["content"].strip()
+
+
+class OpenAIBackend:
+    """OpenAI API backend for chat models (GPT-5, GPT-4o, etc.)."""
+
+    is_api = True
+
+    def __init__(self, model: str):
+        from openai import OpenAI
+
+        self.client = OpenAI()  # uses OPENAI_API_KEY env var
+        self.model = model
+        print(f"Using OpenAI API model: {model}")
+
+    def generate(self, messages: dict, max_tokens: int = 512) -> str:
+        result = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": messages["system"]},
+                {"role": "user", "content": messages["user"]},
+            ],
+            temperature=TEMPERATURE,
+        )
+        content = result.choices[0].message.content
+        if not content:
+            reason = result.choices[0].finish_reason
+            print(f"  WARNING: empty response from {self.model} (finish_reason={reason})")
+            return ""
+        return content.strip()
+
+
+MODEL_REGISTRY = {
+    # Local GGUF models (backend, path, use_chat)
+    # use_chat=True uses llama-cpp's built-in chat template instead of manual Gemma IT formatting
+    "gemma3n-e4b": ("gguf", "gemma-3n/gemma-3n-E4B-it-Q4_0.gguf", False),
+    "gemma3n-e2b": ("gguf", "gemma-3n/gemma-3n-E2B-it-Q4_0.gguf", False),
+    "medgemma-gguf": ("gguf", "medgemma-4b/medgemma-4b-it-Q4_0.gguf", False),
+    "meditron3-8b": ("gguf", "meditron3-8b/Meditron3-8B.Q4_0.gguf", True),
+    # OpenAI API models
+    "gpt-5": ("openai", "gpt-5"),
+    "gpt-4o": ("openai", "gpt-4o"),
+}
+
+
+def load_model(name: str, model_dir: str = "", n_gpu_layers: int | None = None):
+    """Load a model by name from the registry."""
+    if name not in MODEL_REGISTRY:
+        raise ValueError(f"Unknown model: {name}. Available: {list(MODEL_REGISTRY.keys())}")
+
+    entry = MODEL_REGISTRY[name]
+    backend_type = entry[0]
+
+    if backend_type == "openai":
+        return OpenAIBackend(entry[1])
+
+    # GGUF backend
+    model_path = entry[1]
+    use_chat = entry[2] if len(entry) > 2 else False
+    full_path = os.path.join(model_dir, model_path)
+    layers = n_gpu_layers if n_gpu_layers is not None else _detect_gpu_layers()
+    print(f"  GPU layers: {layers} ({'all on GPU' if layers == -1 else 'CPU only'})")
+    return GGUFBackend(full_path, n_gpu_layers=layers, use_chat=use_chat)

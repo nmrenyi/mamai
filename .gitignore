@@ -1,7 +1,7 @@
 _scratch/
 evaluation/models/
 evaluation/results/
-
+evaluation/latency_results/
 
 # IDE
 .idea/
