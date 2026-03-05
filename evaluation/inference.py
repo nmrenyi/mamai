@@ -81,10 +81,14 @@ class OpenAIBackend:
                 {"role": "system", "content": messages["system"]},
                 {"role": "user", "content": messages["user"]},
             ],
-            max_completion_tokens=max_tokens,
             temperature=TEMPERATURE,
         )
-        return result.choices[0].message.content.strip()
+        content = result.choices[0].message.content
+        if not content:
+            reason = result.choices[0].finish_reason
+            print(f"  WARNING: empty response from {self.model} (finish_reason={reason})")
+            return ""
+        return content.strip()
 
 
 MODEL_REGISTRY = {
