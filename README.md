@@ -204,18 +204,6 @@ To serve the model files from your own server:
 3. Replace `app/cert.pem` with your server's TLS certificate
 4. Rebuild the APK
 
-## Partners
-
-<p align="center">
-  <img src="app/images/epfl.png" alt="EPFL" height="50"/>
-  &nbsp;&nbsp;&nbsp;
-  <img src="app/images/swiss_tph.png" alt="Swiss TPH" height="50"/>
-  &nbsp;&nbsp;&nbsp;
-  <img src="app/images/d-tree.jpg" alt="D-tree International" height="50"/>
-  &nbsp;&nbsp;&nbsp;
-  <img src="app/images/swiss_dev_coop.webp" alt="Swiss Development Cooperation" height="50"/>
-</p>
-
 ## License
 
 This project is licensed under [CC BY 4.0](LICENSE).
