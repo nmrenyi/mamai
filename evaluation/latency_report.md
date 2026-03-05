@@ -1,97 +1,207 @@
-# On-Device LLM Latency Comparison
+# MAM-AI On-Device Latency Report
 
 **Device**: Google Pixel 7 (Tensor G2, 8 GB RAM, Android 16)
-**Date**: 2026-02-26
-**Build**: Release APK (optimized native code)
-**CPU state**: Fully recovered (big cores at 2850 MHz) before each test
+**Dates**: 2026-02-26 (backend comparison), 2026-03-04/05 (automated benchmarks)
+**Build**: Release APK, CPU backend
 
-## Results
+## Executive Summary
 
-| | MedGemma 4B (llama.cpp b5220) | MedGemma 4B (llama.cpp b8157) | Gemma 3n E4B (llama.cpp b8157) | Gemma 3n E4B (MediaPipe) |
+We evaluated four model/backend combinations and two Gemma 3n model sizes for on-device medical search latency on the Pixel 7. Key results:
+
+- **Best stack**: Gemma 3n E4B on MediaPipe — fastest across all metrics
+- **Typical query latency**: 1.0–1.5 min (No RAG), 1.2–1.8 min (with RAG) using E4B
+- **E2B is not a viable alternative**: despite being smaller, E2B is 2–3x slower for medium/long queries
+- **llama.cpp is not competitive**: 2.8x slower than MediaPipe for the same model
+
+---
+
+## Part 1: Backend Comparison (llama.cpp vs MediaPipe)
+
+*Single-query manual tests, 2026-02-26. Short query, no RAG.*
+
+| | MedGemma 4B (llama.cpp) | Gemma 3n E4B (llama.cpp) | Gemma 3n E4B (MediaPipe) |
+|---|---|---|---|
+| **Model size** | 2.2 GB | 4.1 GB | 4.1 GB |
+| **Quantization** | Q4_0 (GGUF) | Q4_0 (GGUF) | int4 (.task) |
+| **Model load** | 3.4s | 13.5s | 1.2s |
+| **Prefill / TTFT** | 45.3s | 62.7s | 16.4s |
+| **Decode** | 3.8s (4.7 t/s) | 40.0s (3.5 t/s) | 19.8s (~5.2 t/s) |
+| **Total query** | 49.2s | 102.7s | **36.2s** |
+
+**Conclusion**: MediaPipe is 2.8x faster than llama.cpp for Gemma 3n. MediaPipe's prefill is 3–4x faster due to Google's Tensor G2-specific optimizations. llama.cpp's only advantage is model flexibility (any GGUF model) and smaller APK size (58 MB vs 164 MB).
+
+---
+
+## Part 2: Automated Benchmark — Gemma 3n E4B (Production Model)
+
+*108 runs: 18 queries x 2 modes x 3 repeats. 10s cooldown. 2026-03-04.*
+
+### Initialization
+
+| Metric | Time |
+|---|---|
+| Gecko + SQLite init | 179ms |
+| LLM model load | 35.0s |
+| Total initialization | 35.1s |
+
+### Latency by Category (Median)
+
+| Category | Mode | TTFT | Decode | Total | TPS |
+|---|---|---|---|---|---|
+| Short (3–7 words) | No RAG | 17.9s | 53.9s | **72s** | 3.3 |
+| Short | RAG | 35.2s | 50.8s | **94s** | 3.3 |
+| Medium (20–30 words) | No RAG | 17.6s | 59.2s | **79s** | 3.2 |
+| Medium | RAG | 35.0s | 48.0s | **91s** | 3.2 |
+| Long (65–80 words) | No RAG | 36.4s | 72.3s | **109s** | 3.5 |
+| Long | RAG | 36.4s | 59.0s | **103s** | 3.4 |
+
+### RAG Overhead
+
+| Metric | No RAG | RAG | Overhead |
+|---|---|---|---|
+| Retrieval time | — | 8.4s (median) | +8.4s |
+| TTFT | 27.7s | 46.3s | +67% |
+| Decode time | 67.8s | 62.0s | -9% |
+| Total query time | 95.6s | 117.3s | +23% |
+| Response length | 826 chars | 668 chars | **-19%** |
+
+RAG adds ~8–10s for retrieval (Gecko embedding + SQLite cosine search) and increases TTFT due to longer prompt prefill. However, RAG responses are 19% shorter and more focused — grounding documents help the model stay concise.
+
+### Decode Throughput
+
+Stable at **3.2–3.5 tok/s** across categories. This is the hardware-limited decode speed of Gemma 3n E4B int4 on the Tensor G2 CPU.
+
+### Outliers
+
+Three query-mode combinations consistently produce 4x slowdowns (0.75–0.96 tok/s):
+
+| Query | Mode | Median Total | TPS |
+|---|---|---|---|
+| "When to cut the umbilical cord" | No RAG | 255s | 0.85 |
+| "Breastfeeding positions for new mothers" | RAG | 379s | 0.92 |
+| Preeclampsia emergency | RAG | 406s | 0.75 |
+
+These are query-content-specific (not thermal) — reproducible across all 3 repeats at different points in the run. Excluding these outliers, the remaining 102 runs show tight consistency at ~90s median.
+
+### Thermal & Memory
+
+- **Thermal throttling**: +1% drift over 3.5 hours — negligible with 10s cooldown
+- **Peak heap**: 16 MB (well within 256 MB max; LLM itself is memory-mapped)
+
+---
+
+## Part 3: Automated Benchmark — Gemma 3n E2B (Smaller Model)
+
+*108 runs: 18 queries x 2 modes x 3 repeats. 10s cooldown. 2026-03-05.*
+
+### Initialization
+
+| Metric | E4B | E2B | Diff |
+|---|---|---|---|
+| Model file size | 4.1 GB | 2.9 GB | -29% |
+| LLM model load | 35.0s | **1.1s** | **-97%** |
+| Total initialization | 35.1s | 15.8s | -55% |
+
+### Latency by Category (Median)
+
+| Category | Mode | TTFT | Decode | Total | TPS |
+|---|---|---|---|---|---|
+| Short | No RAG | 13.2s | 40.9s | **54s** | 5.1 |
+| Short | RAG | 25.6s | 35.9s | **71s** | 5.0 |
+| Medium | No RAG | 76.5s | 155.9s | **234s** | 1.4 |
+| Medium | RAG | 161.8s | 100.4s | **293s** | 1.3 |
+| Long | No RAG | 163.1s | 167.1s | **326s** | 1.3 |
+| Long | RAG | 167.1s | 163.6s | **369s** | 1.3 |
+
+### Thermal Behavior
+
+The auto-generated thermal analysis reports +277% degradation from first-third to last-third of the run. However, this reflects the **query ordering** (short queries first, long queries last) rather than true thermal throttling — E2B is inherently 5–6x slower on long queries.
+
+---
+
+## Part 4: E4B vs E2B Head-to-Head
+
+### Median Total Query Time
+
+| Category | Mode | E4B | E2B | Diff |
 |---|---|---|---|---|
-| **Branch** | `llama-cpp` | `llama-cpp` | `llama-cpp` | `main` |
-| **Model file** | `medgemma-4b-it-Q4_0.gguf` | `medgemma-4b-it-Q4_0.gguf` | `gemma-3n-E4B-it-Q4_0.gguf` | `gemma-3n-E4B-it-int4.task` |
-| **Model size** | 2.2 GB | 2.2 GB | 4.1 GB | 4.1 GB |
-| **Quantization** | Q4_0 (GGUF) | Q4_0 (GGUF) | Q4_0 (GGUF) | int4 (.task) |
-| **APK size** | 57 MB | 58 MB | 58 MB | 164 MB |
-| **Backend** | CPU only | CPU only | CPU only | CPU (GPU available) |
-| **Model load** | 5.0 s | 3.4 s | 13.5 s | 1.2 s |
-| **Prefill** | 50.0 s (413 tok, 8.3 t/s) | 45.3 s (413 tok, 9.1 t/s) | 62.7 s (414 tok, 6.6 t/s) | 16.4 s (TTFT) |
-| **Decode** | 18.2 s (78 tok, 4.3 t/s) | 3.8 s (18 tok, 4.7 t/s) | 40.0 s (141 tok, 3.5 t/s) | 19.8 s (~103 tok, ~5.2 t/s) |
-| **Total query** | 68.2 s | 49.2 s | 102.7 s | 36.2 s |
-| **Response** | 405 chars | 79 chars | 706 chars | 411 chars |
+| Short | No RAG | 72s | **54s** | **-25%** |
+| Short | RAG | 94s | **71s** | **-25%** |
+| Medium | No RAG | **79s** | 234s | +194% |
+| Medium | RAG | **91s** | 293s | +223% |
+| Long | No RAG | **109s** | 326s | +198% |
+| Long | RAG | **103s** | 369s | +260% |
 
-## Key Findings
+### Decode Throughput
 
-### 1. llama.cpp b8157 upgrade improves performance
+| Category | E4B (tok/s) | E2B (tok/s) | Diff |
+|---|---|---|---|
+| Short | 3.3 | **5.0–5.1** | **+52–56%** |
+| Medium | **3.2** | 1.3–1.4 | -58% |
+| Long | **3.4–3.5** | 1.3 | -61–62% |
 
-Upgrading from b5220 to b8157 improved MedGemma 4B performance:
-- Model load: 5.0s → 3.4s (32% faster)
-- Prefill: 50.0s → 45.3s (10% faster)
-- Decode throughput: 4.3 → 4.7 t/s (9% faster)
+### TTFT (Time To First Token)
 
-### 2. Gemma 3n now works on llama.cpp (b8157)
+| Category | Mode | E4B | E2B | Diff |
+|---|---|---|---|---|
+| Short | No RAG | 17.9s | **13.2s** | -26% |
+| Short | RAG | 35.2s | **25.6s** | -27% |
+| Medium | No RAG | **17.6s** | 76.5s | +335% |
+| Medium | RAG | **35.0s** | 161.8s | +362% |
+| Long | No RAG | **36.4s** | 163.1s | +348% |
+| Long | RAG | **36.4s** | 167.1s | +359% |
 
-Previously failed on b5220 (no `gemma3n` architecture support). Gemma 3n support was added in [PR #14400](https://github.com/ggml-org/llama.cpp/pull/14400) (merged June 2025, minimum version b5769).
+### Overall (all 108 runs, median)
 
-### 3. Gemma 3n is much slower on llama.cpp than MediaPipe
+| Metric | E4B | E2B | Diff |
+|---|---|---|---|
+| Total query time | **91s** | 205s | +125% |
+| TTFT | **35s** | 71s | +105% |
+| Decode time | **58s** | 99s | +72% |
+| Decode throughput | 3.3 tok/s | 1.4 tok/s | -57% |
+| Benchmark duration | 3.5 hr | **6.1 hr** | +73% |
 
-Same model (Gemma 3n E4B), same device:
-- **llama.cpp**: 102.7s total (62.7s prefill + 40.0s decode at 3.5 t/s)
-- **MediaPipe**: 36.2s total (16.4s prefill + 19.8s decode at ~5.2 t/s)
+### Analysis
 
-MediaPipe is **2.8x faster** for the same model. Google has optimized MediaPipe specifically for Tensor chips; llama.cpp's CPU backend is generic.
+E2B's counterintuitive behavior — faster for short queries but dramatically slower for medium/long — likely stems from:
 
-### 4. MediaPipe prefill is 3-4x faster than llama.cpp
+- **Prefill bottleneck**: E2B's TTFT explodes 3.5–4.6x for medium/long queries, suggesting the smaller model's prefill computation scales poorly with input length on this hardware
+- **KV cache efficiency**: E4B's larger hidden dimensions may produce more compute-efficient attention patterns on the Tensor G2
+- **MediaPipe kernel optimization**: The int4 decode kernels may be better optimized for E4B's tensor shapes
 
-MediaPipe prefill (TTFT): **16.4s**. llama.cpp prefill: 45-63s depending on model. MediaPipe's `addQueryChunk()` returns in 6ms (lazy queuing), with actual prefill happening during generation start.
-
-### 5. Thermal throttling compounds Gemma 3n on llama.cpp
-
-The Pixel 7's Tensor G2 throttles aggressively under sustained CPU load. Gemma 3n's 62.7s prefill on llama.cpp causes severe throttling before decode begins, further slowing generation (3.5 t/s vs 4.7 t/s for MedGemma which has shorter prefill).
-
-### 6. MedGemma 4B on llama.cpp is competitive with MediaPipe
-
-With b8157, MedGemma on llama.cpp (49.2s) is only 1.4x slower than Gemma 3n on MediaPipe (36.2s). However, MedGemma has a 45s blank screen (synchronous prefill) vs MediaPipe's 16s — worse user experience.
-
-## Observations
-
-**Advantages of llama.cpp**:
-- Can run any GGUF model (model flexibility)
-- MedGemma 4B may produce better medical answers than Gemma 3n (not evaluated here)
-- Smaller APK (58 MB vs 164 MB — no bundled MediaPipe native libs)
-- Upgrading to b8157 enables Gemma 3n and improves performance
-
-**Advantages of MediaPipe**:
-- 3-4x faster prefill (16.4s vs 45-63s)
-- Faster total query time (36.2s vs 49-103s)
-- Faster model load (1.2s vs 3.4-13.5s)
-- Higher decode throughput (~5.2 t/s vs 3.5-4.7 t/s)
-- Optimized for Tensor chips by Google
-- GPU backend available (not tested, but could further improve speed)
-
-## Methodology
-
-Each test followed the same procedure:
-1. Force-stop the app and wait for CPU to fully recover (big cores at 2850 MHz max)
-2. Install release APK and clear logcat
-3. Launch app, wait for model to load
-4. Submit a single short query with retrieval disabled
-5. Record timing from `adb logcat -s mam-ai`
-
-Test queries were similar short prompts ("I am in pain", "I feel painful", "I feel depressed"). Retrieval was disabled to isolate LLM latency from embedding/vector search overhead.
-
-MediaPipe prefill was measured via time-to-first-token callback (first non-empty `partial` in `generateResponseAsync`), since `addQueryChunk()` only queues the prompt and returns immediately.
-
-Note: MedGemma 4B on b8157 produced a short response (18 tokens / 79 chars) — it hit EOS early. Decode throughput (4.7 t/s) is comparable to b5220 (4.3 t/s).
+---
 
 ## Recommendation
 
-**Stick with MediaPipe + Gemma 3n** for production. It is the fastest option across all metrics (load, prefill, decode, total).
+**Use Gemma 3n E4B on MediaPipe** for production. It delivers:
 
-Consider llama.cpp + MedGemma if:
-- MedGemma's medical accuracy is significantly better than Gemma 3n (requires separate quality evaluation)
-- The 45s blank-screen prefill can be mitigated (prompt caching, shorter system prompts)
-- APK size is a priority (58 MB vs 164 MB)
+- Consistent 3.2–3.5 tok/s decode regardless of query length
+- Stable TTFT scaling (18–36s vs E2B's 13–167s)
+- Predictable 1–2 minute total query times
 
-Do **not** use Gemma 3n on llama.cpp — it is 2.8x slower than the same model on MediaPipe.
+E2B is only preferable if the app needs sub-2s cold start and handles exclusively short queries without RAG — neither applies to MAM-AI, where RAG context injection makes every query effectively a medium/long input.
+
+Do **not** use llama.cpp — it is 2.8x slower than MediaPipe for the same model.
+
+## Methodology
+
+### Manual Tests (Part 1)
+
+Single-query tests with force-stopped app, CPU fully recovered (2850 MHz), retrieval disabled. Timing from `adb logcat -s mam-ai`.
+
+### Automated Benchmarks (Parts 2–4)
+
+- 18 medical queries across 3 categories: short (8, 3–7 words), medium (6, 20–30 words), long (4, 65–80 words)
+- Each run through `RagPipeline.generateResponse()` from standalone `BenchmarkActivity` (no Flutter overhead)
+- Separate Android process (`:benchmark`) isolated from the main app
+- Warmup query before timed runs (JIT, CPU cache, memory allocation)
+- 10s cooldown between queries to mitigate thermal throttling
+- TTFT = time from generation start to first non-empty token callback
+- Decode time = first token to generation complete
+- Token count estimated at ~4 chars/token (Gemma tokenizer average)
+- Retrieval = Gecko embedding + SQLite cosine similarity (top 3 docs)
+- Generation params: temperature=1, top_p=0.95, top_k=64, single-turn only
+
+---
+
+*E4B benchmark: 108 runs, 0 errors, 3.5 hours. E2B benchmark: 108 runs, 0 errors, 6.1 hours. Device: Google Pixel 7.*

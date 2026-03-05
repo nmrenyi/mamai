@@ -450,6 +450,8 @@ Examples:
   python evaluation/benchmark_latency.py --cooldown 10000         # Longer cooldown (thermal)
         """,
     )
+    parser.add_argument("--analyze", type=str, default=None, metavar="JSON_FILE",
+                        help="Analyze an existing results JSON file (skip device run)")
     parser.add_argument("--repeats", type=int, default=3,
                         help="Repetitions per query (default: 3)")
     parser.add_argument("--cooldown", type=int, default=5000,
@@ -470,41 +472,46 @@ Examples:
     print("MAM-AI On-Device Latency Benchmark")
     print("=" * 60)
 
-    # Pre-flight checks
-    check_device(args.device)
-    check_models_downloaded(args.device)
-
     # Output directory
     os.makedirs(args.output_dir, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
 
-    # Force stop any running instance
-    print("Stopping app...")
-    force_stop_app(args.device)
-    time.sleep(2)
+    if args.analyze:
+        # Offline analysis mode — skip device interaction
+        json_path = args.analyze
+        print(f"Analyzing existing results: {json_path}")
+    else:
+        # Pre-flight checks
+        check_device(args.device)
+        check_models_downloaded(args.device)
 
-    # Clear logcat
-    clear_logcat(args.device)
+        # Force stop any running instance
+        print("Stopping app...")
+        force_stop_app(args.device)
+        time.sleep(2)
 
-    # Launch benchmark
-    print(f"Launching: {args.repeats} repeats, {args.cooldown}ms cooldown, filter={args.filter}")
-    launch_benchmark(
-        device_serial=args.device,
-        repeats=args.repeats,
-        cooldown_ms=args.cooldown,
-        skip_retrieval=args.no_retrieval,
-        query_filter=args.filter,
-    )
+        # Clear logcat
+        clear_logcat(args.device)
 
-    # Wait for completion
-    success = wait_for_completion(args.device, timeout_s=args.timeout)
-    if not success:
-        print("Benchmark did not complete successfully.")
-        sys.exit(1)
+        # Launch benchmark
+        print(f"Launching: {args.repeats} repeats, {args.cooldown}ms cooldown, filter={args.filter}")
+        launch_benchmark(
+            device_serial=args.device,
+            repeats=args.repeats,
+            cooldown_ms=args.cooldown,
+            skip_retrieval=args.no_retrieval,
+            query_filter=args.filter,
+        )
 
-    # Pull results
-    json_path = os.path.join(args.output_dir, f"benchmark_{timestamp}.json")
-    pull_results(args.device, json_path)
+        # Wait for completion
+        success = wait_for_completion(args.device, timeout_s=args.timeout)
+        if not success:
+            print("Benchmark did not complete successfully.")
+            sys.exit(1)
+
+        # Pull results
+        json_path = os.path.join(args.output_dir, f"benchmark_{timestamp}.json")
+        pull_results(args.device, json_path)
 
     # Load and analyze
     with open(json_path) as f:
