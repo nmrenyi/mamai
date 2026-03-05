@@ -256,6 +256,8 @@ def main():
     parser.add_argument("--data-dir", default="data", help="Directory containing dataset TSV files")
     parser.add_argument("--rag", default=None, help="Path to pre-computed RAG contexts dir (from precompute_retrieval.py)")
     parser.add_argument("--resume", default=None, help="Path to previous run dir to resume incomplete datasets from")
+    parser.add_argument("--run-dir", default=None, help="Fixed output dir (reused across restarts for auto-resume). "
+                        "If not set, creates a new timestamped dir each run.")
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -281,7 +283,10 @@ def main():
 
     # Run evaluation for each dataset
     run_timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
-    run_dir = os.path.join(args.output_dir, args.model, run_timestamp)
+    if args.run_dir:
+        run_dir = args.run_dir
+    else:
+        run_dir = os.path.join(args.output_dir, args.model, run_timestamp)
     os.makedirs(run_dir, exist_ok=True)
 
     summary = []
@@ -333,36 +338,42 @@ def main():
         }
 
         # Load previous checkpoint for resume
+        # Priority: 1) own output file (auto-resume), 2) --resume dir
         resume_results = None
-        if args.resume:
-            resume_path = os.path.join(args.resume, f"{ds_name}.json")
-            if os.path.exists(resume_path):
-                with open(resume_path) as f:
-                    prev = json.load(f)
-                prev_results = prev.get("results", [])
-                expected = min(len(df), args.max_questions or len(df))
-                if len(prev_results) >= expected:
-                    print(f"  Already complete ({len(prev_results)}/{expected}), skipping")
-                    # Copy the completed file to new run dir
+        expected = min(len(df), args.max_questions or len(df))
+        resume_path = None
+        if os.path.exists(output_path):
+            resume_path = output_path  # auto-resume from own checkpoint
+        elif args.resume:
+            candidate = os.path.join(args.resume, f"{ds_name}.json")
+            if os.path.exists(candidate):
+                resume_path = candidate
+
+        if resume_path:
+            with open(resume_path) as f:
+                prev = json.load(f)
+            prev_results = prev.get("results", [])
+            if len(prev_results) >= expected:
+                print(f"  Already complete ({len(prev_results)}/{expected}), skipping")
+                if resume_path != output_path:
                     save_checkpoint(output_path, prev.get("metadata", metadata),
                                     prev.get("aggregate_scores", {}), prev_results)
-                    scores = prev.get("aggregate_scores", {})
-                    results = prev_results
-                    # Print summary and continue to next dataset
-                    if ds_type == "mcq":
-                        acc = scores.get("accuracy", 0)
-                        partial = scores.get("partial_credit_accuracy", acc)
-                        summary.append(f"  {ds_name}: {acc:.1%} (partial: {partial:.1%}) [resumed]")
-                    else:
-                        mean_score = scores.get("mean_weighted_score")
-                        if mean_score is not None:
-                            summary.append(f"  {ds_name}: {mean_score}/5 [resumed]")
-                        else:
-                            summary.append(f"  {ds_name}: {len(results)} responses saved [resumed]")
-                    continue
+                scores = prev.get("aggregate_scores", {})
+                results = prev_results
+                if ds_type == "mcq":
+                    acc = scores.get("accuracy", 0)
+                    partial = scores.get("partial_credit_accuracy", acc)
+                    summary.append(f"  {ds_name}: {acc:.1%} (partial: {partial:.1%}) [resumed]")
                 else:
-                    resume_results = prev_results
-                    print(f"  Resuming: {len(resume_results)}/{expected} results from checkpoint")
+                    mean_score = scores.get("mean_weighted_score")
+                    if mean_score is not None:
+                        summary.append(f"  {ds_name}: {mean_score}/5 [resumed]")
+                    else:
+                        summary.append(f"  {ds_name}: {len(results)} responses saved [resumed]")
+                continue
+            else:
+                resume_results = prev_results
+                print(f"  Resuming: {len(resume_results)}/{expected} results from checkpoint")
 
         t0 = time.time()
         if ds_type == "mcq":
