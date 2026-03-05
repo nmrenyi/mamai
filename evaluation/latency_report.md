@@ -9,7 +9,7 @@
 We evaluated four model/backend combinations and two Gemma 3n model sizes for on-device medical search latency on the Pixel 7. Key results:
 
 - **Best stack**: Gemma 3n E4B on MediaPipe — fastest across all metrics
-- **Typical query latency**: 1.0–1.5 min (No RAG), 1.2–1.8 min (with RAG) using E4B
+- **Typical query latency**: 1.2–1.8 min (No RAG), 1.5–1.7 min (with RAG) using E4B
 - **E2B is not a viable alternative**: despite being smaller, E2B is 2–3x slower for medium/long queries
 - **llama.cpp is not competitive**: 2.8x slower than MediaPipe for the same model
 
@@ -41,8 +41,11 @@ We evaluated four model/backend combinations and two Gemma 3n model sizes for on
 | Metric | Time |
 |---|---|
 | Gecko + SQLite init | 179ms |
-| LLM model load | 35.0s |
-| Total initialization | 35.1s |
+| LLM model load (cold) | 35.0s |
+| LLM model load (warm) | ~1.2s |
+| Total initialization | 1.4–35.1s |
+
+The 35s cold load occurs on first launch after install (file not yet in OS page cache). Subsequent launches load in ~1.2s (consistent with Part 1 manual measurement).
 
 ### Latency by Category (Median)
 
@@ -99,8 +102,10 @@ These are query-content-specific (not thermal) — reproducible across all 3 rep
 | Metric | E4B | E2B | Diff |
 |---|---|---|---|
 | Model file size | 4.1 GB | 2.9 GB | -29% |
-| LLM model load | 35.0s | **1.1s** | **-97%** |
-| Total initialization | 35.1s | 15.8s | -55% |
+| LLM model load | ~1.2s* | **1.1s** | comparable |
+| Total initialization | 15–35s | 15.8s | — |
+
+*E4B's 35s load in Part 2 was a cold-start artifact (first launch, file not in OS page cache). Warm load is ~1.2s (consistent with Part 1). E2B was measured on a warm launch.
 
 ### Latency by Category (Median)
 
@@ -159,7 +164,7 @@ The auto-generated thermal analysis reports +277% degradation from first-third t
 | TTFT | **35s** | 71s | +105% |
 | Decode time | **58s** | 99s | +72% |
 | Decode throughput | 3.3 tok/s | 1.4 tok/s | -57% |
-| Benchmark duration | 3.5 hr | **6.1 hr** | +73% |
+| Benchmark duration | **3.5 hr** | 6.1 hr | +73% |
 
 ### Analysis
 
