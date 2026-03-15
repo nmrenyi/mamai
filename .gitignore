@@ -6,6 +6,7 @@ evaluation/latency_results/
 # IDE
 .idea/
 .vscode/
+.claude/
 *.iml
 *.ipr
 *.iws
