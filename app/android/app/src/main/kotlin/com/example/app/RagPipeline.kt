@@ -143,8 +143,9 @@ class RagPipeline(application: Application) {
             texts.add(sb.toString())
         }
         reader.close()
-        Log.i("mam-ai", "Texts is empty!!!")
-        if (texts.isNotEmpty()) {
+        if (texts.isEmpty()) {
+            Log.i("mam-ai", "Texts is empty!")
+        } else {
             Log.i("mam-ai", "Texts is " + texts.size)
             return memorize(texts)
         }
