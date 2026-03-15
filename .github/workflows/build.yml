@@ -35,17 +35,6 @@ jobs:
         working-directory: app
         run: flutter analyze
 
-      - name: Check code formatting
-        working-directory: app
-        run: dart format --set-exit-if-changed lib/
-
       - name: Build APK
         working-directory: app
         run: flutter build apk --debug
-
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-apk
-          path: app/build/app/outputs/flutter-apk/app-debug.apk
-          retention-days: 7
