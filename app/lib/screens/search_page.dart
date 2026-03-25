@@ -704,7 +704,6 @@ class _SearchPageState extends State<SearchPage> {
             ),
           ],
         ),
-        centerTitle: true,
         backgroundColor: Colors.deepOrange,
         actions: [
           IconButton(
