@@ -1,16 +1,48 @@
-# app
+# MAM-AI
 
-A new Flutter project.
+A clinical decision-support tool for nurse-midwives in Zanzibar. Provides fully offline, on-device answers grounded in medical guidelines — covering maternal health, obstetrics, and neonatal care.
 
-## Getting Started
+## Requirements
 
-This project is a starting point for a Flutter application.
+### Android device
 
-A few resources to get you started if this is your first Flutter project:
+| Requirement | Minimum |
+|---|---|
+| Android version | 7.0 (API 24) |
+| Architecture | arm64-v8a (64-bit) |
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+> **Why API 24?** The MediaPipe LLM inference library used for on-device Gemma 3n requires Android 7.0+.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+> **Real device required.** The MediaPipe inference library needs hardware acceleration and does not run on emulators.
+
+### Development machine
+
+- Flutter SDK (see `pubspec.yaml` for SDK constraint)
+- Android SDK with platform-tools (`adb` in PATH or at `~/Library/Android/sdk/platform-tools/`)
+
+## Building and running
+
+```bash
+cd app
+flutter pub get
+
+# Run on a connected Android device
+flutter run
+
+# Build a release APK
+flutter build apk
+```
+
+### Cloud AI mode (optional)
+
+The app includes a Cloud AI toggle that uses the Gemini API. To enable it, pass your API key at build/run time:
+
+```bash
+flutter run --dart-define=GEMINI_API_KEY=your_key_here
+```
+
+Without a key, on-device mode (Gemma 3n) is the default and works fully offline.
+
+## Languages
+
+The app supports English and Swahili. The language toggle is available in the top-right corner of the main screen. Swahili translations are placeholder-quality and pending review by a qualified Swahili-speaking medical professional (see GitHub issue #29).
