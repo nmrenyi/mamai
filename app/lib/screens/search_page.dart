@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:app/locale_notifier.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:app/l10n/app_localizations.dart';
 import 'package:markdown_widget/markdown_widget.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../conversation_store.dart';
 import '../gemini_service.dart';
 
@@ -141,22 +144,20 @@ class _SearchPageState extends State<SearchPage> {
     // If a previous conversation is still generating in the background, ask
     // the user to cancel it before sending a new message here.
     if (_backgroundGenerating && context.mounted) {
+      final l10n = AppLocalizations.of(context);
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Cancel previous generation?'),
-          content: const Text(
-            'A response is still being generated for a previous conversation. '
-            'Cancel it to send this message?',
-          ),
+          title: Text(l10n.dialogCancelGenerationTitle),
+          content: Text(l10n.dialogCancelGenerationContent),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Wait'),
+              child: Text(l10n.dialogWait),
             ),
             TextButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Cancel and send'),
+              child: Text(l10n.dialogCancelAndSend),
             ),
           ],
         ),
@@ -206,10 +207,8 @@ class _SearchPageState extends State<SearchPage> {
     await _saveCurrentConversation();
     if (historyTruncated && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Older messages were removed to fit the model\'s context window.',
-          ),
+        SnackBar(
+          content: Text(AppLocalizations.of(context).snackbarHistoryTruncated),
           duration: Duration(seconds: 4),
         ),
       );
@@ -222,6 +221,7 @@ class _SearchPageState extends State<SearchPage> {
           "prompt": prompt,
           "history": history,
           "useRetrieval": _useRetrieval,
+          "language": appLocale.value.languageCode,
         });
       } on PlatformException catch (e) {
         debugPrint('Platform error while generating response: $e');
@@ -279,6 +279,7 @@ class _SearchPageState extends State<SearchPage> {
       await for (final text in _geminiService!.generateStream(
         prompt: prompt,
         history: history,
+        languageCode: appLocale.value.languageCode,
       )) {
         if (!mounted) return;
         setState(() {
@@ -584,11 +585,12 @@ class _SearchPageState extends State<SearchPage> {
           final display = convTitle.length > 40
               ? '${convTitle.substring(0, 40)}…'
               : convTitle;
+          final l10n = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Response ready: "$display"'),
+              content: Text(l10n.snackbarResponseReady(display)),
               action: SnackBarAction(
-                label: 'View',
+                label: l10n.snackbarView,
                 onPressed: () => _scaffoldKey.currentState?.openDrawer(),
               ),
             ),
@@ -649,14 +651,24 @@ class _SearchPageState extends State<SearchPage> {
     super.dispose();
   }
 
+  void _toggleLocale() async {
+    final newLocale = appLocale.value.languageCode == 'en'
+        ? const Locale('sw')
+        : const Locale('en');
+    appLocale.value = newLocale;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('locale', newLocale.languageCode);
+  }
+
   @override
   Widget build(BuildContext context) {
-    const examples = [
-      ("How do I measure fundal height?", Icons.pregnant_woman),
-      ("My patient's newborn won't latch, what do I do?", Icons.child_care),
-      ("How do I care for the umbilical cord after birth?", Icons.healing),
-      ("When should I give iron supplements in pregnancy?", Icons.medication),
-      ("How much newborn weight loss is normal?", Icons.monitor_weight),
+    final l10n = AppLocalizations.of(context);
+    final examples = [
+      (l10n.exampleChip1, Icons.pregnant_woman),
+      (l10n.exampleChip2, Icons.child_care),
+      (l10n.exampleChip3, Icons.healing),
+      (l10n.exampleChip4, Icons.medication),
+      (l10n.exampleChip5, Icons.monitor_weight),
     ];
 
     return Scaffold(
@@ -682,7 +694,7 @@ class _SearchPageState extends State<SearchPage> {
         leading: Builder(
           builder: (ctx) => IconButton(
             icon: const Icon(Icons.menu, color: Colors.white),
-            tooltip: 'Conversation history',
+            tooltip: l10n.tooltipConversationHistory,
             onPressed: () => Scaffold.of(ctx).openDrawer(),
           ),
         ),
@@ -695,12 +707,12 @@ class _SearchPageState extends State<SearchPage> {
               child: Image.asset('images/logo.png', height: 42),
             ),
             const SizedBox(width: 10),
-            const Flexible(
+            Flexible(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  const Text(
                     'MAM-AI',
                     style: TextStyle(
                       color: Colors.white,
@@ -710,8 +722,8 @@ class _SearchPageState extends State<SearchPage> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
-                    'For nurse-midwives in Zanzibar',
-                    style: TextStyle(
+                    l10n.appBarSubtitle,
+                    style: const TextStyle(
                       color: Colors.white70,
                       fontSize: 12,
                     ),
@@ -724,9 +736,37 @@ class _SearchPageState extends State<SearchPage> {
         ),
         backgroundColor: Color(0xffDE7356),
         actions: [
+          // Language toggle: shows current language code in a rounded badge
+          ValueListenableBuilder<Locale>(
+            valueListenable: appLocale,
+            builder: (_, locale, __) => Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: GestureDetector(
+                onTap: _toggleLocale,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    locale.languageCode.toUpperCase(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.add_comment, color: Colors.white),
-            tooltip: 'New conversation',
+            tooltip: l10n.tooltipNewConversation,
             onPressed: _startNewConversation,
           ),
         ],
@@ -737,7 +777,7 @@ class _SearchPageState extends State<SearchPage> {
           children: [
             Expanded(
               child: _messages.isEmpty
-                  ? _buildSuggestionChips(examples)
+                  ? _buildSuggestionChips(examples, l10n)
                   : ListView.builder(
                       controller: _scrollController,
                       padding: const EdgeInsets.all(16),
@@ -756,35 +796,38 @@ class _SearchPageState extends State<SearchPage> {
                       },
                     ),
             ),
-            _buildInputBar(),
+            _buildInputBar(l10n),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSuggestionChips(List<(String, IconData)> examples) {
+  Widget _buildSuggestionChips(
+    List<(String, IconData)> examples,
+    AppLocalizations l10n,
+  ) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.only(bottom: 4),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
             child: Text(
-              'What do you need help with today?',
-              style: TextStyle(
+              l10n.emptyStateHeading,
+              style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
                 color: Colors.black87,
               ),
             ),
           ),
-          const Padding(
-            padding: EdgeInsets.only(bottom: 16),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
             child: Text(
-              'Here to support you at the point of care.',
-              style: TextStyle(fontSize: 14, color: Colors.black45),
+              l10n.emptyStateSubheading,
+              style: const TextStyle(fontSize: 14, color: Colors.black45),
             ),
           ),
           Wrap(
@@ -806,7 +849,7 @@ class _SearchPageState extends State<SearchPage> {
     );
   }
 
-  Widget _buildInputBar() {
+  Widget _buildInputBar(AppLocalizations l10n) {
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -816,7 +859,7 @@ class _SearchPageState extends State<SearchPage> {
               child: TextField(
                 controller: _textController,
                 decoration: InputDecoration(
-                  hintText: 'Describe your clinical situation...',
+                  hintText: l10n.inputHint,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(24),
                   ),
@@ -835,8 +878,8 @@ class _SearchPageState extends State<SearchPage> {
             // Cloud / on-device toggle
             Tooltip(
               message: _useCloudLLM
-                  ? 'Cloud AI (tap to switch to on-device)'
-                  : 'On-device (tap to switch to cloud)',
+                  ? l10n.tooltipCloudAI
+                  : l10n.tooltipOnDevice,
               child: IconButton(
                 icon: Icon(
                   _useCloudLLM ? Icons.cloud : Icons.smartphone,
@@ -851,8 +894,9 @@ class _SearchPageState extends State<SearchPage> {
               GestureDetector(
                 onTap: () => setState(() => _useRetrieval = !_useRetrieval),
                 child: Tooltip(
-                  message:
-                      _useRetrieval ? 'Search enabled' : 'Search disabled',
+                  message: _useRetrieval
+                      ? l10n.tooltipSearchEnabled
+                      : l10n.tooltipSearchDisabled,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -868,7 +912,7 @@ class _SearchPageState extends State<SearchPage> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          _useRetrieval ? 'Search ON' : 'Search OFF',
+                          _useRetrieval ? l10n.searchOn : l10n.searchOff,
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 12,
@@ -983,7 +1027,8 @@ class SearchSuggestionChip extends StatelessWidget {
         break;
     }
 
-    final resolvedIcon = chipIcon ?? (type == SuggestionType.history ? Icons.history : Icons.auto_awesome);
+    final resolvedIcon = chipIcon ??
+        (type == SuggestionType.history ? Icons.history : Icons.auto_awesome);
 
     return ChipTheme(
       data: ChipThemeData(
@@ -1049,6 +1094,7 @@ class _AssistantCardState extends State<_AssistantCard> {
   @override
   Widget build(BuildContext context) {
     final message = widget.message;
+    final l10n = AppLocalizations.of(context);
     const lightOrange = Color(0xffDE7356);
 
     return Padding(
@@ -1092,15 +1138,15 @@ class _AssistantCardState extends State<_AssistantCard> {
                     ),
                   ),
                 if (message.wasCancelled)
-                  const Padding(
-                    padding: EdgeInsetsDirectional.only(
+                  Padding(
+                    padding: const EdgeInsetsDirectional.only(
                       start: 16,
                       end: 24,
                       bottom: 12,
                     ),
                     child: Text(
-                      'Response was interrupted.',
-                      style: TextStyle(
+                      l10n.responseCancelled,
+                      style: const TextStyle(
                         color: Colors.grey,
                         fontSize: 14,
                         fontStyle: FontStyle.italic,
@@ -1112,11 +1158,11 @@ class _AssistantCardState extends State<_AssistantCard> {
           ),
           // Disclaimer shown on the latest response once generation is complete
           if (widget.showDisclaimer)
-            const Padding(
-              padding: EdgeInsets.only(top: 4, left: 4),
+            Padding(
+              padding: const EdgeInsets.only(top: 4, left: 4),
               child: Text(
-                'Always apply your clinical judgment. For emergencies, escalate immediately.',
-                style: TextStyle(fontSize: 11, color: Colors.black38),
+                l10n.disclaimer,
+                style: const TextStyle(fontSize: 11, color: Colors.black38),
               ),
             ),
         ],
@@ -1155,7 +1201,8 @@ class _ThinkingIndicatorState extends State<_ThinkingIndicator>
 
   @override
   Widget build(BuildContext context) {
-    final label = widget.hasDocs ? 'Generating response' : 'Thinking';
+    final l10n = AppLocalizations.of(context);
+    final label = widget.hasDocs ? l10n.generatingLabel : l10n.thinkingLabel;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
       child: AnimatedBuilder(
@@ -1219,7 +1266,7 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
     if (mounted) setState(() => _conversations = conversations);
   }
 
-  String _formatTimestamp(DateTime dt) {
+  String _formatTimestamp(DateTime dt, AppLocalizations l10n) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = today.subtract(const Duration(days: 1));
@@ -1227,9 +1274,9 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
     if (date == today) {
       final h = dt.hour.toString().padLeft(2, '0');
       final m = dt.minute.toString().padLeft(2, '0');
-      return 'Today $h:$m';
+      return l10n.timestampToday('$h:$m');
     } else if (date == yesterday) {
-      return 'Yesterday';
+      return l10n.timestampYesterday;
     } else {
       return '${dt.day}/${dt.month}/${dt.year}';
     }
@@ -1237,6 +1284,7 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Drawer(
       child: Column(
         children: [
@@ -1246,10 +1294,10 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
-                    'Past conversations',
-                    style: TextStyle(
+                    l10n.drawerTitle,
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -1265,7 +1313,7 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
           ),
           ListTile(
             leading: const Icon(Icons.add_comment, color: Color(0xffDE7356)),
-            title: const Text('New conversation'),
+            title: Text(l10n.drawerNewConversation),
             onTap: () {
               Navigator.pop(context);
               widget.onNewConversation();
@@ -1274,10 +1322,10 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
           const Divider(height: 1),
           Expanded(
             child: _conversations.isEmpty
-                ? const Center(
+                ? Center(
                     child: Text(
-                      'No conversations yet',
-                      style: TextStyle(color: Colors.grey),
+                      l10n.drawerNoConversations,
+                      style: const TextStyle(color: Colors.grey),
                     ),
                   )
                 : ListView.builder(
@@ -1299,7 +1347,9 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
                           width: 10,
                           height: 10,
                           decoration: BoxDecoration(
-                            color: isUnread ? Colors.blue : Colors.transparent,
+                            color: isUnread
+                                ? Colors.blue
+                                : Colors.transparent,
                             shape: BoxShape.circle,
                           ),
                         ),
@@ -1308,7 +1358,7 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        subtitle: Text(_formatTimestamp(c.timestamp)),
+                        subtitle: Text(_formatTimestamp(c.timestamp, l10n)),
                         // Spinner for background generation; nothing for
                         // foreground generation; delete button otherwise.
                         trailing: isBackgroundGenerating
@@ -1327,25 +1377,29 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
                                   size: 20,
                                 ),
                                 color: Colors.grey,
-                                tooltip: 'Delete',
+                                tooltip: l10n.dialogDelete,
                                 onPressed: () async {
                                   final confirmed = await showDialog<bool>(
                                     context: context,
                                     builder: (ctx) => AlertDialog(
-                                      title: const Text('Delete conversation?'),
-                                      content: Text('Delete "${c.title}"?'),
+                                      title: Text(l10n.deleteConversationTitle),
+                                      content: Text(
+                                        l10n.deleteConversationContent(c.title),
+                                      ),
                                       actions: [
                                         TextButton(
                                           onPressed: () =>
                                               Navigator.pop(ctx, false),
-                                          child: const Text('Cancel'),
+                                          child: Text(l10n.dialogCancel),
                                         ),
                                         TextButton(
                                           onPressed: () =>
                                               Navigator.pop(ctx, true),
-                                          child: const Text(
-                                            'Delete',
-                                            style: TextStyle(color: Colors.red),
+                                          child: Text(
+                                            l10n.dialogDelete,
+                                            style: const TextStyle(
+                                              color: Colors.red,
+                                            ),
                                           ),
                                         ),
                                       ],
@@ -1371,28 +1425,26 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
               top: false,
               child: ListTile(
                 leading: const Icon(Icons.delete_forever, color: Colors.red),
-                title: const Text(
-                  'Clear all conversations',
-                  style: TextStyle(color: Colors.red),
+                title: Text(
+                  l10n.clearAllDrawerItem,
+                  style: const TextStyle(color: Colors.red),
                 ),
                 onTap: () async {
                   final confirmed = await showDialog<bool>(
                     context: context,
                     builder: (ctx) => AlertDialog(
-                      title: const Text('Clear all conversations?'),
-                      content: const Text(
-                        'This will permanently delete all past conversations.',
-                      ),
+                      title: Text(l10n.clearAllTitle),
+                      content: Text(l10n.clearAllContent),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.pop(ctx, false),
-                          child: const Text('Cancel'),
+                          child: Text(l10n.dialogCancel),
                         ),
                         TextButton(
                           onPressed: () => Navigator.pop(ctx, true),
-                          child: const Text(
-                            'Clear all',
-                            style: TextStyle(color: Colors.red),
+                          child: Text(
+                            l10n.clearAllButton,
+                            style: const TextStyle(color: Colors.red),
                           ),
                         ),
                       ],
@@ -1426,6 +1478,7 @@ class _RetrievalDisclosure extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1444,7 +1497,7 @@ class _RetrievalDisclosure extends StatelessWidget {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  'Retrieved ${docs.length} guideline${docs.length == 1 ? '' : 's'}',
+                  l10n.retrievedGuidelines(docs.length),
                   style: const TextStyle(color: Colors.grey, fontSize: 13),
                 ),
               ],
@@ -1452,44 +1505,16 @@ class _RetrievalDisclosure extends StatelessWidget {
           ),
         ),
         if (expanded)
-          ...docs.asMap().entries.map(
-            (entry) => Container(
+          ...docs.map(
+            (doc) => Container(
               margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: Color(0xffF4F3EE),
-                border: const Border(
-                  left: BorderSide(color: Color(0xffcc5500), width: 3),
-                ),
-                borderRadius: const BorderRadius.only(
-                  topRight: Radius.circular(8),
-                  bottomRight: Radius.circular(8),
-                ),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Color(0xffE8E6DC)),
               ),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 14, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Guideline ${entry.key + 1} of ${docs.length}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xffB85C42),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      entry.value,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        height: 1.5,
-                        color: Colors.black87,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              child: Text(doc, style: const TextStyle(fontSize: 13)),
             ),
           ),
       ],

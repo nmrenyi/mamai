@@ -2,12 +2,15 @@ import 'dart:collection';
 import 'dart:io';
 import 'dart:io' as io;
 
+import 'package:app/locale_notifier.dart';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:app/l10n/app_localizations.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
 import 'search_page.dart';
@@ -75,7 +78,7 @@ class _IntroPageState extends State<IntroPage> {
     };
 
     // TODO basic auth - we can gate the model if required with a password
-    // String basicAuthHeader = 'Basic ${base64.encode(utf8.encode(basicAuth))}';
+    // String basicAuthHeader = 'Basic ${base64.encode(utf8.encode(basicAuth))}'
 
     // Send the request
     await dio.download(
@@ -168,10 +171,12 @@ class _IntroPageState extends State<IntroPage> {
       return const Scaffold(body: SizedBox.shrink());
     }
 
+    final l10n = AppLocalizations.of(context);
+
     Widget nextButton;
 
     // Our background colour
-    Color orange = Color(0xffDE7356);
+    const Color orange = Color(0xffDE7356);
 
     if (_downloadDir == null) {
       // Download dir loading - show loading spinner
@@ -181,7 +186,7 @@ class _IntroPageState extends State<IntroPage> {
 
       nextButton = Column(
         children: [
-          Text("Checking if the LLM is installed..."),
+          Text(l10n.introCheckingLLM),
           SizedBox(height: 20),
           SizedBox(
             width: 64,
@@ -204,7 +209,7 @@ class _IntroPageState extends State<IntroPage> {
 
         nextButton = Column(
           children: [
-            Text("LLM loading (may take a while the first time)..."),
+            Text(l10n.introLLMLoading),
             SizedBox(height: 20),
             SizedBox(
               width: 64,
@@ -227,9 +232,12 @@ class _IntroPageState extends State<IntroPage> {
             ),
             elevation: 2,
           ),
-          child: const Text(
-            'Start chat',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          child: Text(
+            l10n.introStartChat,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         );
       }
@@ -237,7 +245,7 @@ class _IntroPageState extends State<IntroPage> {
       // Download not yet started - prompt license
       nextButton = ElevatedButton(
         onPressed: () async {
-          var accepted = await promptLicense(context);
+          var accepted = await promptLicense(context, l10n);
           if (accepted ?? false) {
             for (var filename in files) {
               downloadFileFromServer("https://152.67.91.164/", filename);
@@ -252,16 +260,19 @@ class _IntroPageState extends State<IntroPage> {
           ),
           elevation: 2,
         ),
-        child: const Text(
-          'Download models',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        child: Text(
+          l10n.introDownloadModels,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       );
     } else {
       double prog = progress;
       nextButton = Column(
         children: [
-          Text("Downloading models (${(prog * 100).toStringAsFixed(2)}%)"),
+          Text(l10n.introDownloadingModels((prog * 100).toStringAsFixed(2))),
           SizedBox(height: 20),
           LinearProgressIndicator(value: progress, color: orange),
         ],
@@ -306,7 +317,7 @@ class _IntroPageState extends State<IntroPage> {
                                   ),
                                   const SizedBox(height: 24),
                                   Text(
-                                    'Welcome to MAM-Ai',
+                                    l10n.introWelcome,
                                     style: TextStyle(
                                       fontSize: 28,
                                       fontWeight: FontWeight.bold,
@@ -316,7 +327,7 @@ class _IntroPageState extends State<IntroPage> {
                                   ),
                                   const SizedBox(height: 12),
                                   Text(
-                                    'A clinical decision-support tool for nurse-midwives in Zanzibar. Offers fully offline, on-device answers grounded in medical guidelines — covering maternal health, obstetrics, and neonatal care — for reliable, private support at the point of care.',
+                                    l10n.introDescription,
                                     textAlign: TextAlign.left,
                                   ),
                                 ],
@@ -328,7 +339,7 @@ class _IntroPageState extends State<IntroPage> {
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 Text(
-                                  'In partnership with',
+                                  l10n.introPartnership,
                                   style: TextStyle(fontSize: 16),
                                   textAlign: TextAlign.center,
                                 ),
@@ -355,6 +366,33 @@ class _IntroPageState extends State<IntroPage> {
                                 const SizedBox(height: 20),
                               ],
                             ),
+                            // Language toggle
+                            Center(
+                              child: ValueListenableBuilder<Locale>(
+                                valueListenable: appLocale,
+                                builder: (_, locale, __) => TextButton(
+                                  onPressed: () async {
+                                    final newLocale =
+                                        locale.languageCode == 'en'
+                                            ? const Locale('sw')
+                                            : const Locale('en');
+                                    appLocale.value = newLocale;
+                                    final prefs =
+                                        await SharedPreferences.getInstance();
+                                    await prefs.setString(
+                                      'locale',
+                                      newLocale.languageCode,
+                                    );
+                                  },
+                                  child: Text(
+                                    locale.languageCode == 'en'
+                                        ? AppLocalizations.of(context).switchToSwahili
+                                        : AppLocalizations.of(context).switchToEnglish,
+                                    style: TextStyle(color: Color(0xffDE7356)),
+                                  ),
+                                ),
+                              ),
+                            ),
                             const SizedBox(height: 36),
                             // Next button
                             nextButton,
@@ -373,7 +411,10 @@ class _IntroPageState extends State<IntroPage> {
   }
 }
 
-Future<bool?> promptLicense(BuildContext context) {
+Future<bool?> promptLicense(
+  BuildContext context,
+  AppLocalizations l10n,
+) {
   bool openedGemmaTos = false;
   bool openedGemmaUsagePolicy = false;
 
@@ -384,19 +425,15 @@ Future<bool?> promptLicense(BuildContext context) {
       return StatefulBuilder(
         builder: (context, setState) {
           return AlertDialog(
-            title: const Text('Accept Gemma3n license'),
+            title: Text(l10n.licenseTitle),
             content: ConstrainedBox(
               constraints: BoxConstraints(maxWidth: 500),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    "Please read and accept Gemma3n's license and prohibited usage policy.",
-                  ),
+                  Text(l10n.licenseIntro),
                   SizedBox(height: 30),
-                  Text(
-                    "Gemma is provided under and subject to the Gemma Terms of Use found at",
-                  ),
+                  Text(l10n.licenseTermsText),
                   SizedBox(height: 15),
                   InkWell(
                     child: Padding(
@@ -420,7 +457,7 @@ Future<bool?> promptLicense(BuildContext context) {
                     child: Padding(
                       padding: EdgeInsets.all(8.0),
                       child: Text(
-                        "Gemma3n usage policy",
+                        l10n.licenseUsagePolicyLink,
                         style: TextStyle(
                           color: Colors.blue,
                           decoration: TextDecoration.underline,
@@ -448,13 +485,13 @@ Future<bool?> promptLicense(BuildContext context) {
                 onPressed: (openedGemmaUsagePolicy && openedGemmaTos)
                     ? () => Navigator.of(context).pop(true)
                     : null,
-                child: const Text('Accept'),
+                child: Text(l10n.licenseAccept),
               ),
               TextButton(
                 style: TextButton.styleFrom(
                   textStyle: Theme.of(context).textTheme.labelLarge,
                 ),
-                child: const Text('Deny'),
+                child: Text(l10n.licenseDeny),
                 onPressed: () {
                   openedGemmaTos = false;
                   openedGemmaUsagePolicy = false;
