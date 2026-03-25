@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:markdown_widget/markdown_widget.dart';
 import '../conversation_store.dart';
+import '../gemini_service.dart';
 
 /// A single message in the conversation
 class ChatMessage {
@@ -71,6 +73,8 @@ class _SearchPageState extends State<SearchPage> {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   bool _useRetrieval = true;
+  bool _useCloudLLM = false;
+  GeminiService? _geminiService;
   bool _isGenerating = false;
   final ConversationStore _store = ConversationStore();
   String? _currentConversationId;
@@ -210,36 +214,123 @@ class _SearchPageState extends State<SearchPage> {
         ),
       );
     }
-    try {
-      await platform.invokeMethod<int>("generateResponse", {
-        "prompt": prompt,
-        "history": history,
-        "useRetrieval": _useRetrieval,
-      });
-    } on PlatformException catch (e) {
-      debugPrint('Platform error while generating response: $e');
-      if (!mounted) return;
-      setState(() {
-        _isGenerating = false;
-        if (_messages.isNotEmpty && _messages.last.role == 'assistant') {
-          final last = _messages.last;
-          if (last.text.isEmpty && last.retrievedDocs.isEmpty) {
-            _messages.removeLast();
-            if (_messages.isNotEmpty && _messages.last.role == 'user') {
+    if (_useCloudLLM) {
+      await _generateWithGemini(prompt, history);
+    } else {
+      try {
+        await platform.invokeMethod<int>("generateResponse", {
+          "prompt": prompt,
+          "history": history,
+          "useRetrieval": _useRetrieval,
+        });
+      } on PlatformException catch (e) {
+        debugPrint('Platform error while generating response: $e');
+        if (!mounted) return;
+        setState(() {
+          _isGenerating = false;
+          if (_messages.isNotEmpty && _messages.last.role == 'assistant') {
+            final last = _messages.last;
+            if (last.text.isEmpty && last.retrievedDocs.isEmpty) {
               _messages.removeLast();
+              if (_messages.isNotEmpty && _messages.last.role == 'user') {
+                _messages.removeLast();
+              }
+            } else {
+              _messages[_messages.length - 1] = last.copyWith(
+                isLoading: false,
+                wasCancelled: true,
+              );
             }
-          } else {
-            _messages[_messages.length - 1] = last.copyWith(
+          }
+        });
+      } catch (e) {
+        // Catches MissingPluginException on non-Android platforms
+        debugPrint('Channel unavailable: $e');
+        if (!mounted) return;
+        setState(() {
+          _isGenerating = false;
+          if (_messages.isNotEmpty && _messages.last.role == 'assistant') {
+            final last = _messages.last;
+            if (last.text.isEmpty && last.retrievedDocs.isEmpty) {
+              _messages.removeLast();
+              if (_messages.isNotEmpty && _messages.last.role == 'user') {
+                _messages.removeLast();
+              }
+            } else {
+              _messages[_messages.length - 1] = last.copyWith(
+                isLoading: false,
+                wasCancelled: true,
+              );
+            }
+          }
+        });
+      }
+    }
+  }
+
+  /// Generate a response via the Gemini cloud API, streaming tokens into the UI.
+  Future<void> _generateWithGemini(
+    String prompt,
+    List<Map<String, String>> history,
+  ) async {
+    _geminiService = GeminiService();
+    var completed = false;
+    try {
+      await for (final text in _geminiService!.generateStream(
+        prompt: prompt,
+        history: history,
+      )) {
+        if (!mounted) return;
+        setState(() {
+          final lastIdx = _messages.length - 1;
+          if (lastIdx >= 0 && _messages[lastIdx].role == 'assistant') {
+            _messages[lastIdx] = _messages[lastIdx].copyWith(
+              text: text,
               isLoading: false,
-              wasCancelled: true,
             );
           }
-        }
-      });
+        });
+        _scrollToBottom();
+      }
+      completed = true;
+    } on DioException catch (e) {
+      if (!CancelToken.isCancel(e)) {
+        debugPrint('Gemini API error: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isGenerating = false;
+          if (!completed &&
+              _messages.isNotEmpty &&
+              _messages.last.role == 'assistant') {
+            final last = _messages.last;
+            if (last.text.isEmpty && last.retrievedDocs.isEmpty) {
+              _messages.removeLast();
+              if (_messages.isNotEmpty && _messages.last.role == 'user') {
+                _messages.removeLast();
+              }
+            } else {
+              _messages[_messages.length - 1] = last.copyWith(
+                isLoading: false,
+                wasCancelled: true,
+              );
+            }
+          }
+        });
+        await _saveCurrentConversation();
+      }
     }
   }
 
   Future<void> _cancelGeneration() async {
+    if (_useCloudLLM) {
+      // Cloud path: cancel the Dio request. Message cleanup is handled by
+      // _generateWithGemini's finally block once the stream throws.
+      _geminiService?.cancel();
+      return;
+    }
+    // On-device path
     try {
       await platform.invokeMethod("cancelGeneration");
     } on PlatformException catch (e) {
@@ -712,26 +803,35 @@ class _SearchPageState extends State<SearchPage> {
               ),
             ),
             const SizedBox(width: 4),
+            // Cloud / on-device toggle
             GestureDetector(
-              onTap: () => setState(() => _useRetrieval = !_useRetrieval),
+              onTap: () => setState(() => _useCloudLLM = !_useCloudLLM),
               child: Tooltip(
-                message: _useRetrieval ? 'Search enabled' : 'Search disabled',
+                message: _useCloudLLM
+                    ? 'Using Gemini cloud API'
+                    : 'Using on-device model',
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 8,
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: _useRetrieval
-                        ? const Color(0xffcc5500)
-                        : Colors.grey[400],
+                    color: _useCloudLLM
+                        ? Colors.blue[700]
+                        : Colors.grey[500],
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      Icon(
+                        _useCloudLLM ? Icons.cloud : Icons.smartphone,
+                        color: Colors.white,
+                        size: 14,
+                      ),
+                      const SizedBox(width: 4),
                       Text(
-                        _useRetrieval ? 'Search ON' : 'Search OFF',
+                        _useCloudLLM ? 'Cloud' : 'On-device',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 12,
@@ -743,6 +843,42 @@ class _SearchPageState extends State<SearchPage> {
                 ),
               ),
             ),
+            // Search toggle — only relevant for on-device mode on Android
+            if (!_useCloudLLM && !kIsWeb && Platform.isAndroid) ...[
+              const SizedBox(width: 4),
+              GestureDetector(
+                onTap: () => setState(() => _useRetrieval = !_useRetrieval),
+                child: Tooltip(
+                  message:
+                      _useRetrieval ? 'Search enabled' : 'Search disabled',
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _useRetrieval
+                          ? const Color(0xffcc5500)
+                          : Colors.grey[400],
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _useRetrieval ? 'Search ON' : 'Search OFF',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(width: 4),
             if (_isGenerating)
               IconButton.filled(
