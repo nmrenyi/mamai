@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 
 /// Streams responses from the Gemini API for the nurse-midwife assistant.
 ///
@@ -164,7 +165,7 @@ class GeminiService {
         'temperature': 1.0,
         'topP': 0.95,
         'topK': 64,
-        'maxOutputTokens': 1024,
+        'maxOutputTokens': 4096,
       },
     };
 
@@ -190,15 +191,20 @@ class GeminiService {
       if (jsonStr.isEmpty) continue;
       try {
         final json = jsonDecode(jsonStr) as Map<String, dynamic>;
+        final candidate = (json['candidates'] as List?)?.first;
         final text =
-            (((json['candidates'] as List?)?.first['content']
-                            as Map<String, dynamic>?)?['parts']
+            ((candidate?['content'] as Map<String, dynamic>?)?['parts']
                         as List?)
                     ?.first['text']
                 as String?;
         if (text != null && text.isNotEmpty) {
           accumulated.write(text);
           yield accumulated.toString();
+        }
+        // Log if the model stopped due to hitting the token limit
+        final finishReason = candidate?['finishReason'] as String?;
+        if (finishReason != null && finishReason != 'STOP') {
+          debugPrint('[GeminiService] finishReason=$finishReason — response may be incomplete');
         }
       } catch (_) {
         // Ignore malformed SSE chunks
