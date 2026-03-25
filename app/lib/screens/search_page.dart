@@ -255,13 +255,19 @@ class _SearchPageState extends State<SearchPage> {
         final l10n = AppLocalizations.of(context);
         setState(() {
           _isGenerating = false;
-          // Remove only the empty assistant placeholder, not the user message
+          // Remove assistant placeholder then user message — both were just
+          // added in _sendMessage. Restore prompt to the input field so the
+          // user can re-send or edit after dismissing the dialog.
           if (_messages.isNotEmpty &&
               _messages.last.role == 'assistant' &&
               _messages.last.text.isEmpty &&
               _messages.last.retrievedDocs.isEmpty) {
             _messages.removeLast();
           }
+          if (_messages.isNotEmpty && _messages.last.role == 'user') {
+            _messages.removeLast();
+          }
+          _textController.text = prompt;
         });
         showDialog<void>(
           context: context,
@@ -279,6 +285,7 @@ class _SearchPageState extends State<SearchPage> {
                   setState(() {
                     _useCloudLLM = true;
                     _isGenerating = true;
+                    _messages.add(ChatMessage(role: 'user', text: prompt));
                     _messages.add(
                       ChatMessage(
                         role: 'assistant',
@@ -286,6 +293,7 @@ class _SearchPageState extends State<SearchPage> {
                         isLoading: true,
                       ),
                     );
+                    _textController.clear();
                   });
                   _scrollToBottom();
                   _generateWithGemini(prompt, history);
