@@ -263,14 +263,36 @@ class _SearchPageState extends State<SearchPage> {
             _messages.removeLast();
           }
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+        showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
             content: Text(l10n.errorOnDeviceUnavailable),
-            duration: const Duration(seconds: 6),
-            action: SnackBarAction(
-              label: l10n.switchToCloudAIAction,
-              onPressed: () => setState(() => _useCloudLLM = true),
-            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: Text(l10n.dialogCancel),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  if (!mounted) return;
+                  setState(() {
+                    _useCloudLLM = true;
+                    _isGenerating = true;
+                    _messages.add(
+                      ChatMessage(
+                        role: 'assistant',
+                        text: '',
+                        isLoading: true,
+                      ),
+                    );
+                  });
+                  _scrollToBottom();
+                  _generateWithGemini(prompt, history);
+                },
+                child: Text(l10n.switchToCloudAIAction),
+              ),
+            ],
           ),
         );
       }
