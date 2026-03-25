@@ -722,7 +722,7 @@ class _SearchPageState extends State<SearchPage> {
             ),
           ],
         ),
-        backgroundColor: Colors.deepOrange,
+        backgroundColor: Color(0xffC15F3C),
         actions: [
           IconButton(
             icon: const Icon(Icons.add_comment, color: Colors.white),
@@ -860,7 +860,7 @@ class _SearchPageState extends State<SearchPage> {
                     ),
                     decoration: BoxDecoration(
                       color: _useRetrieval
-                          ? const Color(0xffcc5500)
+                          ? Color(0xffC15F3C)
                           : Colors.grey[400],
                       borderRadius: BorderRadius.circular(16),
                     ),
@@ -886,7 +886,7 @@ class _SearchPageState extends State<SearchPage> {
               IconButton.filled(
                 icon: const Icon(Icons.stop),
                 style: IconButton.styleFrom(
-                  backgroundColor: const Color(0xffcc5500),
+                  backgroundColor: Color(0xffC15F3C),
                   foregroundColor: Colors.white,
                 ),
                 onPressed: _cancelGeneration,
@@ -895,7 +895,7 @@ class _SearchPageState extends State<SearchPage> {
               IconButton.filled(
                 icon: const Icon(Icons.send),
                 style: IconButton.styleFrom(
-                  backgroundColor: const Color(0xffcc5500),
+                  backgroundColor: Color(0xffC15F3C),
                   foregroundColor: Colors.white,
                 ),
                 onPressed: () => _generateResponse(_textController.text),
@@ -931,7 +931,7 @@ class SearchSuggestionTile extends StatelessWidget {
 
     switch (type) {
       case SuggestionType.example:
-        textColor = const Color(0xff994000);
+        textColor = const Color(0xff8C4A35);
         icon = Icon(Icons.auto_awesome, color: textColor);
         break;
 
@@ -971,9 +971,9 @@ class SearchSuggestionChip extends StatelessWidget {
 
     switch (type) {
       case SuggestionType.example:
-        bgColor = Colors.orange[50];
-        textColor = const Color(0xffcc5500);
-        borderColor = Colors.orange[300]!;
+        bgColor = Color(0xffF4F3EE);
+        textColor = Color(0xffC15F3C);
+        borderColor = Color(0xffE8E6DC);
         break;
 
       case SuggestionType.history:
@@ -1021,7 +1021,7 @@ class _UserBubble extends StatelessWidget {
         margin: const EdgeInsets.only(left: 64, bottom: 12),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: const Color(0xffcc5500),
+          color: Color(0xffC15F3C),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Text(
@@ -1241,7 +1241,7 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
       child: Column(
         children: [
           DrawerHeader(
-            decoration: const BoxDecoration(color: Colors.deepOrange),
+            decoration: const BoxDecoration(color: Color(0xffC15F3C)),
             padding: const EdgeInsets.fromLTRB(16, 16, 8, 16),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1264,7 +1264,7 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
             ),
           ),
           ListTile(
-            leading: const Icon(Icons.add_comment, color: Colors.deepOrange),
+            leading: const Icon(Icons.add_comment, color: Color(0xffC15F3C)),
             title: const Text('New conversation'),
             onTap: () {
               Navigator.pop(context);
@@ -1292,7 +1292,7 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
                       final isUnread = widget.unreadIds.contains(c.id);
                       return ListTile(
                         selected: isActive,
-                        selectedTileColor: Colors.orange[50],
+                        selectedTileColor: Color(0xffF4F3EE),
                         // Blue dot for unread; transparent placeholder keeps
                         // alignment consistent across all rows.
                         leading: Container(
@@ -1316,7 +1316,7 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
                                 dimension: 24,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  color: Colors.deepOrange,
+                                  color: Color(0xffC15F3C),
                                 ),
                               )
                             : isForegroundGenerating
@@ -1456,7 +1456,7 @@ class _RetrievalDisclosure extends StatelessWidget {
             (entry) => Container(
               margin: const EdgeInsets.only(bottom: 8),
               decoration: BoxDecoration(
-                color: Colors.orange[50],
+                color: Color(0xffF4F3EE),
                 border: const Border(
                   left: BorderSide(color: Color(0xffcc5500), width: 3),
                 ),
@@ -1475,7 +1475,7 @@ class _RetrievalDisclosure extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: Colors.orange[800],
+                        color: Color(0xff8C5240),
                       ),
                     ),
                     const SizedBox(height: 6),

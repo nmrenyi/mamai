@@ -171,7 +171,7 @@ class _IntroPageState extends State<IntroPage> {
     Widget nextButton;
 
     // Our background colour
-    Color orange = Color(0xffcc5500);
+    Color orange = Color(0xffC15F3C);
 
     if (_downloadDir == null) {
       // Download dir loading - show loading spinner
@@ -310,7 +310,7 @@ class _IntroPageState extends State<IntroPage> {
                                     style: TextStyle(
                                       fontSize: 28,
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.deepOrange,
+                                      color: Color(0xffC15F3C),
                                     ),
                                     textAlign: TextAlign.center,
                                   ),
