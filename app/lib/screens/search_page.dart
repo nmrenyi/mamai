@@ -722,7 +722,7 @@ class _SearchPageState extends State<SearchPage> {
             ),
           ],
         ),
-        backgroundColor: Color(0xffC15F3C),
+        backgroundColor: Color(0xffDE7356),
         actions: [
           IconButton(
             icon: const Icon(Icons.add_comment, color: Colors.white),
@@ -860,7 +860,7 @@ class _SearchPageState extends State<SearchPage> {
                     ),
                     decoration: BoxDecoration(
                       color: _useRetrieval
-                          ? Color(0xffC15F3C)
+                          ? Color(0xffDE7356)
                           : Colors.grey[400],
                       borderRadius: BorderRadius.circular(16),
                     ),
@@ -886,7 +886,7 @@ class _SearchPageState extends State<SearchPage> {
               IconButton.filled(
                 icon: const Icon(Icons.stop),
                 style: IconButton.styleFrom(
-                  backgroundColor: Color(0xffC15F3C),
+                  backgroundColor: Color(0xffDE7356),
                   foregroundColor: Colors.white,
                 ),
                 onPressed: _cancelGeneration,
@@ -895,7 +895,7 @@ class _SearchPageState extends State<SearchPage> {
               IconButton.filled(
                 icon: const Icon(Icons.send),
                 style: IconButton.styleFrom(
-                  backgroundColor: Color(0xffC15F3C),
+                  backgroundColor: Color(0xffDE7356),
                   foregroundColor: Colors.white,
                 ),
                 onPressed: () => _generateResponse(_textController.text),
@@ -931,7 +931,7 @@ class SearchSuggestionTile extends StatelessWidget {
 
     switch (type) {
       case SuggestionType.example:
-        textColor = const Color(0xff8C4A35);
+        textColor = const Color(0xffB85C42);
         icon = Icon(Icons.auto_awesome, color: textColor);
         break;
 
@@ -972,7 +972,7 @@ class SearchSuggestionChip extends StatelessWidget {
     switch (type) {
       case SuggestionType.example:
         bgColor = Color(0xffF4F3EE);
-        textColor = Color(0xffC15F3C);
+        textColor = Color(0xffDE7356);
         borderColor = Color(0xffE8E6DC);
         break;
 
@@ -1021,7 +1021,7 @@ class _UserBubble extends StatelessWidget {
         margin: const EdgeInsets.only(left: 64, bottom: 12),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: Color(0xffC15F3C),
+          color: Color(0xffDE7356),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Text(
@@ -1049,7 +1049,7 @@ class _AssistantCardState extends State<_AssistantCard> {
   @override
   Widget build(BuildContext context) {
     final message = widget.message;
-    const lightOrange = Color(0xffff7f50);
+    const lightOrange = Color(0xffDE7356);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -1241,7 +1241,7 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
       child: Column(
         children: [
           DrawerHeader(
-            decoration: const BoxDecoration(color: Color(0xffC15F3C)),
+            decoration: const BoxDecoration(color: Color(0xffDE7356)),
             padding: const EdgeInsets.fromLTRB(16, 16, 8, 16),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1264,7 +1264,7 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
             ),
           ),
           ListTile(
-            leading: const Icon(Icons.add_comment, color: Color(0xffC15F3C)),
+            leading: const Icon(Icons.add_comment, color: Color(0xffDE7356)),
             title: const Text('New conversation'),
             onTap: () {
               Navigator.pop(context);
@@ -1316,7 +1316,7 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
                                 dimension: 24,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  color: Color(0xffC15F3C),
+                                  color: Color(0xffDE7356),
                                 ),
                               )
                             : isForegroundGenerating
@@ -1475,7 +1475,7 @@ class _RetrievalDisclosure extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xff8C5240),
+                        color: Color(0xffB85C42),
                       ),
                     ),
                     const SizedBox(height: 6),
