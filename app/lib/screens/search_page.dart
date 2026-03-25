@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:markdown_widget/markdown_widget.dart';
@@ -541,7 +543,11 @@ class _SearchPageState extends State<SearchPage> {
   @override
   void initState() {
     super.initState();
-    _startListeningForLatestMessage();
+    // EventChannel is Android-only — skip on web/desktop to avoid
+    // MissingPluginException during UI development without a device.
+    if (!kIsWeb && Platform.isAndroid) {
+      _startListeningForLatestMessage();
+    }
   }
 
   @override

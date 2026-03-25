@@ -4,6 +4,7 @@ import 'dart:io' as io;
 
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
@@ -31,6 +32,22 @@ class IntroPage extends StatefulWidget {
 }
 
 class _IntroPageState extends State<IntroPage> {
+  // Evaluated once in initState before the first build(). Guards all
+  // Android-only code (path_provider, platform channels) so the UI can be
+  // developed and tested on web / macOS without a device.
+  late final bool _runOnAndroid;
+
+  @override
+  void initState() {
+    super.initState();
+    _runOnAndroid = !kIsWeb && Platform.isAndroid;
+    if (!_runOnAndroid) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Navigator.pushReplacementNamed(context, '/chat');
+      });
+    }
+  }
+
   Map<String, DownloadInProgress> downloads = HashMap();
 
   /// Downloads a file from our remote server (easiest way for us to upload
@@ -145,6 +162,12 @@ class _IntroPageState extends State<IntroPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Non-Android: show a blank scaffold while initState's post-frame
+    // callback redirects to /chat.
+    if (!_runOnAndroid) {
+      return const Scaffold(body: SizedBox.shrink());
+    }
+
     Widget nextButton;
 
     // Our background colour
