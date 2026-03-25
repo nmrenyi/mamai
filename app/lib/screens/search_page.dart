@@ -652,11 +652,11 @@ class _SearchPageState extends State<SearchPage> {
   @override
   Widget build(BuildContext context) {
     const examples = [
-      "How do I measure fundal height?",
-      "My patient's newborn won't latch, what do I do?",
-      "How do I care for the umbilical cord after birth?",
-      "When should I give iron supplements in pregnancy?",
-      "How much newborn weight loss is normal?",
+      ("How do I measure fundal height?", Icons.pregnant_woman),
+      ("My patient's newborn won't latch, what do I do?", Icons.child_care),
+      ("How do I care for the umbilical cord after birth?", Icons.healing),
+      ("When should I give iron supplements in pregnancy?", Icons.medication),
+      ("How much newborn weight loss is normal?", Icons.monitor_weight),
     ];
 
     return Scaffold(
@@ -696,10 +696,28 @@ class _SearchPageState extends State<SearchPage> {
             ),
             const SizedBox(width: 10),
             const Flexible(
-              child: Text(
-                'MAM-AI clinical search',
-                style: TextStyle(color: Colors.white),
-                overflow: TextOverflow.ellipsis,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'MAM-AI',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    'For nurse-midwives in Zanzibar',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
             ),
           ],
@@ -745,17 +763,28 @@ class _SearchPageState extends State<SearchPage> {
     );
   }
 
-  Widget _buildSuggestionChips(List<String> examples) {
+  Widget _buildSuggestionChips(List<(String, IconData)> examples) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Padding(
-            padding: EdgeInsets.only(bottom: 12),
+            padding: EdgeInsets.only(bottom: 4),
             child: Text(
-              'Try asking:',
-              style: TextStyle(fontSize: 16, color: Colors.black54),
+              'What do you need help with today?',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.only(bottom: 16),
+            child: Text(
+              'Here to support you at the point of care.',
+              style: TextStyle(fontSize: 14, color: Colors.black45),
             ),
           ),
           Wrap(
@@ -763,9 +792,10 @@ class _SearchPageState extends State<SearchPage> {
             runSpacing: 8,
             children: examples
                 .map(
-                  (text) => SearchSuggestionChip(
-                    text,
+                  (e) => SearchSuggestionChip(
+                    e.$1,
                     SuggestionType.example,
+                    chipIcon: e.$2,
                     onPressed: _generateResponse,
                   ),
                 )
@@ -925,22 +955,22 @@ class SearchSuggestionChip extends StatelessWidget {
     this.type, {
     super.key,
     required this.onPressed,
+    this.chipIcon,
   });
 
   final String text;
   final Function(String) onPressed;
   final SuggestionType type;
+  final IconData? chipIcon;
 
   @override
   Widget build(BuildContext context) {
-    Icon icon;
     Color? bgColor;
     Color? textColor;
     Color borderColor;
 
     switch (type) {
       case SuggestionType.example:
-        icon = const Icon(Icons.auto_awesome);
         bgColor = Colors.orange[50];
         textColor = const Color(0xffcc5500);
         borderColor = Colors.orange[300]!;
@@ -948,23 +978,29 @@ class SearchSuggestionChip extends StatelessWidget {
 
       case SuggestionType.history:
         textColor = Colors.black.withAlpha(166);
-        icon = Icon(Icons.history, color: textColor);
         bgColor = null;
         borderColor = Colors.grey;
         break;
     }
 
+    final resolvedIcon = chipIcon ?? (type == SuggestionType.history ? Icons.history : Icons.auto_awesome);
+
     return ChipTheme(
       data: ChipThemeData(
-        labelStyle: TextStyle(color: textColor, fontWeight: FontWeight.w500),
+        labelStyle: TextStyle(
+          color: textColor,
+          fontWeight: FontWeight.w500,
+          fontSize: 14,
+        ),
         backgroundColor: bgColor,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         shape: RoundedRectangleBorder(
           side: BorderSide(color: borderColor),
           borderRadius: BorderRadiusGeometry.circular(12),
         ),
       ),
       child: ActionChip(
-        avatar: icon,
+        avatar: Icon(resolvedIcon, color: textColor),
         label: Text(text),
         onPressed: () => onPressed(text),
       ),
