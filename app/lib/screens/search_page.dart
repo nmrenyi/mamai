@@ -804,43 +804,16 @@ class _SearchPageState extends State<SearchPage> {
             ),
             const SizedBox(width: 4),
             // Cloud / on-device toggle
-            GestureDetector(
-              onTap: () => setState(() => _useCloudLLM = !_useCloudLLM),
-              child: Tooltip(
-                message: _useCloudLLM
-                    ? 'Using Gemini cloud API'
-                    : 'Using on-device model',
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _useCloudLLM
-                        ? Colors.blue[700]
-                        : Colors.grey[500],
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        _useCloudLLM ? Icons.cloud : Icons.smartphone,
-                        color: Colors.white,
-                        size: 14,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        _useCloudLLM ? 'Cloud' : 'On-device',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
+            Tooltip(
+              message: _useCloudLLM
+                  ? 'Cloud AI (tap to switch to on-device)'
+                  : 'On-device (tap to switch to cloud)',
+              child: IconButton(
+                icon: Icon(
+                  _useCloudLLM ? Icons.cloud : Icons.smartphone,
+                  color: _useCloudLLM ? Colors.blue[700] : Colors.grey[500],
                 ),
+                onPressed: () => setState(() => _useCloudLLM = !_useCloudLLM),
               ),
             ),
             // Search toggle — only relevant for on-device mode on Android
