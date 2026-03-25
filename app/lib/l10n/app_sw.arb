@@ -1,0 +1,101 @@
+{
+  "@@locale": "sw",
+
+  "appBarSubtitle": "Kwa wauguzi wakunga Zanzibar",
+
+  "tooltipConversationHistory": "Historia ya mazungumzo",
+  "tooltipNewConversation": "Mazungumzo mapya",
+  "tooltipCloudAI": "AI ya wingu (gonga kubadilisha hadi kwenye kifaa)",
+  "tooltipOnDevice": "Kwenye kifaa (gonga kubadilisha hadi winguni)",
+  "tooltipSearchEnabled": "Utafutaji umewashwa",
+  "tooltipSearchDisabled": "Utafutaji umezimwa",
+  "searchOn": "Tafuta IMEWASHWA",
+  "searchOff": "Tafuta IMEZIMWA",
+
+  "dialogCancelGenerationTitle": "Ghairi uzalishaji uliopita?",
+  "dialogCancelGenerationContent": "Jibu bado linazalishwa kwa mazungumzo ya awali. Lighairie kutuma ujumbe huu?",
+  "dialogWait": "Ngoja",
+  "dialogCancelAndSend": "Ghairi na tuma",
+
+  "snackbarHistoryTruncated": "Ujumbe wa zamani uliondolewa ili kulingana na dirisha la muktadha la modeli.",
+  "snackbarResponseReady": "Jibu liko tayari: \"{title}\"",
+  "@snackbarResponseReady": {
+    "placeholders": {
+      "title": { "type": "String" }
+    }
+  },
+  "snackbarView": "Tazama",
+
+  "emptyStateHeading": "Unahitaji msaada gani leo?",
+  "emptyStateSubheading": "Hapa kukusaidia mahali pa huduma.",
+
+  "exampleChip1": "Ninapimaje urefu wa fundal?",
+  "exampleChip2": "Mtoto mchanga wa mgonjwa wangu hawezi kunyonya, nifanye nini?",
+  "exampleChip3": "Ninatunzaje kitovu baada ya kuzaa?",
+  "exampleChip4": "Ninapaswa kutoa dawa za chuma lini wakati wa ujauzito?",
+  "exampleChip5": "Kupungua kwa uzito wa mtoto mchanga kiasi gani ni kawaida?",
+
+  "inputHint": "Eleza hali yako ya kliniki...",
+  "disclaimer": "Daima tumia uamuzi wako wa kimatibabu. Kwa dharura, piga kengele haraka.",
+
+  "thinkingLabel": "Nafikiri",
+  "generatingLabel": "Ninatengeneza jibu",
+  "responseCancelled": "Jibu lilikatizwa.",
+
+  "drawerTitle": "Mazungumzo ya zamani",
+  "drawerNewConversation": "Mazungumzo mapya",
+  "drawerNoConversations": "Hakuna mazungumzo bado",
+  "timestampToday": "Leo {time}",
+  "@timestampToday": {
+    "placeholders": {
+      "time": { "type": "String" }
+    }
+  },
+  "timestampYesterday": "Jana",
+
+  "deleteConversationTitle": "Futa mazungumzo?",
+  "deleteConversationContent": "Futa \"{title}\"?",
+  "@deleteConversationContent": {
+    "placeholders": {
+      "title": { "type": "String" }
+    }
+  },
+  "dialogCancel": "Ghairi",
+  "dialogDelete": "Futa",
+
+  "clearAllTitle": "Futa mazungumzo yote?",
+  "clearAllContent": "Hii itafuta kabisa mazungumzo yote ya zamani.",
+  "clearAllButton": "Futa yote",
+  "clearAllDrawerItem": "Futa mazungumzo yote",
+
+  "retrievedGuidelines": "{count, plural, =1{Mwongozo 1 uliopatikana} other{Miongozo {count} iliyopatikana}}",
+  "@retrievedGuidelines": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+
+  "introCheckingLLM": "Inaangalia kama LLM imewekwa...",
+  "introLLMLoading": "LLM inawashwa (inaweza kuchukua muda mara ya kwanza)...",
+  "introStartChat": "Anza mazungumzo",
+  "introDownloadModels": "Pakua mifano",
+  "introDownloadingModels": "Inapakua mifano ({percent}%)",
+  "@introDownloadingModels": {
+    "placeholders": {
+      "percent": { "type": "String" }
+    }
+  },
+  "introWelcome": "Karibu MAM-AI",
+  "introDescription": "Chombo cha msaada wa maamuzi ya kimatibabu kwa wauguzi-wakunga Zanzibar. Kinatoa majibu kamili bila mtandao, yanayolingana na miongozo ya kimatibabu — inayoshughulikia afya ya uzazi, uzazishaji, na utunzaji wa watoto wachanga — kwa msaada wa kuaminika, wa siri mahali pa huduma.",
+  "introPartnership": "Kwa ushirikiano na",
+
+  "licenseTitle": "Kubali leseni ya Gemma3n",
+  "licenseIntro": "Tafadhali soma na kukubali leseni ya Gemma3n na sera ya matumizi yaliyokatazwa.",
+  "licenseTermsText": "Gemma inatolewa chini ya na kulingana na Masharti ya Matumizi ya Gemma yanayopatikana katika",
+  "licenseUsagePolicyLink": "Sera ya matumizi ya Gemma3n",
+  "licenseAccept": "Kubali",
+  "licenseDeny": "Kataa",
+
+  "switchToSwahili": "Kiswahili",
+  "switchToEnglish": "Kiingereza"
+}

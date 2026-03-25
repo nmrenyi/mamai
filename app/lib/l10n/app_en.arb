@@ -1,0 +1,101 @@
+{
+  "@@locale": "en",
+
+  "appBarSubtitle": "For nurse-midwives in Zanzibar",
+
+  "tooltipConversationHistory": "Conversation history",
+  "tooltipNewConversation": "New conversation",
+  "tooltipCloudAI": "Cloud AI (tap to switch to on-device)",
+  "tooltipOnDevice": "On-device (tap to switch to cloud)",
+  "tooltipSearchEnabled": "Search enabled",
+  "tooltipSearchDisabled": "Search disabled",
+  "searchOn": "Search ON",
+  "searchOff": "Search OFF",
+
+  "dialogCancelGenerationTitle": "Cancel previous generation?",
+  "dialogCancelGenerationContent": "A response is still being generated for a previous conversation. Cancel it to send this message?",
+  "dialogWait": "Wait",
+  "dialogCancelAndSend": "Cancel and send",
+
+  "snackbarHistoryTruncated": "Older messages were removed to fit the model's context window.",
+  "snackbarResponseReady": "Response ready: \"{title}\"",
+  "@snackbarResponseReady": {
+    "placeholders": {
+      "title": { "type": "String" }
+    }
+  },
+  "snackbarView": "View",
+
+  "emptyStateHeading": "What do you need help with today?",
+  "emptyStateSubheading": "Here to support you at the point of care.",
+
+  "exampleChip1": "How do I measure fundal height?",
+  "exampleChip2": "My patient's newborn won't latch, what do I do?",
+  "exampleChip3": "How do I care for the umbilical cord after birth?",
+  "exampleChip4": "When should I give iron supplements in pregnancy?",
+  "exampleChip5": "How much newborn weight loss is normal?",
+
+  "inputHint": "Describe your clinical situation...",
+  "disclaimer": "Always apply your clinical judgment. For emergencies, escalate immediately.",
+
+  "thinkingLabel": "Thinking",
+  "generatingLabel": "Generating response",
+  "responseCancelled": "Response was interrupted.",
+
+  "drawerTitle": "Past conversations",
+  "drawerNewConversation": "New conversation",
+  "drawerNoConversations": "No conversations yet",
+  "timestampToday": "Today {time}",
+  "@timestampToday": {
+    "placeholders": {
+      "time": { "type": "String" }
+    }
+  },
+  "timestampYesterday": "Yesterday",
+
+  "deleteConversationTitle": "Delete conversation?",
+  "deleteConversationContent": "Delete \"{title}\"?",
+  "@deleteConversationContent": {
+    "placeholders": {
+      "title": { "type": "String" }
+    }
+  },
+  "dialogCancel": "Cancel",
+  "dialogDelete": "Delete",
+
+  "clearAllTitle": "Clear all conversations?",
+  "clearAllContent": "This will permanently delete all past conversations.",
+  "clearAllButton": "Clear all",
+  "clearAllDrawerItem": "Clear all conversations",
+
+  "retrievedGuidelines": "{count, plural, =1{Retrieved 1 guideline} other{Retrieved {count} guidelines}}",
+  "@retrievedGuidelines": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+
+  "introCheckingLLM": "Checking if the LLM is installed...",
+  "introLLMLoading": "LLM loading (may take a while the first time)...",
+  "introStartChat": "Start chat",
+  "introDownloadModels": "Download models",
+  "introDownloadingModels": "Downloading models ({percent}%)",
+  "@introDownloadingModels": {
+    "placeholders": {
+      "percent": { "type": "String" }
+    }
+  },
+  "introWelcome": "Welcome to MAM-AI",
+  "introDescription": "A clinical decision-support tool for nurse-midwives in Zanzibar. Offers fully offline, on-device answers grounded in medical guidelines — covering maternal health, obstetrics, and neonatal care — for reliable, private support at the point of care.",
+  "introPartnership": "In partnership with",
+
+  "licenseTitle": "Accept Gemma3n license",
+  "licenseIntro": "Please read and accept Gemma3n's license and prohibited usage policy.",
+  "licenseTermsText": "Gemma is provided under and subject to the Gemma Terms of Use found at",
+  "licenseUsagePolicyLink": "Gemma3n usage policy",
+  "licenseAccept": "Accept",
+  "licenseDeny": "Deny",
+
+  "switchToSwahili": "Kiswahili",
+  "switchToEnglish": "English"
+}
