@@ -463,6 +463,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No API key configured. Rebuild with --dart-define=GEMINI_API_KEY=your_key to use Cloud AI.'**
   String get errorNoApiKey;
+
+  /// No description provided for @errorApiKeyInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'API key is invalid or unauthorised (HTTP {code}). Check your GEMINI_API_KEY.'**
+  String errorApiKeyInvalid(int code);
+
+  /// No description provided for @errorRateLimited.
+  ///
+  /// In en, this message translates to:
+  /// **'Too many requests — please wait a moment and try again.'**
+  String get errorRateLimited;
+
+  /// No description provided for @errorNoInternet.
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot reach Cloud AI. Check your internet connection.'**
+  String get errorNoInternet;
+
+  /// No description provided for @errorCloudUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Cloud AI returned an error (HTTP {code}). Please try again.'**
+  String errorCloudUnavailable(int code);
 }
 
 class _AppLocalizationsDelegate

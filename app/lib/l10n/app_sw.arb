@@ -102,5 +102,15 @@
   "errorOnDeviceUnavailable": "Hali ya kwenye kifaa haipatikani hapa. Badilisha kwenda AI ya wingu kutuma ujumbe.",
   "switchToCloudAIAction": "Tumia AI ya wingu",
 
-  "errorNoApiKey": "Hakuna ufunguo wa API uliosanidiwa. Jenga tena na --dart-define=GEMINI_API_KEY=ufunguo_wako kutumia AI ya wingu."
+  "errorNoApiKey": "Hakuna ufunguo wa API uliosanidiwa. Jenga tena na --dart-define=GEMINI_API_KEY=ufunguo_wako kutumia AI ya wingu.",
+  "errorApiKeyInvalid": "Ufunguo wa API ni batili au haujaidhinishwa (HTTP {code}). Angalia GEMINI_API_KEY yako.",
+  "@errorApiKeyInvalid": {
+    "placeholders": { "code": { "type": "int" } }
+  },
+  "errorRateLimited": "Maombi mengi sana — tafadhali subiri kidogo kisha jaribu tena.",
+  "errorNoInternet": "Haiwezekani kufikia AI ya wingu. Angalia muunganisho wako wa mtandao.",
+  "errorCloudUnavailable": "AI ya wingu ilirejesha hitilafu (HTTP {code}). Tafadhali jaribu tena.",
+  "@errorCloudUnavailable": {
+    "placeholders": { "code": { "type": "int" } }
+  }
 }

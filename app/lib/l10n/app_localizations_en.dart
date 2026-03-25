@@ -220,4 +220,22 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get errorNoApiKey =>
       'No API key configured. Rebuild with --dart-define=GEMINI_API_KEY=your_key to use Cloud AI.';
+
+  @override
+  String errorApiKeyInvalid(int code) {
+    return 'API key is invalid or unauthorised (HTTP $code). Check your GEMINI_API_KEY.';
+  }
+
+  @override
+  String get errorRateLimited =>
+      'Too many requests — please wait a moment and try again.';
+
+  @override
+  String get errorNoInternet =>
+      'Cannot reach Cloud AI. Check your internet connection.';
+
+  @override
+  String errorCloudUnavailable(int code) {
+    return 'Cloud AI returned an error (HTTP $code). Please try again.';
+  }
 }

@@ -303,6 +303,7 @@ class _SearchPageState extends State<SearchPage> {
     }
     _geminiService = GeminiService();
     var completed = false;
+    String? apiError;
     try {
       await for (final text in _geminiService!.generateStream(
         prompt: prompt,
@@ -323,8 +324,23 @@ class _SearchPageState extends State<SearchPage> {
       }
       completed = true;
     } on DioException catch (e) {
-      if (!CancelToken.isCancel(e)) {
+      if (CancelToken.isCancel(e)) {
+        completed = true; // cancellation is intentional — not an error
+      } else {
         debugPrint('Gemini API error: $e');
+        if (!mounted) return;
+        final l10n = AppLocalizations.of(context);
+        final status = e.response?.statusCode;
+        if (status == 401 || status == 403) {
+          apiError = l10n.errorApiKeyInvalid(status!);
+        } else if (status == 429) {
+          apiError = l10n.errorRateLimited;
+        } else if (e.type == DioExceptionType.connectionError ||
+            e.type == DioExceptionType.unknown) {
+          apiError = l10n.errorNoInternet;
+        } else {
+          apiError = l10n.errorCloudUnavailable(status ?? 0);
+        }
       }
     } finally {
       if (mounted) {
@@ -349,6 +365,14 @@ class _SearchPageState extends State<SearchPage> {
         });
         await _saveCurrentConversation();
       }
+    }
+    if (apiError != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(apiError),
+          duration: const Duration(seconds: 8),
+        ),
+      );
     }
   }
 

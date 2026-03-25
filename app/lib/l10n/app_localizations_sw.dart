@@ -219,4 +219,22 @@ class AppLocalizationsSw extends AppLocalizations {
   @override
   String get errorNoApiKey =>
       'Hakuna ufunguo wa API uliosanidiwa. Jenga tena na --dart-define=GEMINI_API_KEY=ufunguo_wako kutumia AI ya wingu.';
+
+  @override
+  String errorApiKeyInvalid(int code) {
+    return 'Ufunguo wa API ni batili au haujaidhinishwa (HTTP $code). Angalia GEMINI_API_KEY yako.';
+  }
+
+  @override
+  String get errorRateLimited =>
+      'Maombi mengi sana — tafadhali subiri kidogo kisha jaribu tena.';
+
+  @override
+  String get errorNoInternet =>
+      'Haiwezekani kufikia AI ya wingu. Angalia muunganisho wako wa mtandao.';
+
+  @override
+  String errorCloudUnavailable(int code) {
+    return 'AI ya wingu ilirejesha hitilafu (HTTP $code). Tafadhali jaribu tena.';
+  }
 }
