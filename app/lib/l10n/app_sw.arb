@@ -97,5 +97,10 @@
   "licenseDeny": "Kataa",
 
   "switchToSwahili": "Kiswahili",
-  "switchToEnglish": "Kiingereza"
+  "switchToEnglish": "Kiingereza",
+
+  "errorOnDeviceUnavailable": "Hali ya kwenye kifaa haipatikani hapa. Badilisha kwenda AI ya wingu kutuma ujumbe.",
+  "switchToCloudAIAction": "Tumia AI ya wingu",
+
+  "errorNoApiKey": "Hakuna ufunguo wa API uliosanidiwa. Jenga tena na --dart-define=GEMINI_API_KEY=ufunguo_wako kutumia AI ya wingu."
 }

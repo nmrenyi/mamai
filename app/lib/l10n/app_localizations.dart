@@ -445,6 +445,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'English'**
   String get switchToEnglish;
+
+  /// No description provided for @errorOnDeviceUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'On-device mode is not available here. Switch to Cloud AI to send messages.'**
+  String get errorOnDeviceUnavailable;
+
+  /// No description provided for @switchToCloudAIAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Use Cloud AI'**
+  String get switchToCloudAIAction;
+
+  /// No description provided for @errorNoApiKey.
+  ///
+  /// In en, this message translates to:
+  /// **'No API key configured. Rebuild with --dart-define=GEMINI_API_KEY=your_key to use Cloud AI.'**
+  String get errorNoApiKey;
 }
 
 class _AppLocalizationsDelegate

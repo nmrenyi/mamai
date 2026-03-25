@@ -243,27 +243,36 @@ class _SearchPageState extends State<SearchPage> {
             }
           }
         });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: ${e.message}')),
+        );
       } catch (e) {
-        // Catches MissingPluginException on non-Android platforms
+        // MissingPluginException on non-Android platforms — on-device mode
+        // is not available. Keep the user message visible, show a SnackBar
+        // with a one-tap action to switch to Cloud AI.
         debugPrint('Channel unavailable: $e');
         if (!mounted) return;
+        final l10n = AppLocalizations.of(context);
         setState(() {
           _isGenerating = false;
-          if (_messages.isNotEmpty && _messages.last.role == 'assistant') {
-            final last = _messages.last;
-            if (last.text.isEmpty && last.retrievedDocs.isEmpty) {
-              _messages.removeLast();
-              if (_messages.isNotEmpty && _messages.last.role == 'user') {
-                _messages.removeLast();
-              }
-            } else {
-              _messages[_messages.length - 1] = last.copyWith(
-                isLoading: false,
-                wasCancelled: true,
-              );
-            }
+          // Remove only the empty assistant placeholder, not the user message
+          if (_messages.isNotEmpty &&
+              _messages.last.role == 'assistant' &&
+              _messages.last.text.isEmpty &&
+              _messages.last.retrievedDocs.isEmpty) {
+            _messages.removeLast();
           }
         });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(l10n.errorOnDeviceUnavailable),
+            duration: const Duration(seconds: 6),
+            action: SnackBarAction(
+              label: l10n.switchToCloudAIAction,
+              onPressed: () => setState(() => _useCloudLLM = true),
+            ),
+          ),
+        );
       }
     }
   }
@@ -273,6 +282,25 @@ class _SearchPageState extends State<SearchPage> {
     String prompt,
     List<Map<String, String>> history,
   ) async {
+    // Guard: API key missing — show a clear error instead of a cryptic 403.
+    if (GeminiService.apiKey.isEmpty) {
+      if (!mounted) return;
+      final l10n = AppLocalizations.of(context);
+      setState(() {
+        _isGenerating = false;
+        if (_messages.isNotEmpty && _messages.last.role == 'assistant' &&
+            _messages.last.text.isEmpty && _messages.last.retrievedDocs.isEmpty) {
+          _messages.removeLast();
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l10n.errorNoApiKey),
+          duration: const Duration(seconds: 8),
+        ),
+      );
+      return;
+    }
     _geminiService = GeminiService();
     var completed = false;
     try {
@@ -885,7 +913,18 @@ class _SearchPageState extends State<SearchPage> {
                   _useCloudLLM ? Icons.cloud : Icons.smartphone,
                   color: _useCloudLLM ? Colors.blue[700] : Colors.grey[500],
                 ),
-                onPressed: () => setState(() => _useCloudLLM = !_useCloudLLM),
+                onPressed: () {
+                  setState(() => _useCloudLLM = !_useCloudLLM);
+                  // _useCloudLLM is already the NEW value after setState
+                  if (_useCloudLLM && GeminiService.apiKey.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(l10n.errorNoApiKey),
+                        duration: const Duration(seconds: 8),
+                      ),
+                    );
+                  }
+                },
               ),
             ),
             // Search toggle — only relevant for on-device mode on Android

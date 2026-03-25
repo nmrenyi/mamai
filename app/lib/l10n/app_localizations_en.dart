@@ -209,4 +209,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get switchToEnglish => 'English';
+
+  @override
+  String get errorOnDeviceUnavailable =>
+      'On-device mode is not available here. Switch to Cloud AI to send messages.';
+
+  @override
+  String get switchToCloudAIAction => 'Use Cloud AI';
+
+  @override
+  String get errorNoApiKey =>
+      'No API key configured. Rebuild with --dart-define=GEMINI_API_KEY=your_key to use Cloud AI.';
 }

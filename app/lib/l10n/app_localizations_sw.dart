@@ -208,4 +208,15 @@ class AppLocalizationsSw extends AppLocalizations {
 
   @override
   String get switchToEnglish => 'Kiingereza';
+
+  @override
+  String get errorOnDeviceUnavailable =>
+      'Hali ya kwenye kifaa haipatikani hapa. Badilisha kwenda AI ya wingu kutuma ujumbe.';
+
+  @override
+  String get switchToCloudAIAction => 'Tumia AI ya wingu';
+
+  @override
+  String get errorNoApiKey =>
+      'Hakuna ufunguo wa API uliosanidiwa. Jenga tena na --dart-define=GEMINI_API_KEY=ufunguo_wako kutumia AI ya wingu.';
 }
