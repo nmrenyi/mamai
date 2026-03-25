@@ -161,6 +161,7 @@ class RagPipeline(application: Application) {
         prompt: String,
         history: List<Map<String, String>>,
         useRetrieval: Boolean = true,
+        language: String = "en",
         retrievalListener: (docs: List<String>) -> Unit,
         generationListener: (partial: String, done: Boolean) -> Unit,
     ): String =
@@ -174,7 +175,7 @@ class RagPipeline(application: Application) {
                 }
             }
 
-            Log.w("mam-ai", "[QUERY] prompt: \"${prompt.take(80)}...\", history turns: ${history.size}, retrieval: $useRetrieval")
+            Log.w("mam-ai", "[QUERY] prompt: \"${prompt.take(80)}...\", history turns: ${history.size}, retrieval: $useRetrieval, language: $language")
             val qStart = System.currentTimeMillis()
 
             val docs = if (useRetrieval) {
@@ -194,7 +195,7 @@ class RagPipeline(application: Application) {
 
             // Construct the full prompt using Gemma IT chat template
             val contextStr = docs.joinToString("\n\n")
-            val fullPrompt = buildPrompt(contextStr, history, prompt)
+            val fullPrompt = buildPrompt(contextStr, history, prompt, language)
 
             if (BuildConfig.DEBUG) {
                 Log.w("mam-ai", "[PROMPT] full prompt sent to LLM:\n$fullPrompt")
@@ -246,26 +247,39 @@ class RagPipeline(application: Application) {
      * System instructions go in the first user turn. Retrieved context is placed
      * immediately before the query it was retrieved for (the current/final user turn).
      */
-    private fun buildPrompt(context: String, history: List<Map<String, String>>, query: String): String {
+    private fun buildPrompt(
+        context: String,
+        history: List<Map<String, String>>,
+        query: String,
+        language: String = "en",
+    ): String {
+        val systemInstructions = if (language == "sw") SYSTEM_INSTRUCTIONS_SW else SYSTEM_INSTRUCTIONS
+        // Context/query labels are also localised so the model understands the prompt structure
+        val contextLabel = if (language == "sw")
+            "MUKTADHA UNAOHUSIANA KUTOKA KWA MIONGOZO YA KIMATIBABU:"
+        else
+            "RELEVANT CONTEXT FROM MEDICAL GUIDELINES:"
+        val questionLabel = if (language == "sw") "Swali:" else "Question:"
+
         val sb = StringBuilder()
 
         // First user turn — system instructions only
         sb.append("<start_of_turn>user\n")
-        sb.append(SYSTEM_INSTRUCTIONS)
+        sb.append(systemInstructions)
 
         if (history.isEmpty()) {
             // No history: context + current query go in the first (and only) user turn
             if (context.isNotEmpty()) {
-                sb.append("\nRELEVANT CONTEXT FROM MEDICAL GUIDELINES:\n$context\n")
+                sb.append("\n$contextLabel\n$context\n")
             }
-            sb.append("\nQuestion: $query<end_of_turn>\n")
+            sb.append("\n$questionLabel $query<end_of_turn>\n")
         } else {
             // History: first historical user message closes the first turn (system instructions only)
-            sb.append("\nQuestion: ${history.first()["text"]}<end_of_turn>\n")
+            sb.append("\n$questionLabel ${history.first()["text"]}<end_of_turn>\n")
             // Remaining history turns alternate model/user
             for (turn in history.drop(1)) {
                 if (turn["role"] == "user") {
-                    sb.append("<start_of_turn>user\nQuestion: ${turn["text"]}<end_of_turn>\n")
+                    sb.append("<start_of_turn>user\n$questionLabel ${turn["text"]}<end_of_turn>\n")
                 } else {
                     sb.append("<start_of_turn>model\n${turn["text"]}<end_of_turn>\n")
                 }
@@ -273,9 +287,9 @@ class RagPipeline(application: Application) {
             // Current query as the final user turn, with retrieved context immediately before it
             sb.append("<start_of_turn>user\n")
             if (context.isNotEmpty()) {
-                sb.append("RELEVANT CONTEXT FROM MEDICAL GUIDELINES:\n$context\n\n")
+                sb.append("$contextLabel\n$context\n\n")
             }
-            sb.append("Question: $query<end_of_turn>\n")
+            sb.append("$questionLabel $query<end_of_turn>\n")
         }
 
         // Trigger generation — no closing <end_of_turn>
@@ -298,7 +312,7 @@ class RagPipeline(application: Application) {
             "\n" +
             "CONVERSATION: You may have access to previous messages in this conversation — use them to maintain context and avoid repeating information already covered.\n" +
             "\n" +
-            "LANGUAGE & TONE: Use simple, short sentences. Avoid idioms and complex words. Answer in the language that the user is speaking. Be supportive, professional, and calm.\n" +
+            "LANGUAGE & TONE: Use simple, short sentences. Avoid idioms and complex words. Answer in English. Be supportive, professional, and calm.\n" +
             "\n" +
             "FORMAT: Use markdown. Use bullet points for lists. Use **bold** for important terms. Use numbered steps for procedures. Keep responses concise — under 200 words unless a procedure genuinely requires more detail.\n" +
             "\n" +
@@ -317,5 +331,34 @@ class RagPipeline(application: Application) {
             "MEDICATIONS: Do not recommend specific drug doses unless the retrieved context explicitly states them. If asked about dosing, advise the nurse to consult a doctor or the local formulary.\n" +
             "\n" +
             "UNCERTAINTY: If you are not sure, admit it clearly (e.g., \u201cI\u2019m not sure. Please consult a doctor or senior clinician.\u201d). Do not guess. Prioritize patient safety above all else."
+
+        // NOTE: Placeholder Swahili translation — pending review by a qualified
+        // Swahili-speaking medical professional. See GitHub issue for tracking.
+        private const val SYSTEM_INSTRUCTIONS_SW =
+            "Wewe ni msaidizi wa maamuzi ya kimatibabu kwa wauguzi-wakunga Zanzibar. Watumiaji wako ni wauguzi wa serikali ambao elimu yao ya uuguzi inajumuisha mafunzo ya msingi ya ukunga \u2014 si wauguzi wakunga wataalamu. Wanafanya kazi katika vituo vya afya vya serikali vya msingi, vya kati na vya juu, mara nyingi na rasilimali chache na msaada mdogo wa wataalamu.\n" +
+            "Unasaidia katika utunzaji wa watoto wachanga, afya ya uzazi, uzazishaji, na mada zinazohusiana za kimatibabu.\n" +
+            "Jibu maswali yanayohusiana na huduma za afya, dawa, na mazoea ya kimatibabu pekee. Kwa mada zisizohusiana, kataa kwa upole na elekeza maswali ya kimatibabu.\n" +
+            "\n" +
+            "MAZUNGUMZO: Unaweza kuwa na ufikiaji wa ujumbe wa awali katika mazungumzo haya \u2014 tumia ili kudumisha muktadha na kuepuka kurudia maelezo yaliyoshughulikiwa tayari.\n" +
+            "\n" +
+            "LUGHA NA SAUTI: Tumia sentensi fupi na rahisi. Epuka misemo na maneno magumu. Jibu kwa Kiswahili. Kuwa na msaada, mtaalamu, na utulivu.\n" +
+            "\n" +
+            "MUUNDO: Tumia markdown. Tumia vitone vya mpangilio kwa orodha. Tumia **maneno muhimu** kwa maneno ya msingi. Tumia hatua za nambari kwa taratibu. Weka majibu mafupi \u2014 chini ya maneno 200 isipokuwa taratibu inahitaji maelezo zaidi.\n" +
+            "\n" +
+            "KUTUMIA MUKTADHA: Ikiwa muktadha uliorejeshwa unapatikana, uitumie kujibu. Ikiwa muktadha hauhusiani na swali, sema hivyo na ujibu kutoka kwa maarifa ya kimatibabu yaliyoanzishwa.\n" +
+            "\n" +
+            "DHARURA \u2014 ikiwa yoyote kati ya hizi yapo, mara moja ushauri muuguzi kuwasiliana na daktari au kupanga rufaa ya haraka, na eleza sababu:\n" +
+            "- Kutoka damu nyingi (kutoka damu baada ya kujifungua, kutoka damu kabla ya kujifungua)\n" +
+            "- Degedege au kupoteza fahamu (eclampsia)\n" +
+            "- Kuteleza kwa kitovu au msimamo usio wa kawaida wa fetasi\n" +
+            "- Dystocia ya bega\n" +
+            "- Ugumu mkubwa wa kupumua (mama au mtoto mchanga)\n" +
+            "- Homa kwa mtoto mchanga au dalili za sepsis ya watoto wachanga\n" +
+            "- Dalili za sepsis ya mama (homa, mapigo ya moyo ya haraka, kuchanganyikiwa kwa mama)\n" +
+            "- Maumivu makali ya tumbo\n" +
+            "\n" +
+            "DAWA: Usipendekezee dozi maalum za dawa isipokuwa muktadha uliorejeshwa unaziainisha wazi. Ikiwa unaulizwa kuhusu dozi, ushauri muuguzi kushauriana na daktari au formulari ya eneo.\n" +
+            "\n" +
+            "KUTOKUWA NA UHAKIKA: Ikiwa huna uhakika, kiri waziwazi (k.m., \u201cSina uhakika. Tafadhali wasiliana na daktari au mkuu wa kliniki.\u201d). Usikisi. Toa kipaumbele usalama wa mgonjwa zaidi ya yote."
     }
 }

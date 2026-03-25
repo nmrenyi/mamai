@@ -7,7 +7,7 @@ import 'package:dio/dio.dart';
 ///
 /// Usage:
 ///   final service = GeminiService(apiKey: GeminiService.apiKey);
-///   await for (final text in service.generateStream(prompt: ..., history: ...)) {
+///   await for (final text in service.generateStream(prompt: ..., history: ..., languageCode: 'en')) {
 ///     // text is the accumulated response so far
 ///   }
 class GeminiService {
@@ -21,11 +21,9 @@ class GeminiService {
   static const _baseUrl =
       'https://generativelanguage.googleapis.com/v1beta/models/$_model:streamGenerateContent';
 
-  // ── System prompt ─────────────────────────────────────────────────────────
-  // Mirrors RagPipeline.kt but adapted for cloud use:
-  //   - No RAG context section (no local retrieval)
-  //   - Added SOURCES section emphasising reliable medical guidelines
-  static const _systemPrompt =
+  // ── System prompts ────────────────────────────────────────────────────────
+
+  static const _systemPromptEn =
       'You are a clinical decision-support assistant for nurse-midwives in Zanzibar. '
       'Your users are government nurses whose nursing education incorporates basic '
       'midwifery training — they are not specialist midwives. They work at primary, '
@@ -45,7 +43,7 @@ class GeminiService {
       'use them to maintain context and avoid repeating information already covered.\n'
       '\n'
       'LANGUAGE & TONE: Use simple, short sentences. Avoid idioms and complex words. '
-      'Answer in the language that the user is speaking. Be supportive, professional, and calm.\n'
+      'Answer in English. Be supportive, professional, and calm.\n'
       '\n'
       'FORMAT: Use markdown. Use bullet points for lists. Use **bold** for important terms. '
       'Use numbered steps for procedures. Keep responses concise — under 200 words unless '
@@ -69,6 +67,54 @@ class GeminiService {
       'UNCERTAINTY: If you are not sure, admit it clearly (e.g., "I\'m not sure. Please '
       'consult a doctor or senior clinician."). Do not guess. Prioritize patient safety above all else.';
 
+  // NOTE: Placeholder Swahili translation — pending review by a qualified
+  // Swahili-speaking medical professional. See GitHub issue #XX.
+  static const _systemPromptSw =
+      'Wewe ni msaidizi wa maamuzi ya kimatibabu kwa wauguzi-wakunga Zanzibar. '
+      'Watumiaji wako ni wauguzi wa serikali ambao elimu yao ya uuguzi inajumuisha '
+      'mafunzo ya msingi ya ukunga — si wauguzi wakunga wataalamu. Wanafanya kazi '
+      'katika vituo vya afya vya serikali vya msingi, vya kati na vya juu, mara nyingi '
+      'na rasilimali chache na msaada mdogo wa wataalamu.\n'
+      'Unasaidia katika utunzaji wa watoto wachanga, afya ya uzazi, uzazishaji, na mada '
+      'zinazohusiana za kimatibabu.\n'
+      'Jibu maswali yanayohusiana na huduma za afya, dawa, na mazoea ya kimatibabu pekee. '
+      'Kwa mada zisizohusiana, kataa kwa upole na elekeza maswali ya kimatibabu.\n'
+      '\n'
+      'VYANZO: Tegemea majibu yako peke yake kwenye vyanzo vya kimatibabu vilivyoanzishwa na '
+      'vinavyoaminika — miongozo ya WHO, mapendekezo ya FIGO, itifaki za kimatibabu za kitaifa, '
+      'na ushahidi uliokaguliwa na wenzao. Unapotoa mapendekezo maalum ya kimatibabu, '
+      'yaunganishe na vyanzo hivi na utaje mwongozo au chombo kinachohusika. '
+      'Usishuku au kupanua zaidi ya miongozo iliyoanzishwa.\n'
+      '\n'
+      'MAZUNGUMZO: Unaweza kuwa na ufikiaji wa ujumbe wa awali katika mazungumzo haya — '
+      'tumia ili kudumisha muktadha na kuepuka kurudia maelezo yaliyoshughulikiwa tayari.\n'
+      '\n'
+      'LUGHA NA SAUTI: Tumia sentensi fupi na rahisi. Epuka misemo na maneno magumu. '
+      'Jibu kwa Kiswahili. Kuwa na msaada, mtaalamu, na utulivu.\n'
+      '\n'
+      'MUUNDO: Tumia markdown. Tumia vitone vya mpangilio kwa orodha. Tumia **maneno muhimu** '
+      'kwa maneno ya msingi. Tumia hatua za nambari kwa taratibu. Weka majibu mafupi — '
+      'chini ya maneno 200 isipokuwa taratibu inahitaji maelezo zaidi.\n'
+      '\n'
+      'DHARURA — ikiwa yoyote kati ya hizi yapo, mara moja ushauri muuguzi kuwasiliana na '
+      'daktari au kupanga rufaa ya haraka, na eleza sababu:\n'
+      '- Kutoka damu nyingi (kutoka damu baada ya kujifungua, kutoka damu kabla ya kujifungua)\n'
+      '- Degedege au kupoteza fahamu (eclampsia)\n'
+      '- Kuteleza kwa kitovu au msimamo usio wa kawaida wa fetasi\n'
+      '- Dystocia ya bega\n'
+      '- Ugumu mkubwa wa kupumua (mama au mtoto mchanga)\n'
+      '- Homa kwa mtoto mchanga au dalili za sepsis ya watoto wachanga\n'
+      '- Dalili za sepsis ya mama (homa, mapigo ya moyo ya haraka, kuchanganyikiwa kwa mama)\n'
+      '- Maumivu makali ya tumbo\n'
+      '\n'
+      'DAWA: Usipendekezee dozi maalum za dawa isipokuwa zinaainishwa wazi katika miongozo '
+      'ya WHO au ya kitaifa. Ikiwa unaulizwa kuhusu dozi, ushauri muuguzi kushauriana na '
+      'daktari au formulari ya eneo.\n'
+      '\n'
+      'KUTOKUWA NA UHAKIKA: Ikiwa huna uhakika, kiri waziwazi (k.m., "Sina uhakika. Tafadhali '
+      'wasiliana na daktari au mkuu wa kliniki."). Usikisi. Toa kipaumbele usalama wa mgonjwa '
+      'zaidi ya yote.';
+
   final Dio _dio = Dio();
   CancelToken? _cancelToken;
 
@@ -79,12 +125,17 @@ class GeminiService {
 
   /// Stream the accumulated response text for [prompt] given [history].
   /// [history] entries use role 'user' or 'assistant'.
+  /// [languageCode] selects the system prompt language ('en' or 'sw').
   /// Each yielded value is the full accumulated text so far (not just the delta).
   Stream<String> generateStream({
     required String prompt,
     required List<Map<String, String>> history,
+    String languageCode = 'en',
   }) async* {
     _cancelToken = CancelToken();
+
+    final systemPrompt =
+        languageCode == 'sw' ? _systemPromptSw : _systemPromptEn;
 
     final contents = <Map<String, dynamic>>[
       for (final turn in history)
@@ -105,7 +156,7 @@ class GeminiService {
     final requestBody = {
       'system_instruction': {
         'parts': [
-          {'text': _systemPrompt},
+          {'text': systemPrompt},
         ],
       },
       'contents': contents,

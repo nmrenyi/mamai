@@ -40,7 +40,8 @@ class MainActivity : FlutterActivity() {
                         }?.toMap()
                     } ?: emptyList()
                     val useRetrieval = args["useRetrieval"] as? Boolean ?: true
-                    ragStream.generateResponse(prompt, history, useRetrieval)
+                    val language = args["language"] as? String ?: "en"
+                    ragStream.generateResponse(prompt, history, useRetrieval, language)
                     result.success(0)
                 }
                 "cancelGeneration" -> {
