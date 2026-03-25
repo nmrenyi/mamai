@@ -555,11 +555,11 @@ class _SearchPageState extends State<SearchPage> {
   @override
   Widget build(BuildContext context) {
     const examples = [
-      "Baby continuous crying",
-      "Preparing for home birth",
-      "Infection risks childbirth",
-      "Bleeding after delivery",
-      "Newborn not breathing",
+      "How do I measure fundal height?",
+      "My patient's newborn won't latch, what do I do?",
+      "How do I care for the umbilical cord after birth?",
+      "When should I give iron supplements in pregnancy?",
+      "How much newborn weight loss is normal?",
     ];
 
     return Scaffold(
@@ -690,7 +690,7 @@ class _SearchPageState extends State<SearchPage> {
               child: TextField(
                 controller: _textController,
                 decoration: InputDecoration(
-                  hintText: 'Ask a medical question...',
+                  hintText: 'Describe your clinical situation...',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(24),
                   ),

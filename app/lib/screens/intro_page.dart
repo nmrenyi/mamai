@@ -293,7 +293,7 @@ class _IntroPageState extends State<IntroPage> {
                                   ),
                                   const SizedBox(height: 12),
                                   Text(
-                                    'An edge-based AI search application designed to support nurses and midwives in Zanzibar in neonatal care. It offers fully offline, on-device functionality and medical guideline-based answers through RAG & finetuning for reliable, private, and context-aware care.',
+                                    'A clinical decision-support tool for nurse-midwives in Zanzibar. Offers fully offline, on-device answers grounded in medical guidelines — covering maternal health, obstetrics, and neonatal care — for reliable, private support at the point of care.',
                                     textAlign: TextAlign.left,
                                   ),
                                 ],
