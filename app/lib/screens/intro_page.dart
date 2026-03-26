@@ -140,7 +140,9 @@ class _IntroPageState extends State<IntroPage> {
             .map((file) => io.File("${_downloadDir!.path}/$file").lengthSync())
             .reduce((a, b) => a + b);
         debugPrint('Downloaded files total size: $fileSize bytes');
-        if (fileSize == 4564057313) {
+        // Accept any total > 4 GB — ensures Gemma (4.1 GB) is present
+        // regardless of embeddings.sqlite size (which varies with content).
+        if (fileSize > 4000000000) {
           return true;
         }
       }

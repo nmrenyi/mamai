@@ -11,11 +11,44 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../conversation_store.dart';
 import '../gemini_service.dart';
 
+/// A retrieved guideline chunk with source metadata.
+class RetrievedDoc {
+  final String text;   // chunk body
+  final String source; // filename stem, e.g. "WHO_PositiveBirth_2018"
+  final int page;      // PDF page number (0 = unknown / legacy chunk)
+
+  const RetrievedDoc({
+    required this.text,
+    this.source = '',
+    this.page = 0,
+  });
+
+  bool get hasSource => source.isNotEmpty && page > 0;
+
+  /// Human-readable label, e.g. "WHO Positive Birth 2018 · p.42"
+  String get label {
+    final name = source.replaceAll('_', ' ');
+    return hasSource ? '$name · p.$page' : name.isNotEmpty ? name : 'Guideline';
+  }
+
+  static RetrievedDoc fromMap(dynamic raw) {
+    if (raw is Map) {
+      return RetrievedDoc(
+        text: raw['text'] as String? ?? '',
+        source: raw['source'] as String? ?? '',
+        page: (raw['page'] as num?)?.toInt() ?? 0,
+      );
+    }
+    // Legacy: plain string (old embeddings.sqlite without metadata prefix)
+    return RetrievedDoc(text: raw as String? ?? '');
+  }
+}
+
 /// A single message in the conversation
 class ChatMessage {
   final String role; // "user" or "assistant"
   final String text;
-  final List<String> retrievedDocs;
+  final List<RetrievedDoc> retrievedDocs;
   final bool isLoading;
   final bool wasCancelled;
 
@@ -29,7 +62,7 @@ class ChatMessage {
 
   ChatMessage copyWith({
     String? text,
-    List<String>? retrievedDocs,
+    List<RetrievedDoc>? retrievedDocs,
     bool? isLoading,
     bool? wasCancelled,
   }) {
@@ -709,7 +742,7 @@ class _SearchPageState extends State<SearchPage> {
         final docs = value["results"];
         if (docs is! List) return;
         _messages[lastIdx] = _messages[lastIdx].copyWith(
-          retrievedDocs: docs.map<String>((a) => a as String).toList(),
+          retrievedDocs: docs.map<RetrievedDoc>(RetrievedDoc.fromMap).toList(),
         );
       }
     });
@@ -1559,15 +1592,43 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
 
 /// Collapsible section showing retrieved guideline chunks
 class _RetrievalDisclosure extends StatelessWidget {
-  final List<String> docs;
+  final List<RetrievedDoc> docs;
   final bool expanded;
   final VoidCallback onToggle;
+
+  static const _platform = MethodChannel(
+    "io.github.mzsfighters.mam_ai/request_generation",
+  );
 
   const _RetrievalDisclosure({
     required this.docs,
     required this.expanded,
     required this.onToggle,
   });
+
+  Future<void> _openPdf(BuildContext context, RetrievedDoc doc) async {
+    if (!doc.hasSource) return;
+    try {
+      final opened = await _platform.invokeMethod<bool>(
+        'openPdf',
+        {'source': doc.source, 'page': doc.page},
+      );
+      if (opened != true && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not open PDF. No PDF viewer installed on this device.'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    } on PlatformException catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open PDF: ${e.message}')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1601,13 +1662,71 @@ class _RetrievalDisclosure extends StatelessWidget {
           ...docs.map(
             (doc) => Container(
               margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Color(0xffF4F3EE),
+                color: const Color(0xffF4F3EE),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Color(0xffE8E6DC)),
+                border: Border.all(color: const Color(0xffE8E6DC)),
               ),
-              child: Text(doc, style: const TextStyle(fontSize: 13)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Source chip — tappable if we have metadata
+                  if (doc.hasSource)
+                    InkWell(
+                      onTap: () => _openPdf(context, doc),
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(8),
+                      ),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 7,
+                        ),
+                        decoration: const BoxDecoration(
+                          color: Color(0xffE8E6DC),
+                          borderRadius: BorderRadius.vertical(
+                            top: Radius.circular(7),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.picture_as_pdf_outlined,
+                              size: 14,
+                              color: Color(0xff8B6914),
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                doc.label,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xff8B6914),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const Icon(
+                              Icons.open_in_new,
+                              size: 12,
+                              color: Color(0xff8B6914),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  // Chunk text
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Text(
+                      doc.text,
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
       ],

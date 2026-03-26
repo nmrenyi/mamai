@@ -93,11 +93,17 @@ class RagStream(application: Application, val lifecycleScope: LifecycleCoroutine
                         }
                     }
 
-                    fun onRetrieve(documents: List<String>) {
+                    fun onRetrieve(documents: List<RetrievedDoc>) {
                         Handler(Looper.getMainLooper()).post {
                             latestGeneration?.success(
                                 hashMapOf(
-                                    "results" to documents
+                                    "results" to documents.map { doc ->
+                                        hashMapOf(
+                                            "text" to doc.text,
+                                            "source" to doc.source,
+                                            "page" to doc.page,
+                                        )
+                                    }
                                 )
                             )
                         }

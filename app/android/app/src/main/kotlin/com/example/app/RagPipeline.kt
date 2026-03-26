@@ -23,6 +23,13 @@ import java.util.Optional
 import java.util.concurrent.Executors
 import kotlin.jvm.optionals.getOrNull
 
+/** A retrieved document chunk with its source metadata. */
+data class RetrievedDoc(
+    val text: String,   // chunk body, with [SOURCE|PAGE] prefix stripped
+    val source: String, // filename stem, e.g. "WHO_PositiveBirth_2018"
+    val page: Int,      // PDF page number
+)
+
 /** The RAG pipeline for LLM generation. */
 class RagPipeline(application: Application) {
     private val baseFolder = application.getExternalFilesDir(null).toString() + "/"
@@ -156,13 +163,27 @@ class RagPipeline(application: Application) {
         textMemory.recordBatchedMemoryItems(ImmutableList.copyOf(facts)).get()
     }
 
+    /** Parse the [SOURCE:stem|PAGE:n] prefix from a raw chunk string. */
+    private fun parseChunkMetadata(raw: String): RetrievedDoc {
+        val match = METADATA_PREFIX.find(raw)
+        return if (match != null) {
+            RetrievedDoc(
+                text = raw.substring(match.range.last + 1).trim(),
+                source = match.groupValues[1],
+                page = match.groupValues[2].toIntOrNull() ?: 0,
+            )
+        } else {
+            RetrievedDoc(text = raw, source = "", page = 0)
+        }
+    }
+
     /** Generates the response from the LLM with conversation history support. */
     suspend fun generateResponse(
         prompt: String,
         history: List<Map<String, String>>,
         useRetrieval: Boolean = true,
         language: String = "en",
-        retrievalListener: (docs: List<String>) -> Unit,
+        retrievalListener: (docs: List<RetrievedDoc>) -> Unit,
         generationListener: (partial: String, done: Boolean) -> Unit,
     ): String =
         coroutineScope {
@@ -183,18 +204,20 @@ class RagPipeline(application: Application) {
                     prompt,
                     RetrievalConfig.create(3, 0.0f, TaskType.RETRIEVAL_QUERY)
                 )
-                val results = textMemory.retrieveResults(retrievalRequest).await().getEntities().map { e -> e.data }.toList()
-                Log.w("mam-ai", "[TIMING] retrieval (embed + vector search): ${System.currentTimeMillis() - qStart}ms, ${results.size} docs")
-                retrievalListener(results)
+                val rawResults = textMemory.retrieveResults(retrievalRequest).await().getEntities().map { e -> e.data }.toList()
+                val parsedDocs = rawResults.map { parseChunkMetadata(it) }
+                Log.w("mam-ai", "[TIMING] retrieval (embed + vector search): ${System.currentTimeMillis() - qStart}ms, ${parsedDocs.size} docs")
+                retrievalListener(parsedDocs)
                 Log.w("mam-ai", "[RETRIEVAL] docs sent to Flutter, starting generation")
-                results
+                parsedDocs
             } else {
                 Log.w("mam-ai", "[RETRIEVAL] skipped by user")
                 emptyList()
             }
 
-            // Construct the full prompt using Gemma IT chat template
-            val contextStr = docs.joinToString("\n\n")
+            // Construct the full prompt using Gemma IT chat template.
+            // Use only the clean text (metadata prefix already stripped).
+            val contextStr = docs.joinToString("\n\n") { it.text }
             val fullPrompt = buildPrompt(contextStr, history, prompt, language)
 
             if (BuildConfig.DEBUG) {
@@ -300,6 +323,8 @@ class RagPipeline(application: Application) {
     companion object {
         private const val USE_GPU_FOR_EMBEDDINGS = false
         private val CHUNK_SEPARATORS = listOf("<sep>", "<doc_sep>")
+        // Matches the [SOURCE:stem|PAGE:n] prefix written by chunk_guidelines.py
+        private val METADATA_PREFIX = Regex("""^\[SOURCE:([^|]+)\|PAGE:(\d+)\]""")
 
         private const val GEMMA_MODEL = "gemma-3n-E4B-it-int4.task"
         private const val TOKENIZER_MODEL = "sentencepiece.model"

@@ -1,11 +1,15 @@
 package com.example.app
 
+import android.content.Intent
+import android.util.Log
+import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import androidx.lifecycle.lifecycleScope
 import io.flutter.plugin.common.EventChannel
 import kotlinx.coroutines.launch
+import java.io.File
 
 class MainActivity : FlutterActivity() {
     private val channel = "io.github.mzsfighters.mam_ai/request_generation"
@@ -48,6 +52,12 @@ class MainActivity : FlutterActivity() {
                     ragStream.cancel()
                     result.success(null)
                 }
+                "openPdf" -> {
+                    val source = call.argument<String>("source") ?: ""
+                    val page = call.argument<Int>("page") ?: 1
+                    val opened = openPdf(source, page)
+                    result.success(opened)
+                }
                 else -> {
                     result.notImplemented()
                 }
@@ -55,6 +65,51 @@ class MainActivity : FlutterActivity() {
         }
 
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, latestMessageEventChannel).setStreamHandler(ragStream)
+    }
+
+    /**
+     * Opens a PDF from getExternalFilesDir at the given page using the device's
+     * default PDF viewer via FileProvider. The [source] parameter is the filename
+     * stem (e.g. "WHO_PositiveBirth_2018"); the file is expected at
+     * getExternalFilesDir(null)/WHO_PositiveBirth_2018.pdf.
+     *
+     * Returns true if an app was found to handle the Intent, false otherwise.
+     */
+    private fun openPdf(source: String, page: Int): Boolean {
+        val baseFolder = application.getExternalFilesDir(null) ?: return false
+        val pdfFile = File(baseFolder, "$source.pdf")
+
+        if (!pdfFile.exists()) {
+            Log.w("mam-ai", "[PDF] file not found: ${pdfFile.absolutePath}")
+            return false
+        }
+
+        val uri = FileProvider.getUriForFile(
+            this,
+            "${applicationContext.packageName}.fileprovider",
+            pdfFile,
+        )
+
+        Log.d("mam-ai", "[PDF] opening $source.pdf at page $page (0-idx=${page - 1})")
+
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/pdf")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            // MuPDF uses "page" (0-indexed). Send common variants for other viewers.
+            putExtra("page", page - 1)        // MuPDF, Adobe Acrobat (0-indexed)
+            putExtra("startPage", page)       // Yozo Office / OPPO reader (1-indexed)
+            putExtra("startpage", page)       // lowercase variant
+            putExtra("pageNum", page)         // Yozo alternate
+            putExtra("PDF_PAGE_NUMBER", page) // Samsung (1-indexed)
+        }
+
+        return try {
+            startActivity(intent)
+            true
+        } catch (e: android.content.ActivityNotFoundException) {
+            Log.w("mam-ai", "[PDF] no PDF viewer app found on device")
+            false
+        }
     }
 }
 
