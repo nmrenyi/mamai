@@ -10,6 +10,7 @@ import 'package:markdown_widget/markdown_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../conversation_store.dart';
 import '../gemini_service.dart';
+import 'about_page.dart';
 import 'pdf_viewer_page.dart';
 
 /// A retrieved guideline chunk with source metadata.
@@ -1545,6 +1546,21 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
                       );
                     },
                   ),
+          ),
+          const Divider(height: 1),
+          SafeArea(
+            top: false,
+            child: ListTile(
+              leading: const Icon(Icons.info_outline, color: Color(0xffDE7356)),
+              title: Text(l10n.drawerAbout),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AboutPage()),
+                );
+              },
+            ),
           ),
           if (_conversations.isNotEmpty) ...[
             const Divider(height: 1),

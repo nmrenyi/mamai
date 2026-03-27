@@ -42,6 +42,10 @@
   "generatingLabel": "Ninatengeneza jibu",
   "responseCancelled": "Jibu lilikatizwa.",
 
+  "aboutTitle": "Kuhusu",
+  "aboutDescription": "Chombo cha msaada wa maamuzi ya kimatibabu kwa wauguzi-wakunga Zanzibar. Kinatoa majibu kamili bila mtandao, yanayolingana na miongozo ya kimatibabu — inayoshughulikia afya ya uzazi, uzazishaji, na utunzaji wa watoto wachanga — kwa msaada wa kuaminika, wa siri mahali pa huduma.",
+
+  "drawerAbout": "Kuhusu MAM-AI",
   "drawerTitle": "Mazungumzo ya zamani",
   "drawerNewConversation": "Mazungumzo mapya",
   "drawerNoConversations": "Hakuna mazungumzo bado",
