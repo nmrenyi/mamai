@@ -102,6 +102,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get responseCancelled => 'Response was interrupted.';
 
   @override
+  String get aboutTitle => 'About';
+
+  @override
+  String get aboutDescription =>
+      'A clinical decision-support tool for nurse-midwives in Zanzibar. Offers fully offline, on-device answers grounded in medical guidelines — covering maternal health, obstetrics, and neonatal care — for reliable, private support at the point of care.';
+
+  @override
+  String get drawerAbout => 'About MAM-AI';
+
+  @override
   String get drawerTitle => 'Past conversations';
 
   @override
@@ -179,7 +189,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get introDescription =>
-      'A clinical decision-support tool for nurse-midwives in Zanzibar. Offers fully offline, on-device answers grounded in medical guidelines — covering maternal health, obstetrics, and neonatal care — for reliable, private support at the point of care.';
+      'Trusted clinical answers, offline and always ready.';
 
   @override
   String get introPartnership => 'In partnership with';

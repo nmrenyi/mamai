@@ -110,7 +110,7 @@ class _SearchPageState extends State<SearchPage> {
   StreamSubscription? _latestMessageSubscription;
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  bool _useRetrieval = true;
+  bool _useRetrieval = false;
   bool _useCloudLLM = false;
   GeminiService? _geminiService;
   bool _isGenerating = false;

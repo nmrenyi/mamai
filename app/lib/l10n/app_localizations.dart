@@ -266,6 +266,24 @@ abstract class AppLocalizations {
   /// **'Response was interrupted.'**
   String get responseCancelled;
 
+  /// No description provided for @aboutTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'About'**
+  String get aboutTitle;
+
+  /// No description provided for @aboutDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'A clinical decision-support tool for nurse-midwives in Zanzibar. Offers fully offline, on-device answers grounded in medical guidelines — covering maternal health, obstetrics, and neonatal care — for reliable, private support at the point of care.'**
+  String get aboutDescription;
+
+  /// No description provided for @drawerAbout.
+  ///
+  /// In en, this message translates to:
+  /// **'About MAM-AI'**
+  String get drawerAbout;
+
   /// No description provided for @drawerTitle.
   ///
   /// In en, this message translates to:
@@ -389,7 +407,7 @@ abstract class AppLocalizations {
   /// No description provided for @introDescription.
   ///
   /// In en, this message translates to:
-  /// **'A clinical decision-support tool for nurse-midwives in Zanzibar. Offers fully offline, on-device answers grounded in medical guidelines — covering maternal health, obstetrics, and neonatal care — for reliable, private support at the point of care.'**
+  /// **'Trusted clinical answers, offline and always ready.'**
   String get introDescription;
 
   /// No description provided for @introPartnership.

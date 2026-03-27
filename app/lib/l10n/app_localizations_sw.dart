@@ -102,6 +102,16 @@ class AppLocalizationsSw extends AppLocalizations {
   String get responseCancelled => 'Jibu lilikatizwa.';
 
   @override
+  String get aboutTitle => 'Kuhusu';
+
+  @override
+  String get aboutDescription =>
+      'Chombo cha msaada wa maamuzi ya kimatibabu kwa wauguzi-wakunga Zanzibar. Kinatoa majibu kamili bila mtandao, yanayolingana na miongozo ya kimatibabu — inayoshughulikia afya ya uzazi, uzazishaji, na utunzaji wa watoto wachanga — kwa msaada wa kuaminika, wa siri mahali pa huduma.';
+
+  @override
+  String get drawerAbout => 'Kuhusu MAM-AI';
+
+  @override
   String get drawerTitle => 'Mazungumzo ya zamani';
 
   @override
@@ -178,7 +188,7 @@ class AppLocalizationsSw extends AppLocalizations {
 
   @override
   String get introDescription =>
-      'Chombo cha msaada wa maamuzi ya kimatibabu kwa wauguzi-wakunga Zanzibar. Kinatoa majibu kamili bila mtandao, yanayolingana na miongozo ya kimatibabu — inayoshughulikia afya ya uzazi, uzazishaji, na utunzaji wa watoto wachanga — kwa msaada wa kuaminika, wa siri mahali pa huduma.';
+      'Majibu ya kuaminika ya kimatibabu, bila mtandao, daima tayari.';
 
   @override
   String get introPartnership => 'Kwa ushirikiano na';

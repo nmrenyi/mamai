@@ -46,6 +46,10 @@ sentencepiece.model
 # RAG output
 rag/out.txt
 
+# device_push — large binaries and PDFs (populate locally, see device_push/README.md)
+device_push/*.pdf
+device_push.zip
+
 # Misc
 *.log
 *.swp
