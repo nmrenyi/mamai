@@ -1547,21 +1547,6 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
                     },
                   ),
           ),
-          const Divider(height: 1),
-          SafeArea(
-            top: false,
-            child: ListTile(
-              leading: const Icon(Icons.info_outline, color: Color(0xffDE7356)),
-              title: Text(l10n.drawerAbout),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const AboutPage()),
-                );
-              },
-            ),
-          ),
           if (_conversations.isNotEmpty) ...[
             const Divider(height: 1),
             SafeArea(
@@ -1601,6 +1586,21 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
               ),
             ),
           ],
+          const Divider(height: 1),
+          SafeArea(
+            top: false,
+            child: ListTile(
+              leading: const Icon(Icons.info_outline, color: Color(0xffDE7356)),
+              title: Text(l10n.drawerAbout),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AboutPage()),
+                );
+              },
+            ),
+          ),
         ],
       ),
     );
