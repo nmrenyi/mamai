@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://www.youtube.com/watch?v=DbioClzbEKs">Demo Video</a> · <a href="https://www.kaggle.com/competitions/google-gemma-3n-hackathon">Gemma 3n Kaggle Challenge</a> · <a href="evaluation/EVAL_REPORT.md">Eval Report</a> · <a href="evaluation/LATENCY_REPORT.md">Latency Report</a>
+  <a href="https://www.youtube.com/watch?v=M_Kruluel28">Demo Video</a> · <a href="https://www.kaggle.com/competitions/google-gemma-3n-hackathon">Gemma 3n Kaggle Challenge</a> · <a href="evaluation/EVAL_REPORT.md">Eval Report</a> · <a href="evaluation/LATENCY_REPORT.md">Latency Report</a>
 </p>
 
 ---
