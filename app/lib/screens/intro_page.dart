@@ -378,17 +378,6 @@ class _IntroPageState extends State<IntroPage> {
                                 const SizedBox(height: 16),
                                 // Next button
                                 nextButton,
-                                const SizedBox(height: 28),
-                                // Discreet partner credits
-                                Text(
-                                  'EPFL · Swiss TPH · D-Tree · Light',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey[400],
-                                    letterSpacing: 0.3,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
                                 const SizedBox(height: 24),
                               ],
                             ),
