@@ -110,7 +110,7 @@ class _SearchPageState extends State<SearchPage> {
   StreamSubscription? _latestMessageSubscription;
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  bool _useRetrieval = false;
+  bool _useRetrieval = true;
   bool _useCloudLLM = false;
   GeminiService? _geminiService;
   bool _isGenerating = false;
@@ -1197,7 +1197,7 @@ class _UserBubble extends StatelessWidget {
           color: Color(0xffDE7356),
           borderRadius: BorderRadius.circular(16),
         ),
-        child: Text(
+        child: SelectableText(
           text,
           style: const TextStyle(color: Colors.white, fontSize: 16),
         ),
@@ -1262,8 +1262,7 @@ class _AssistantCardState extends State<_AssistantCard> {
                       end: 24,
                       bottom: message.wasCancelled ? 8 : 16,
                     ),
-                    child: SelectionContainer.disabled(
-                      child: MarkdownBlock(
+                    child: MarkdownBlock(
                         data: _insertCitationLinks(message.text),
                         config: MarkdownConfig(
                           configs: [
@@ -1299,7 +1298,6 @@ class _AssistantCardState extends State<_AssistantCard> {
                           ],
                         ),
                       ),
-                    ),
                   ),
                 if (message.wasCancelled)
                   Padding(
