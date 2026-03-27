@@ -1608,7 +1608,7 @@ class _RetrievalDisclosure extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => PdfViewerPage(source: doc.source, page: doc.page > 0 ? doc.page : 1),
+        builder: (_) => PdfViewerPage(source: doc.source, page: doc.page > 0 ? doc.page : 1, highlightText: doc.text),
       ),
     );
   }
