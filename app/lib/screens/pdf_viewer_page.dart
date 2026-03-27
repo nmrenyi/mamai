@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
@@ -29,33 +30,43 @@ class PdfViewerPage extends StatefulWidget {
 class _PdfViewerPageState extends State<PdfViewerPage> {
   late final Future<String> _pathFuture;
   final _controller = PdfViewerController();
-  late final PdfTextSearcher _searcher;
+
+  // Created lazily in _onViewerReady, once controller.isReady is true.
+  // PdfTextSearcher crashes if constructed before the controller is attached
+  // to a viewer (its constructor immediately calls controller!, which is null
+  // until the viewer widget initialises).
+  PdfTextSearcher? _searcher;
 
   @override
   void initState() {
     super.initState();
     _pathFuture = _resolvePath();
-    _searcher = PdfTextSearcher(_controller);
-
-    final query = _buildQuery();
-    if (query != null) {
-      _searcher.startTextSearch(
-        query,
-        caseInsensitive: true,
-        goToFirstMatch: true,
-      );
-    }
   }
 
   @override
   void dispose() {
-    _searcher.dispose();
+    _searcher?.dispose();
     super.dispose();
   }
 
-  /// Collapse newlines/whitespace and return the first ~80-char word-boundary
-  /// substring of the chunk text — long enough to be unique, short enough to
-  /// survive minor whitespace differences between PyMuPDF and PDFium extraction.
+  void _onViewerReady(PdfDocument _, PdfViewerController __) {
+    if (_searcher != null) return;
+    _searcher = PdfTextSearcher(_controller);
+    final query = _buildQuery();
+    if (query != null) {
+      _searcher!.startTextSearch(query, caseInsensitive: true, goToFirstMatch: true);
+    }
+  }
+
+  /// Stable wrapper so pagePaintCallbacks never changes between builds
+  /// (a changing PdfViewerParams would reset the viewer).
+  void _paintCallback(ui.Canvas canvas, Rect pageRect, PdfPage page) {
+    _searcher?.pageTextMatchPaintCallback(canvas, pageRect, page);
+  }
+
+  /// Collapse whitespace and return the first ~80-char word-boundary substring
+  /// of the chunk — long enough to be unique, short enough to survive minor
+  /// whitespace differences between PyMuPDF and PDFium text extraction.
   String? _buildQuery() {
     final raw = widget.highlightText;
     if (raw == null || raw.trim().isEmpty) return null;
@@ -94,7 +105,8 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
             controller: _controller,
             initialPageNumber: widget.page,
             params: PdfViewerParams(
-              pagePaintCallbacks: [_searcher.pageTextMatchPaintCallback],
+              onViewerReady: _onViewerReady,
+              pagePaintCallbacks: [_paintCallback],
             ),
           );
         },
