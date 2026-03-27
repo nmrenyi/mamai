@@ -297,107 +297,101 @@ class _IntroPageState extends State<IntroPage> {
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 28.0,
-                      vertical: 24.0,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 32.0),
                     child: Center(
                       child: ConstrainedBox(
-                        constraints: BoxConstraints(maxWidth: 400),
+                        constraints: const BoxConstraints(maxWidth: 400),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
-                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const SizedBox(height: 32),
-                            Center(
-                              child: Column(
-                                children: [
-                                  CircleAvatar(
-                                    radius: 56,
-                                    backgroundColor: Colors.white,
-                                    child: Image.asset('images/logo.png'),
-                                  ),
-                                  const SizedBox(height: 24),
-                                  Text(
-                                    l10n.introWelcome,
-                                    style: TextStyle(
-                                      fontSize: 28,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xffDE7356),
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    l10n.introDescription,
-                                    textAlign: TextAlign.left,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            // Partners section
-                            SizedBox(height: 20),
+                            // ── Brand block ──────────────────────────────
                             Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
+                                const SizedBox(height: 72),
+                                Center(
+                                  child: Image.asset(
+                                    'images/logo.png',
+                                    width: 96,
+                                    height: 96,
+                                  ),
+                                ),
+                                const SizedBox(height: 24),
                                 Text(
-                                  l10n.introPartnership,
-                                  style: TextStyle(fontSize: 16),
+                                  l10n.introWelcome,
+                                  style: const TextStyle(
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xffDE7356),
+                                  ),
                                   textAlign: TextAlign.center,
                                 ),
-                                const SizedBox(height: 5),
-                                Wrap(
-                                  alignment: WrapAlignment.center,
-                                  spacing: 20.0,
-                                  runSpacing: 5.0,
-                                  children: [
-                                    // Partner logos
-                                    Image.asset('images/epfl.png', height: 20),
-                                    Image.asset('images/light.png', height: 25),
-                                    Image.asset(
-                                      'images/swiss_tph.png',
-                                      height: 25,
-                                    ),
-                                    Image.asset(
-                                      'images/d-tree.jpg',
-                                      height: 25,
-                                    ),
-                                    // Add more partners as needed
-                                  ],
+                                const SizedBox(height: 10),
+                                Text(
+                                  l10n.introDescription,
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    color: Colors.grey[500],
+                                    height: 1.4,
+                                  ),
+                                  textAlign: TextAlign.center,
                                 ),
-                                const SizedBox(height: 20),
                               ],
                             ),
-                            // Language toggle
-                            Center(
-                              child: ValueListenableBuilder<Locale>(
-                                valueListenable: appLocale,
-                                builder: (_, locale, __) => TextButton(
-                                  onPressed: () async {
-                                    final newLocale =
+
+                            // ── Action block ─────────────────────────────
+                            Column(
+                              children: [
+                                // Language toggle
+                                Center(
+                                  child: ValueListenableBuilder<Locale>(
+                                    valueListenable: appLocale,
+                                    builder: (_, locale, __) => TextButton(
+                                      onPressed: () async {
+                                        final newLocale =
+                                            locale.languageCode == 'en'
+                                                ? const Locale('sw')
+                                                : const Locale('en');
+                                        appLocale.value = newLocale;
+                                        final prefs = await SharedPreferences
+                                            .getInstance();
+                                        await prefs.setString(
+                                          'locale',
+                                          newLocale.languageCode,
+                                        );
+                                      },
+                                      child: Text(
                                         locale.languageCode == 'en'
-                                            ? const Locale('sw')
-                                            : const Locale('en');
-                                    appLocale.value = newLocale;
-                                    final prefs =
-                                        await SharedPreferences.getInstance();
-                                    await prefs.setString(
-                                      'locale',
-                                      newLocale.languageCode,
-                                    );
-                                  },
-                                  child: Text(
-                                    locale.languageCode == 'en'
-                                        ? AppLocalizations.of(context).switchToSwahili
-                                        : AppLocalizations.of(context).switchToEnglish,
-                                    style: TextStyle(color: Color(0xffDE7356)),
+                                            ? AppLocalizations.of(
+                                                context,
+                                              ).switchToSwahili
+                                            : AppLocalizations.of(
+                                                context,
+                                              ).switchToEnglish,
+                                        style: const TextStyle(
+                                          color: Color(0xffDE7356),
+                                        ),
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              ),
+                                const SizedBox(height: 16),
+                                // Next button
+                                nextButton,
+                                const SizedBox(height: 28),
+                                // Discreet partner credits
+                                Text(
+                                  'EPFL · Swiss TPH · D-Tree · Light',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey[400],
+                                    letterSpacing: 0.3,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 24),
+                              ],
                             ),
-                            const SizedBox(height: 36),
-                            // Next button
-                            nextButton,
                           ],
                         ),
                       ),
