@@ -53,21 +53,11 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
     if (_searcher != null) return;
     _searcher = PdfTextSearcher(_controller);
     final query = _buildQuery();
-    debugPrint('[PDF-HL] source=${widget.source} page=${widget.page}');
-    debugPrint('[PDF-HL] raw chunk (first 120): ${widget.highlightText?.substring(0, widget.highlightText!.length.clamp(0, 120))}');
-    debugPrint('[PDF-HL] regex query: $query');
     if (query != null) {
-      _searcher!.addListener(() {
-        if (!_searcher!.isSearching) {
-          debugPrint('[PDF-HL] search done — matches found: ${_searcher!.matches.length}');
-        }
-      });
       _searcher!.startTextSearch(
         RegExp(query, caseSensitive: false),
         goToFirstMatch: true,
       );
-    } else {
-      debugPrint('[PDF-HL] query is null — no highlight attempted');
     }
   }
 
