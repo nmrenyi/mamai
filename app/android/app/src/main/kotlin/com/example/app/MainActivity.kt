@@ -95,8 +95,11 @@ class MainActivity : FlutterActivity() {
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "application/pdf")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            // MuPDF uses "page" (0-indexed). Send common variants for other viewers.
-            putExtra("page", page - 1)        // MuPDF, Adobe Acrobat (0-indexed)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT)
+            // Send both indexing conventions — last putExtra wins for "page".
+            // Testing 1-indexed for MuPDF 1.27 (overrides the 0-indexed value).
+            putExtra("page", page - 1)        // Adobe Acrobat (0-indexed)
+            putExtra("page", page)            // MuPDF 1.27 test (1-indexed, overwrites above)
             putExtra("startPage", page)       // Yozo Office / OPPO reader (1-indexed)
             putExtra("startpage", page)       // lowercase variant
             putExtra("pageNum", page)         // Yozo alternate
