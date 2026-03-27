@@ -1219,6 +1219,14 @@ class _AssistantCard extends StatefulWidget {
 class _AssistantCardState extends State<_AssistantCard> {
   bool _docsExpanded = false;
 
+  /// Converts [1], [2], [3] or [1, 3] or [1, 2, 3] into tappable markdown links.
+  String _insertCitationLinks(String text) {
+    return text.replaceAllMapped(RegExp(r'\[([1-3](?:\s*,\s*[1-3])*)\]'), (m) {
+      final nums = m.group(1)!.split(',').map((s) => s.trim());
+      return nums.map((s) => '[[$s]](cite://${int.parse(s) - 1})').join('');
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final message = widget.message;
@@ -1256,10 +1264,38 @@ class _AssistantCardState extends State<_AssistantCard> {
                     ),
                     child: SelectionContainer.disabled(
                       child: MarkdownBlock(
-                        data: message.text,
+                        data: _insertCitationLinks(message.text),
                         config: MarkdownConfig(
                           configs: [
                             PConfig(textStyle: const TextStyle(fontSize: 18)),
+                            LinkConfig(
+                              style: const TextStyle(
+                                color: Color(0xffDE7356),
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                decoration: TextDecoration.none,
+                              ),
+                              onTap: (url) {
+                                if (url.startsWith('cite://')) {
+                                  final idx = int.tryParse(url.substring(7));
+                                  if (idx != null && idx < message.retrievedDocs.length) {
+                                    final doc = message.retrievedDocs[idx];
+                                    if (doc.hasSource) {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => PdfViewerPage(
+                                            source: doc.source,
+                                            page: doc.page > 0 ? doc.page : 1,
+                                            highlightText: doc.text,
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  }
+                                }
+                              },
+                            ),
                           ],
                         ),
                       ),

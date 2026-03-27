@@ -216,8 +216,8 @@ class RagPipeline(application: Application) {
             }
 
             // Construct the full prompt using Gemma IT chat template.
-            // Use only the clean text (metadata prefix already stripped).
-            val contextStr = docs.joinToString("\n\n") { it.text }
+            // Number the documents so the LLM can cite them as [1], [2], [3].
+            val contextStr = docs.mapIndexed { i, doc -> "Document ${i + 1}:\n${doc.text}" }.joinToString("\n\n")
             val fullPrompt = buildPrompt(contextStr, history, prompt, language)
 
             if (BuildConfig.DEBUG) {
@@ -341,7 +341,7 @@ class RagPipeline(application: Application) {
             "\n" +
             "FORMAT: Use markdown. Use bullet points for lists. Use **bold** for important terms. Use numbered steps for procedures. Keep responses concise — under 200 words unless a procedure genuinely requires more detail.\n" +
             "\n" +
-            "USING CONTEXT: If retrieved context is provided, use it to answer. If the context is not relevant to the question, say so and answer from established medical knowledge instead.\n" +
+            "USING CONTEXT: If retrieved context is provided, use it to answer. If the context is not relevant to the question, say so and answer from established medical knowledge instead. When you use information from a document, add its citation number at the end of the relevant sentence — e.g. [1], [2], or [3].\n" +
             "\n" +
             "EMERGENCIES — if any of these are present, immediately advise the nurse to escalate to a doctor or arrange urgent referral, and state why:\n" +
             "- Heavy bleeding (postpartum haemorrhage, antepartum haemorrhage)\n" +
