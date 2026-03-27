@@ -10,6 +10,7 @@ import 'package:markdown_widget/markdown_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../conversation_store.dart';
 import '../gemini_service.dart';
+import 'pdf_viewer_page.dart';
 
 /// A retrieved guideline chunk with source metadata.
 class RetrievedDoc {
@@ -1596,38 +1597,20 @@ class _RetrievalDisclosure extends StatelessWidget {
   final bool expanded;
   final VoidCallback onToggle;
 
-  static const _platform = MethodChannel(
-    "io.github.mzsfighters.mam_ai/request_generation",
-  );
-
   const _RetrievalDisclosure({
     required this.docs,
     required this.expanded,
     required this.onToggle,
   });
 
-  Future<void> _openPdf(BuildContext context, RetrievedDoc doc) async {
+  void _openPdf(BuildContext context, RetrievedDoc doc) {
     if (!doc.hasSource) return;
-    try {
-      final opened = await _platform.invokeMethod<bool>(
-        'openPdf',
-        {'source': doc.source, 'page': doc.page},
-      );
-      if (opened != true && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not open PDF. No PDF viewer installed on this device.'),
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-    } on PlatformException catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not open PDF: ${e.message}')),
-        );
-      }
-    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PdfViewerPage(source: doc.source, page: doc.page > 0 ? doc.page : 1),
+      ),
+    );
   }
 
   @override
@@ -1709,8 +1692,8 @@ class _RetrievalDisclosure extends StatelessWidget {
                               ),
                             ),
                             const Icon(
-                              Icons.open_in_new,
-                              size: 12,
+                              Icons.chevron_right,
+                              size: 14,
                               color: Color(0xff8B6914),
                             ),
                           ],
