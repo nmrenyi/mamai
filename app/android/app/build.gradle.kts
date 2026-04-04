@@ -14,10 +14,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
-    }
-
     buildFeatures {
         buildConfig = true
     }
@@ -49,10 +45,17 @@ android {
 flutter {
     source = "../.."
 }
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+    }
+}
 dependencies {
     implementation("com.google.ai.edge.localagents:localagents-rag:0.2.0")
-    implementation("com.google.mediapipe:tasks-genai:0.10.25")
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.10.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.10.2")
+    implementation("com.google.protobuf:protobuf-javalite:3.25.4")
 }
 
 tasks.register("prepareKotlinBuildScriptModel") {}
