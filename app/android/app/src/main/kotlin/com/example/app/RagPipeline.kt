@@ -11,11 +11,16 @@ import com.google.ai.edge.localagents.rag.retrieval.RetrievalConfig
 import com.google.ai.edge.localagents.rag.retrieval.RetrievalConfig.TaskType
 import com.google.ai.edge.localagents.rag.retrieval.RetrievalRequest
 import com.google.common.collect.ImmutableList
-import com.google.mediapipe.tasks.genai.llminference.LlmInference
-import com.google.mediapipe.tasks.genai.llminference.LlmInference.LlmInferenceOptions
-import com.google.mediapipe.tasks.genai.llminference.LlmInferenceSession
+import com.google.ai.edge.litertlm.Backend
+import com.google.ai.edge.litertlm.Contents
+import com.google.ai.edge.litertlm.ConversationConfig
+import com.google.ai.edge.litertlm.Engine
+import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.Message
+import com.google.ai.edge.litertlm.SamplerConfig
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.guava.await
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -33,22 +38,8 @@ data class RetrievedDoc(
 /** The RAG pipeline for LLM generation. */
 class RagPipeline(application: Application) {
     private val baseFolder = application.getExternalFilesDir(null).toString() + "/"
-    private val mediaPipeLanguageModelOptions: LlmInferenceOptions =
-        LlmInferenceOptions.builder()
-            .setModelPath(baseFolder + GEMMA_MODEL)
-            .setPreferredBackend(LlmInference.Backend.CPU)
-            .setMaxTokens(32000)  // Gemma 3n E4B IT has 32k context window
-            .build()
-    private val mediaPipeLanguageModelSessionOptions: LlmInferenceSession.LlmInferenceSessionOptions =
-        LlmInferenceSession.LlmInferenceSessionOptions.builder()
-            .setTemperature(1.0f)
-            .setTopP(0.95f)
-            .setTopK(64)
-            .build()
 
-    // Owned directly so we can create/cancel sessions and call cancelGenerateResponseAsync()
-    @Volatile private lateinit var llmInference: LlmInference
-    @Volatile private var currentSession: LlmInferenceSession? = null
+    @Volatile private lateinit var engine: Engine
 
     private val embedder: Embedder<String>
     private val textMemory: DefaultSemanticTextMemory
@@ -85,17 +76,21 @@ class RagPipeline(application: Application) {
 
     private val initStartTime = System.currentTimeMillis()
 
-    // LlmInference.createFromOptions() is a blocking call that loads the model file.
+    // Engine.initialize() is a blocking call that loads the model file.
     // Run it on a background thread so we don't block the main thread.
     init {
         Executors.newSingleThreadExecutor().execute {
             try {
-                Log.w("mam-ai", "[TIMING] LlmInference.createFromOptions starting...")
-                llmInference = LlmInference.createFromOptions(
-                    application.applicationContext,
-                    mediaPipeLanguageModelOptions
+                Log.w("mam-ai", "[TIMING] Engine.initialize() starting...")
+                engine = Engine(
+                    EngineConfig(
+                        modelPath = baseFolder + GEMMA_MODEL,
+                        backend = Backend.CPU(),
+                        cacheDir = application.cacheDir.path,
+                    )
                 )
-                Log.w("mam-ai", "[TIMING] LlmInference ready: ${System.currentTimeMillis() - initStartTime}ms after construction")
+                engine.initialize()
+                Log.w("mam-ai", "[TIMING] Engine ready: ${System.currentTimeMillis() - initStartTime}ms after construction")
                 val rt = Runtime.getRuntime()
                 Log.w("mam-ai", "[MEMORY] post-init heap: ${rt.totalMemory() / 1024 / 1024}MB used, ${rt.freeMemory() / 1024 / 1024}MB free, ${rt.maxMemory() / 1024 / 1024}MB max")
                 Log.i("mam-ai", "LLM initialized!")
@@ -112,11 +107,6 @@ class RagPipeline(application: Application) {
                 onLlmReady.trySend(Unit)
             }
         }
-    }
-
-    /** Abort the currently running session's native inference. */
-    fun cancelGeneration() {
-        currentSession?.cancelGenerateResponseAsync()
     }
 
     // Memorise the given file (from inside the app context)
@@ -215,110 +205,68 @@ class RagPipeline(application: Application) {
                 emptyList()
             }
 
-            // Construct the full prompt using Gemma IT chat template.
             // Number the documents so the LLM can cite them as [1], [2], [3].
             val contextStr = docs.mapIndexed { i, doc -> "Document ${i + 1}:\n${doc.text}" }.joinToString("\n\n")
-            val fullPrompt = buildPrompt(contextStr, history, prompt, language)
+
+            val systemInstructions = if (language == "sw") SYSTEM_INSTRUCTIONS_SW else SYSTEM_INSTRUCTIONS
+            val contextLabel = if (language == "sw")
+                "MUKTADHA UNAOHUSIANA KUTOKA KWA MIONGOZO YA KIMATIBABU:"
+            else
+                "RELEVANT CONTEXT FROM MEDICAL GUIDELINES:"
+            val questionLabel = if (language == "sw") "Swali:" else "Question:"
+
+            // Build the final user message: retrieved context (if any) followed by the question.
+            // LiteRT-LM handles the chat template internally, so we only supply the content.
+            val queryMessage = buildString {
+                if (contextStr.isNotEmpty()) append("$contextLabel\n$contextStr\n\n")
+                append("$questionLabel $prompt")
+            }
+
+            // Pass conversation history via initialMessages; system instructions via systemInstruction.
+            val conversationConfig = ConversationConfig(
+                systemInstruction = Contents.of(systemInstructions),
+                initialMessages = history.map { turn ->
+                    if (turn["role"] == "user") Message.user(turn["text"] ?: "")
+                    else Message.model(turn["text"] ?: "")
+                },
+                samplerConfig = SamplerConfig(topK = 64, topP = 0.95, temperature = 1.0),
+            )
 
             if (BuildConfig.DEBUG) {
-                Log.w("mam-ai", "[PROMPT] full prompt sent to LLM:\n$fullPrompt")
+                Log.w("mam-ai", "[PROMPT] queryMessage sent to LLM:\n$queryMessage")
             } else {
-                Log.w("mam-ai", "[PROMPT] length=${fullPrompt.length} history=${history.size} docs=${docs.size}")
+                Log.w("mam-ai", "[PROMPT] length=${queryMessage.length} history=${history.size} docs=${docs.size}")
             }
 
             val genStart = System.currentTimeMillis()
             var firstTokenTime = 0L
+            val accumulated = StringBuilder()
 
-            // Create a fresh session for each query. We build the full Gemma IT prompt ourselves
-            // (including all history), so the session must not accumulate its own context.
-            val session = LlmInferenceSession.createFromOptions(
-                llmInference,
-                mediaPipeLanguageModelSessionOptions
-            )
-
-            try {
-                // Expose the session before addQueryChunk so that a cancelGeneration()
-                // call arriving on the main thread during addQueryChunk or generateResponseAsync
-                // can still reach cancelGenerateResponseAsync() and abort the native inference.
-                currentSession = session
-                session.addQueryChunk(fullPrompt)
-                val result = session.generateResponseAsync { partial, done ->
-                    if (firstTokenTime == 0L && partial.isNotEmpty()) {
-                        firstTokenTime = System.currentTimeMillis()
-                        Log.w("mam-ai", "[TIMING] TTFT (time-to-first-token): ${firstTokenTime - genStart}ms")
+            // Create a fresh Conversation for each query — history is supplied via initialMessages,
+            // so the Conversation does not need to persist across queries.
+            engine.createConversation(conversationConfig).use { conversation ->
+                conversation.sendMessageAsync(queryMessage)
+                    .collect { message ->
+                        val token = message.toString()
+                        accumulated.append(token)
+                        if (firstTokenTime == 0L && token.isNotEmpty()) {
+                            firstTokenTime = System.currentTimeMillis()
+                            Log.w("mam-ai", "[TIMING] TTFT (time-to-first-token): ${firstTokenTime - genStart}ms")
+                        }
+                        generationListener(token, false)
                     }
-                    generationListener(partial, done)
-                }.await()
-                val genEnd = System.currentTimeMillis()
-                Log.w("mam-ai", "[TIMING] generation total: ${genEnd - genStart}ms, ${result.length} chars")
-                if (firstTokenTime > 0) {
-                    Log.w("mam-ai", "[TIMING] prefill (to 1st token): ${firstTokenTime - genStart}ms, decode: ${genEnd - firstTokenTime}ms")
-                }
-                Log.w("mam-ai", "[TIMING] total query: ${System.currentTimeMillis() - qStart}ms")
-                result
-            } finally {
-                // Null out before close so cancelGeneration() on the main thread cannot
-                // call cancelGenerateResponseAsync() on an already-closed session
-                currentSession = null
-                session.close()
             }
+            generationListener("", true)
+
+            val genEnd = System.currentTimeMillis()
+            val result = accumulated.toString()
+            Log.w("mam-ai", "[TIMING] generation total: ${genEnd - genStart}ms, ${result.length} chars")
+            if (firstTokenTime > 0) {
+                Log.w("mam-ai", "[TIMING] prefill (to 1st token): ${firstTokenTime - genStart}ms, decode: ${genEnd - firstTokenTime}ms")
+            }
+            Log.w("mam-ai", "[TIMING] total query: ${System.currentTimeMillis() - qStart}ms")
+            result
         }
-
-    /**
-     * Builds a prompt using the Gemma IT chat template.
-     * Format: <start_of_turn>user / <end_of_turn> / <start_of_turn>model
-     * System instructions go in the first user turn. Retrieved context is placed
-     * immediately before the query it was retrieved for (the current/final user turn).
-     */
-    private fun buildPrompt(
-        context: String,
-        history: List<Map<String, String>>,
-        query: String,
-        language: String = "en",
-    ): String {
-        val systemInstructions = if (language == "sw") SYSTEM_INSTRUCTIONS_SW else SYSTEM_INSTRUCTIONS
-        // Context/query labels are also localised so the model understands the prompt structure
-        val contextLabel = if (language == "sw")
-            "MUKTADHA UNAOHUSIANA KUTOKA KWA MIONGOZO YA KIMATIBABU:"
-        else
-            "RELEVANT CONTEXT FROM MEDICAL GUIDELINES:"
-        val questionLabel = if (language == "sw") "Swali:" else "Question:"
-
-        val sb = StringBuilder()
-
-        // First user turn — system instructions only
-        sb.append("<start_of_turn>user\n")
-        sb.append(systemInstructions)
-
-        if (history.isEmpty()) {
-            // No history: context + current query go in the first (and only) user turn
-            if (context.isNotEmpty()) {
-                sb.append("\n$contextLabel\n$context\n")
-            }
-            sb.append("\n$questionLabel $query<end_of_turn>\n")
-        } else {
-            // History: first historical user message closes the first turn (system instructions only)
-            sb.append("\n$questionLabel ${history.first()["text"]}<end_of_turn>\n")
-            // Remaining history turns alternate model/user
-            for (turn in history.drop(1)) {
-                if (turn["role"] == "user") {
-                    sb.append("<start_of_turn>user\n$questionLabel ${turn["text"]}<end_of_turn>\n")
-                } else {
-                    sb.append("<start_of_turn>model\n${turn["text"]}<end_of_turn>\n")
-                }
-            }
-            // Current query as the final user turn, with retrieved context immediately before it
-            sb.append("<start_of_turn>user\n")
-            if (context.isNotEmpty()) {
-                sb.append("$contextLabel\n$context\n\n")
-            }
-            sb.append("$questionLabel $query<end_of_turn>\n")
-        }
-
-        // Trigger generation — no closing <end_of_turn>
-        sb.append("<start_of_turn>model\n")
-        return sb.toString()
-    }
 
     companion object {
         private const val USE_GPU_FOR_EMBEDDINGS = false
@@ -326,7 +274,7 @@ class RagPipeline(application: Application) {
         // Matches the [SOURCE:stem|PAGE:n] prefix written by chunk_guidelines.py
         private val METADATA_PREFIX = Regex("""^\[SOURCE:([^|]+)\|PAGE:(\d+)\]""")
 
-        private const val GEMMA_MODEL = "gemma-3n-E4B-it-int4.task"
+        private const val GEMMA_MODEL = "gemma-3n-E4B-it-int4.litertlm"
         private const val TOKENIZER_MODEL = "sentencepiece.model"
         private const val GECKO_MODEL = "Gecko_1024_quant.tflite"
 

@@ -20,8 +20,7 @@ import kotlin.collections.hashMapOf
  */
 class RagStream(application: Application, val lifecycleScope: LifecycleCoroutineScope): EventChannel.StreamHandler {
     private val backgroundExecutor: Executor = Executors.newSingleThreadExecutor()
-    // Currently executing prompt future - we can't execute two at once else the mediapipe
-    // backend crashes
+    // Currently executing generation job - only one query runs at a time
     private var currentJob: Job? = null
 
     val ragPipeline: RagPipeline by lazy { RagPipeline(application) }
@@ -53,7 +52,6 @@ class RagStream(application: Application, val lifecycleScope: LifecycleCoroutine
         synchronized(this) {
             if (currentJob != null) {
                 Log.w("mam-ai", "[CANCEL] generation cancelled by user")
-                ragPipeline.cancelGeneration() // abort native MediaPipe inference
                 currentJob?.cancel()
                 currentJob = null
             }
@@ -64,15 +62,13 @@ class RagStream(application: Application, val lifecycleScope: LifecycleCoroutine
     fun generateResponse(prompt: String, history: List<Map<String, String>>, useRetrieval: Boolean = true, language: String = "en") {
         synchronized(this) {
             if (currentJob != null) {
-                ragPipeline.cancelGeneration() // abort native inference if one is running
                 currentJob?.cancel()
             }
 
             currentJob = lifecycleScope.launch {
                 withContext(backgroundExecutor.asCoroutineDispatcher()) {
                     // Accumulate tokens so Flutter always receives the full text so far,
-                    // not just the latest delta. LlmInferenceSession sends deltas;
-                    // the old MediaPipeLlmBackend sent accumulated text.
+                    // not just the latest delta.
                     val accumulatedText = StringBuilder()
 
                     fun onGenerate(partial: String, done: Boolean) {
