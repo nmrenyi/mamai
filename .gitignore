@@ -40,8 +40,12 @@ app/android/app/src/main/cpp/
 # Model files & large artifacts
 *.tflite
 *.task
+*.litertlm
 *.sqlite
 sentencepiece.model
+
+# Downloaded models directory
+models/
 
 # RAG output
 rag/out.txt
