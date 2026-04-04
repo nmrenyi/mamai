@@ -263,7 +263,7 @@ class BenchmarkActivity : Activity() {
                 put("cooldown_ms", cooldownMs)
                 put("skip_retrieval", skipRetrieval)
                 put("query_filter", queryFilter ?: JSONObject.NULL)
-                put("model", "gemma-3n-E4B-it-int4.litertlm")
+                put("model", "gemma-4-E4B-it.litertlm")
                 put("backend", "CPU")
                 put("max_tokens", 32000)
                 put("temperature", 1.0)

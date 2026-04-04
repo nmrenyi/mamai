@@ -274,7 +274,7 @@ class RagPipeline(application: Application) {
         // Matches the [SOURCE:stem|PAGE:n] prefix written by chunk_guidelines.py
         private val METADATA_PREFIX = Regex("""^\[SOURCE:([^|]+)\|PAGE:(\d+)\]""")
 
-        private const val GEMMA_MODEL = "gemma-3n-E4B-it-int4.litertlm"
+        private const val GEMMA_MODEL = "gemma-4-E4B-it.litertlm"
         private const val TOKENIZER_MODEL = "sentencepiece.model"
         private const val GECKO_MODEL = "Gecko_1024_quant.tflite"
 

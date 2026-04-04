@@ -140,9 +140,9 @@ class _IntroPageState extends State<IntroPage> {
             .map((file) => io.File("${_downloadDir!.path}/$file").lengthSync())
             .reduce((a, b) => a + b);
         debugPrint('Downloaded files total size: $fileSize bytes');
-        // Accept any total > 4 GB — ensures Gemma (4.1 GB) is present
-        // regardless of embeddings.sqlite size (which varies with content).
-        if (fileSize > 4000000000) {
+        // Accept any total > 3 GB — ensures Gemma model is present
+        // (Gemma 4 E4B is 3.4 GB; Gemma 3n E4B was 4.6 GB).
+        if (fileSize > 3000000000) {
           return true;
         }
       }
@@ -159,7 +159,7 @@ class _IntroPageState extends State<IntroPage> {
 
   /// List of remote model files to download
   static const List<String> files = [
-    "gemma-3n-E4B-it-int4.litertlm",
+    "gemma-4-E4B-it.litertlm",
     "sentencepiece.model",
     "Gecko_1024_quant.tflite",
     "embeddings.sqlite",
