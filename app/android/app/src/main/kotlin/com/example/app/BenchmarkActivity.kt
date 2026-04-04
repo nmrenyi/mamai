@@ -130,22 +130,33 @@ class BenchmarkActivity : Activity() {
         Log.w(BENCH_TAG, "[BENCHMARK] LLM model loaded: ${llmInitMs}ms (total init: ${System.currentTimeMillis() - initStart}ms)")
         logStatus("Step 2/4: LLM loaded (${llmInitMs}ms)")
 
-        // Step 3: Warmup query — warms JIT / MediaPipe caches
-        logStatus("Step 3/4: Running warmup query...")
-        Log.w(BENCH_TAG, "[BENCHMARK] Running warmup query...")
+        // Step 3: 5 warmup queries of varying length — warms JIT and model caches
+        val warmupQueries = listOf(
+            "Normal fetal heart rate",
+            "Signs of infection after delivery",
+            "A mother has heavy bleeding after birth. What should I do first?",
+            "A newborn is not breathing after delivery and has a heart rate below 100. What are the first steps to take?",
+            "A pregnant woman at 34 weeks has a severe headache, blurred vision, and blood pressure of 160 over 110. The nearest hospital is 45 minutes away. What should I do immediately while waiting for transport?",
+        )
+        logStatus("Step 3/4: Running ${warmupQueries.size} warmup queries...")
+        Log.w(BENCH_TAG, "[BENCHMARK] Running ${warmupQueries.size} warmup queries...")
         val warmupStart = System.currentTimeMillis()
-        withContext(executor.asCoroutineDispatcher()) {
-            pipeline.generateResponse(
-                prompt = "hello",
-                history = emptyList(),
-                useRetrieval = false,
-                retrievalListener = {},
-                generationListener = { _, _ -> }
-            )
+        warmupQueries.forEachIndexed { i, prompt ->
+            Log.w(BENCH_TAG, "[BENCHMARK] Warmup ${i + 1}/${warmupQueries.size}: \"${prompt.take(40)}...\"")
+            withContext(executor.asCoroutineDispatcher()) {
+                pipeline.generateResponse(
+                    prompt = prompt,
+                    history = emptyList(),
+                    useRetrieval = false,
+                    retrievalListener = {},
+                    generationListener = { _, _ -> }
+                )
+            }
+            Log.w(BENCH_TAG, "[BENCHMARK] Warmup ${i + 1} done (${System.currentTimeMillis() - warmupStart}ms elapsed)")
         }
         val warmupMs = System.currentTimeMillis() - warmupStart
         val totalInitMs = System.currentTimeMillis() - initStart
-        Log.w(BENCH_TAG, "[BENCHMARK] Warmup query: ${warmupMs}ms")
+        Log.w(BENCH_TAG, "[BENCHMARK] Warmup complete: ${warmupMs}ms total (${warmupQueries.size} queries)")
         Log.w(BENCH_TAG, "[BENCHMARK] Init complete: sync=${syncInitMs}ms llm=${llmInitMs}ms warmup=${warmupMs}ms total=${totalInitMs}ms")
 
         val postInitMemory = collectMemoryInfo()
