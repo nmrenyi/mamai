@@ -159,7 +159,7 @@ class _IntroPageState extends State<IntroPage> {
 
   /// List of remote model files to download
   static const List<String> files = [
-    "gemma-3n-E4B-it-int4.task",
+    "gemma-3n-E4B-it-int4.litertlm",
     "sentencepiece.model",
     "Gecko_1024_quant.tflite",
     "embeddings.sqlite",

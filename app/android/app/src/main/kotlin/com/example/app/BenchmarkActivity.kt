@@ -130,7 +130,7 @@ class BenchmarkActivity : Activity() {
         Log.w(BENCH_TAG, "[BENCHMARK] LLM model loaded: ${llmInitMs}ms (total init: ${System.currentTimeMillis() - initStart}ms)")
         logStatus("Step 2/4: LLM loaded (${llmInitMs}ms)")
 
-        // Step 3: 5 warmup queries of varying length — warms JIT and model caches
+        // Step 3: 5 warmup queries of varying length — warms JIT and LiteRT-LM caches
         val warmupQueries = listOf(
             "Normal fetal heart rate",
             "Signs of infection after delivery",
@@ -263,7 +263,7 @@ class BenchmarkActivity : Activity() {
                 put("cooldown_ms", cooldownMs)
                 put("skip_retrieval", skipRetrieval)
                 put("query_filter", queryFilter ?: JSONObject.NULL)
-                put("model", "gemma-3n-E4B-it-int4.task")
+                put("model", "gemma-3n-E4B-it-int4.litertlm")
                 put("backend", "CPU")
                 put("max_tokens", 32000)
                 put("temperature", 1.0)
