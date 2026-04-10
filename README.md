@@ -159,9 +159,9 @@ We evaluate model accuracy across multiple medical QA benchmarks, including MCQ 
 
 - **Best overall model**: GPT-5 at **80.9%** average MCQ accuracy and **4.47/5** average open-ended judge score
 - **Best fully evaluated on-device model**: Gemma 3n E4B at **45.6%** MCQ and **3.06/5** open-ended
-- **Current deployed model check**: Gemma 4 E4B reaches **42.9%** average MCQ accuracy (**37.0** AfriMedQA, **40.8** MedQA USMLE, **51.0** MedMCQA), which is **2.7 points below** Gemma 3n E4B
+- **Current deployed model check**: Gemma 4 E4B reaches **42.9%** average MCQ accuracy and **2.94/5** open-ended (no RAG), which is below Gemma 3n E4B on both MCQ (**45.6%**) and open-ended (**3.06/5**)
 - **RAG currently hurts MCQ performance** for all evaluated on-device models, with Gemma 3n E4B dropping from **45.6% → 43.4%**
-- **Gemma 4 E4B open-ended evaluation is still pending**
+- **Gemma 4 E4B +RAG evaluation is still pending**
 
 See [evaluation/EVAL_REPORT.md](evaluation/EVAL_REPORT.md) for the full benchmark tables.
 

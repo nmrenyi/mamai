@@ -3,7 +3,7 @@
 ## Setup
 
 **Models evaluated**:
-- **Gemma 4 E4B-IT** (Q4_0 GGUF) — current deployed model, **MCQ only so far**
+- **Gemma 4 E4B-IT** (Q4_0 GGUF) — current deployed model, **MCQ + open-ended (no RAG); +RAG pending**
 - **Gemma 3n E4B-IT** (4.1 GB, Q4_0 GGUF) — deployed in the MAM-AI app
 - **Gemma 3n E2B-IT** (2.8 GB, Q4_0 GGUF) — smaller variant
 - **MedGemma 4B-IT** (2.3 GB, Q4_0 GGUF) — medical-domain finetuned
@@ -40,7 +40,7 @@ On-device models run via llama-cpp-python with CUDA on an NVIDIA A100. GPT-5 via
 | Gemma E2B | 37.4 | 39.8 | 47.0 | 41.4 |
 | Gemma E2B + RAG | 32.7 | 37.5 | 41.4 | 37.2 |
 
-*†Gemma 4 E4B has only been evaluated on the three MCQ benchmarks so far. Open-ended evaluation is still pending.*
+*†Gemma 4 E4B now has complete no-RAG open-ended results. +RAG evaluation is still pending.*
 
 ### Open-ended Benchmarks (weighted judge score /5)
 
@@ -48,6 +48,7 @@ On-device models run via llama-cpp-python with CUDA on an NVIDIA A100. GPT-5 via
 |---|:---:|:---:|:---:|:---:|
 | GPT-5† | **4.69** | **4.78** | **3.93** | **4.47** |
 | GPT-5 + RAG† | 4.70 | 4.72 | 3.86 | 4.43 |
+| Gemma 4 E4B‡ | 3.11 | 2.97 | 2.75 | 2.94 |
 | Gemma E4B | 3.11 | 3.39 | 2.68 | 3.06 |
 | Gemma E4B + RAG | 3.08 | 3.48 | 2.67 | 3.08 |
 | MedGemma 4B | 2.93 | 3.22 | 2.54 | 2.90 |
@@ -58,6 +59,7 @@ On-device models run via llama-cpp-python with CUDA on an NVIDIA A100. GPT-5 via
 | Gemma E2B + RAG | 2.73 | 2.91 | 2.39 | 2.68 |
 
 *†GPT-5 Kenya Vignettes: partial (31–32/284 questions, API quota exhausted). SAQ and WHB Stumps are complete.*
+*‡Gemma 4 E4B open-ended results are complete for the no-RAG setting only. +RAG evaluation is still pending.*
 
 ### Per-Dimension Breakdown (open-ended, without RAG)
 
@@ -68,6 +70,7 @@ Each response is scored 1–5 on five dimensions. Weighted = accuracy (30%) + sa
 | Model | Accuracy | Safety | Completeness | Helpfulness | Clarity | Weighted |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|
 | GPT-5† | **4.41** | **4.66** | **4.79** | **5.00** | **4.97** | **4.69** |
+| Gemma 4 E4B | 2.87 | 2.96 | 2.87 | 3.58 | 3.97 | 3.11 |
 | Gemma E4B | 2.75 | 2.70 | 3.30 | 3.64 | 4.02 | 3.11 |
 | MedGemma 4B | 2.57 | 2.44 | 3.17 | 3.45 | 3.96 | 2.93 |
 | Meditron3 8B | 2.64 | 2.54 | 2.36 | 3.10 | 3.97 | 2.76 |
@@ -81,6 +84,7 @@ Each response is scored 1–5 on five dimensions. Weighted = accuracy (30%) + sa
 | Gemma E4B | 2.81 | 3.43 | 3.49 | 3.89 | 4.08 | 3.39 |
 | Meditron3 8B | 3.24 | 3.27 | 2.89 | 3.68 | 4.19 | 3.34 |
 | MedGemma 4B | 2.62 | 3.24 | 3.41 | 3.57 | 4.05 | 3.22 |
+| Gemma 4 E4B | 2.65 | 3.08 | 2.59 | 3.35 | 3.84 | 2.97 |
 | Gemma E2B | 2.41 | 2.86 | 3.08 | 3.32 | 3.97 | 2.95 |
 
 #### WHB Stumps (n=20)
@@ -88,12 +92,15 @@ Each response is scored 1–5 on five dimensions. Weighted = accuracy (30%) + sa
 | Model | Accuracy | Safety | Completeness | Helpfulness | Clarity | Weighted |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|
 | GPT-5 | **3.45** | **3.85** | **3.85** | **4.65** | **4.65** | **3.93** |
+| Gemma 4 E4B | 2.40 | 2.75 | 2.30 | 3.35 | 3.80 | 2.75 |
 | Gemma E4B | 2.25 | 2.50 | 2.30 | 3.45 | 4.00 | 2.68 |
 | Gemma E2B | 2.05 | 2.40 | 2.35 | 3.30 | 3.95 | 2.58 |
 | Meditron3 8B | 2.30 | 2.40 | 2.05 | 3.00 | 4.00 | 2.55 |
 | MedGemma 4B | 2.15 | 2.25 | 2.30 | 3.15 | 4.00 | 2.54 |
 
 ### Per-Dimension Breakdown (open-ended, with RAG)
+
+*Gemma 4 E4B +RAG open-ended results are not yet available.*
 
 #### Kenya Vignettes (n=284; GPT-5 n=32†)
 
@@ -135,6 +142,7 @@ Averaged across all three open-ended benchmarks:
 |---|:---:|:---:|:---:|:---:|:---:|:---:|
 | GPT-5† | **4.22** | **4.38** | **4.45** | **4.86** | **4.87** | **4.47** |
 | Gemma E4B | 2.60 | 2.88 | 3.03 | 3.66 | 4.03 | 3.06 |
+| Gemma 4 E4B | 2.64 | 2.93 | 2.59 | 3.43 | 3.87 | 2.94 |
 | MedGemma 4B | 2.45 | 2.64 | 2.96 | 3.39 | 4.00 | 2.90 |
 | Meditron3 8B | 2.73 | 2.74 | 2.43 | 3.26 | 4.05 | 2.88 |
 | Gemma E2B | 2.28 | 2.52 | 2.79 | 3.28 | 3.96 | 2.76 |
@@ -147,7 +155,7 @@ GPT-5 scores ~4.5/5 across all dimensions — a large gap over on-device models 
 
 ### 1. RAG hurts more than it helps
 
-Every on-device model sees **degraded MCQ accuracy** with RAG context (-2.2pp to -6.0pp). GPT-5 is unaffected on MCQ but drops slightly on open-ended (4.47 → 4.43). On open-ended benchmarks, RAG effects are small and mixed across all models. The retrieved OBGYN guidelines appear to distract smaller models rather than ground their answers.
+Every on-device model with +RAG results sees **degraded MCQ accuracy** with RAG context (-2.2pp to -6.0pp). GPT-5 is unaffected on MCQ but drops slightly on open-ended (4.47 → 4.43). On open-ended benchmarks, RAG effects are small and mixed across all models. The retrieved OBGYN guidelines appear to distract smaller models rather than ground their answers. Gemma 4 E4B still lacks +RAG evaluation, so its RAG effect remains unmeasured.
 
 | Model | NoRAG MCQ Avg | +RAG MCQ Avg | Delta |
 |---|:---:|:---:|:---:|
@@ -162,11 +170,11 @@ Every on-device model sees **degraded MCQ accuracy** with RAG context (-2.2pp to
 
 For on-device models, **clarity scores ~4.0/5** even when accuracy is 1–2/5. The models write convincingly when factually wrong — dangerous for medical applications where users may trust well-articulated but incorrect advice. GPT-5 does not exhibit this: its clarity (~4.9) is backed by high accuracy (~4.2).
 
-### 3. Gemma 4 E4B does not beat Gemma 3n E4B on MCQ quality
+### 3. Gemma 4 E4B still trails Gemma 3n E4B on current quality evidence
 
-Gemma 4 E4B scores **42.9% average MCQ accuracy**, below Gemma 3n E4B's **45.6%** by **2.7 percentage points**. Its strongest result is MedMCQA (51.0%), where it matches MedGemma 4B, but it underperforms Gemma 3n E4B on AfriMedQA (37.0% vs 40.8%) and MedQA USMLE (40.8% vs 44.1%).
+Gemma 4 E4B scores **42.9% average MCQ accuracy** and **2.94/5 average open-ended weighted score** (no RAG). Both trail Gemma 3n E4B, which reaches **45.6% MCQ** and **3.06/5 open-ended**. Gemma 4 matches Gemma 3n E4B on Kenya Vignettes (3.11), beats it slightly on WHB Stumps (2.75 vs 2.68), but drops materially on AfriMedQA SAQ (2.97 vs 3.39) and on two of the three MCQ benchmarks.
 
-Among models with full MCQ + open-ended evaluation, **Gemma 3n E4B remains the strongest on-device model overall**. On MCQ-only results, Gemma 4 E4B ranks below Gemma 3n E4B and MedGemma 4B, and above Gemma 3n E2B and Meditron3 8B.
+With Gemma 4's no-RAG open-ended results now available, **Gemma 3n E4B remains the strongest on-device model overall** on the current benchmark set. Gemma 4 +RAG evaluation is still missing, but the available no-RAG evidence does not support the model switch on quality grounds.
 
 ### 4. GPT-5 is the quality ceiling
 
@@ -186,11 +194,11 @@ All models score lowest on AfriMedQA MCQ (28–65%), reflecting African clinical
 
 ## Recommendations
 
-1. **Do not justify the model switch on MCQ quality alone.** Gemma 4 E4B improves neither average MCQ accuracy nor headline benchmark performance versus Gemma 3n E4B (42.9% vs 45.6%).
+1. **Do not justify the model switch on current benchmark evidence.** Gemma 4 E4B is worse than Gemma 3n E4B on both MCQ (**42.9% vs 45.6%**) and no-RAG open-ended quality (**2.94/5 vs 3.06/5**).
 
-2. **Keep Gemma 3n E4B as the quality baseline** until Gemma 4 E4B's open-ended evaluation is complete and there is a clear reason to prefer it despite the CPU TTFT regression.
+2. **Keep Gemma 3n E4B as the quality baseline** unless Gemma 4 E4B shows a clear advantage in future evaluation or there is another product reason to prefer it despite the CPU TTFT regression.
 
-3. **Complete Gemma 4 E4B open-ended evaluation** before making a final deployment call. MCQ results alone are not enough to rule in or rule out Gemma 4 for clinical use.
+3. **If retrieval remains part of the shipped app flow, complete Gemma 4 E4B +RAG evaluation** before making a final deployment call. The no-RAG open-ended run is complete, but the retrieval-on setting is still missing.
 
 4. **Improve RAG retrieval quality** — current pipeline degrades accuracy for all evaluated on-device models. Options: raise similarity threshold, improve chunk relevance filtering, or only inject context above a confidence threshold.
 
