@@ -153,32 +153,31 @@ Downloaded on first launch from a temporary VPS and stored on-device:
 
 ## Evaluation
 
-We evaluated 5 models across 6 medical QA benchmarks (3 MCQ, 3 open-ended). See the full reports:
+> Full evaluation results coming soon.
 
-- [**Eval Report**](evaluation/EVAL_REPORT.md) — quality benchmarks
-- [**Latency Report**](evaluation/LATENCY_REPORT.md) — on-device performance
+### Answering Accuracy
 
-### Quality Summary
+We evaluate model accuracy across multiple medical QA benchmarks, including MCQ datasets (AfriMedQA, MedQA USMLE, MedMCQA) and open-ended clinical vignettes (Kenya Vignettes, AfriMedQA SAQ, WHB Stumps). Open-ended responses are scored by an LLM judge on accuracy, safety, completeness, helpfulness, and clarity.
 
-| Model | MCQ Avg | Open-ended Avg (/5) |
-|---|:---:|:---:|
-| GPT-5 (cloud baseline) | **80.9%** | **4.47** |
-| Gemma 3n E4B (deployed) | 45.6% | 3.06 |
-| MedGemma 4B | 44.5% | 2.90 |
-| Meditron3 8B | 41.0% | 2.88 |
-| Gemma 3n E2B | 41.4% | 2.76 |
+*Results coming soon.*
 
-**Gemma 3n E4B** is the best on-device model across both MCQ accuracy and open-ended quality. Medical-domain finetuned models (MedGemma, Meditron3) did not consistently outperform it at this quantization level.
+### Latency
 
-### Latency Summary (Pixel 7)
+We benchmark on-device latency on real Android hardware, measuring time-to-first-token (TTFT), decode throughput (tokens/sec), and end-to-end query time across short, medium, and long clinical queries.
 
-| Metric | E4B | E2B |
-|---|---|---|
-| Median query time | **91s** | 205s |
-| Decode throughput | **3.3 tok/s** | 1.4 tok/s |
-| Model load (warm) | ~1.2s | ~1.1s |
+*Results coming soon.*
 
-E4B delivers consistent performance regardless of query length, while E2B degrades dramatically on medium/long queries.
+### Stability
+
+We evaluate response consistency under repeated identical queries and across varying conversation history lengths, assessing whether the model produces reliable outputs under the constraints of on-device inference.
+
+*Results coming soon.*
+
+### Dangerous Scenario Recognition
+
+A dedicated evaluation of how the app handles high-stakes clinical emergencies — including postpartum hemorrhage, eclampsia, neonatal respiratory distress, and sepsis. We assess whether the model correctly identifies emergency escalation triggers, avoids underreacting to critical presentations, and produces safe, actionable guidance aligned with MOHSW Zanzibar protocols.
+
+*Results coming soon.*
 
 ## Finetuning
 
