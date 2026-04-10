@@ -153,31 +153,40 @@ Downloaded on first launch from a temporary VPS and stored on-device:
 
 ## Evaluation
 
-> Full evaluation results coming soon.
-
 ### Answering Accuracy
 
 We evaluate model accuracy across multiple medical QA benchmarks, including MCQ datasets (AfriMedQA, MedQA USMLE, MedMCQA) and open-ended clinical vignettes (Kenya Vignettes, AfriMedQA SAQ, WHB Stumps). Open-ended responses are scored by an LLM judge on accuracy, safety, completeness, helpfulness, and clarity.
 
-*Results coming soon.*
+- **Best overall model**: GPT-5 at **80.9%** average MCQ accuracy and **4.47/5** average open-ended judge score
+- **Best fully evaluated on-device model**: Gemma 3n E4B at **45.6%** MCQ and **3.06/5** open-ended
+- **Current deployed model check**: Gemma 4 E4B reaches **42.9%** average MCQ accuracy (**37.0** AfriMedQA, **40.8** MedQA USMLE, **51.0** MedMCQA), which is **2.7 points below** Gemma 3n E4B
+- **RAG currently hurts MCQ performance** for all evaluated on-device models, with Gemma 3n E4B dropping from **45.6% → 43.4%**
+- **Gemma 4 E4B open-ended evaluation is still pending**
+
+See [evaluation/EVAL_REPORT.md](evaluation/EVAL_REPORT.md) for the full benchmark tables.
 
 ### Latency
 
 We benchmark on-device latency on real Android hardware, measuring time-to-first-token (TTFT), decode throughput (tokens/sec), and end-to-end query time across short, medium, and long clinical queries.
 
-*Results coming soon.*
+- On an OPPO Snapdragon 8 Elite device, **LiteRT-LM + Gemma 4 E4B** averages **11.7 s TTFT**, **26.8 s total time**, and **13.8 tok/s**
+- On the same device, **LiteRT-LM + Gemma 3n E4B** is still faster for user-perceived latency at **6.8 s TTFT** and **24.8 s total time**
+- The current conclusion is that **Gemma 4 E4B is not yet a clear CPU-only upgrade**: decode is faster, but TTFT is worse and MCQ accuracy is lower
+- GPU evaluation remains blocked on a LiteRT-LM Android release with working GPU decode for E4B
+
+See [benchmark_report.md](benchmark_report.md) and [evaluation/latency_report.md](evaluation/latency_report.md) for details.
 
 ### Stability
 
 We evaluate response consistency under repeated identical queries and across varying conversation history lengths, assessing whether the model produces reliable outputs under the constraints of on-device inference.
 
-*Results coming soon.*
+A dedicated stability benchmark has not yet been published as a separate report. The app already includes single-query execution, cancellation, background-generation handling, and history truncation to fit the context window, but response-consistency numbers are still pending.
 
 ### Dangerous Scenario Recognition
 
 A dedicated evaluation of how the app handles high-stakes clinical emergencies — including postpartum hemorrhage, eclampsia, neonatal respiratory distress, and sepsis. We assess whether the model correctly identifies emergency escalation triggers, avoids underreacting to critical presentations, and produces safe, actionable guidance aligned with MOHSW Zanzibar protocols.
 
-*Results coming soon.*
+This has not yet been isolated as a standalone benchmark. For now, the closest signal is the open-ended judge scoring in [evaluation/EVAL_REPORT.md](evaluation/EVAL_REPORT.md), where on-device models trail GPT-5 most sharply on **accuracy** and **safety**.
 
 ## Finetuning
 
