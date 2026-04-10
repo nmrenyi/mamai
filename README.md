@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://youtu.be/M_Kruluel28">Demo Video</a> · <a href="https://www.kaggle.com/competitions/google-gemma-3n-hackathon">Gemma 3n Kaggle Challenge</a> · <a href="evaluation/EVAL_REPORT.md">Eval Report</a> · <a href="evaluation/LATENCY_REPORT.md">Latency Report</a>
+  <a href="https://youtu.be/M_Kruluel28">Demo Video</a> · <a href="https://www.kaggle.com/competitions/google-gemma-3n-hackathon">Gemma 3n Kaggle Challenge</a> · <a href="evaluation/reports/eval_report_no_rag.md">Eval Report</a> · <a href="evaluation/reports/latency_report.md">Latency Report</a>
 </p>
 
 ---
@@ -93,8 +93,11 @@ mamai/
 │   ├── run_eval.py                  # Main evaluation harness
 │   ├── scoring.py                   # LLM-as-judge scoring
 │   ├── benchmark_latency.py         # On-device latency analysis
-│   ├── EVAL_REPORT.md               # Quality results (5 models × 6 datasets)
-│   └── LATENCY_REPORT.md            # On-device latency results
+│   └── reports/
+│       ├── eval_report_no_rag.md    # Quality results (no-RAG, 5 models × 6 datasets)
+│       ├── eval_report.md           # Quality results (full, incl. +RAG variants)
+│       ├── latency_report.md        # On-device latency results
+│       └── benchmark_report.md      # CPU inference benchmark (MediaPipe vs LiteRT-LM)
 └── CLAUDE.md               # Developer instructions for Claude Code
 ```
 
@@ -163,7 +166,7 @@ We evaluate model accuracy across multiple medical QA benchmarks, including MCQ 
 - **RAG currently hurts MCQ performance** for all evaluated on-device models, with Gemma 3n E4B dropping from **45.6% → 43.4%**
 - **Gemma 4 E4B +RAG evaluation is still pending**
 
-See [evaluation/EVAL_REPORT.md](evaluation/EVAL_REPORT.md) for the full benchmark tables.
+See [evaluation/reports/eval_report_no_rag.md](evaluation/reports/eval_report_no_rag.md) for the full benchmark tables.
 
 ### Latency
 
@@ -174,7 +177,7 @@ We benchmark on-device latency on real Android hardware, measuring time-to-first
 - The current conclusion is that **Gemma 4 E4B is not yet a clear CPU-only upgrade**: decode is faster, but TTFT is worse and MCQ accuracy is lower
 - GPU evaluation remains blocked on a LiteRT-LM Android release with working GPU decode for E4B
 
-See [benchmark_report.md](benchmark_report.md) and [evaluation/latency_report.md](evaluation/latency_report.md) for details.
+See [evaluation/reports/benchmark_report.md](evaluation/reports/benchmark_report.md) and [evaluation/reports/latency_report.md](evaluation/reports/latency_report.md) for details.
 
 ### Stability
 
@@ -186,7 +189,7 @@ A dedicated stability benchmark has not yet been published as a separate report.
 
 A dedicated evaluation of how the app handles high-stakes clinical emergencies — including postpartum hemorrhage, eclampsia, neonatal respiratory distress, and sepsis. We assess whether the model correctly identifies emergency escalation triggers, avoids underreacting to critical presentations, and produces safe, actionable guidance aligned with MOHSW Zanzibar protocols.
 
-This has not yet been isolated as a standalone benchmark. For now, the closest signal is the open-ended judge scoring in [evaluation/EVAL_REPORT.md](evaluation/EVAL_REPORT.md), where on-device models trail GPT-5 most sharply on **accuracy** and **safety**.
+This has not yet been isolated as a standalone benchmark. For now, the closest signal is the open-ended judge scoring in [evaluation/reports/eval_report_no_rag.md](evaluation/reports/eval_report_no_rag.md), where on-device models trail GPT-5 most sharply on **accuracy** and **safety**.
 
 ## Finetuning
 
