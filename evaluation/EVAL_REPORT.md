@@ -3,6 +3,7 @@
 ## Setup
 
 **Models evaluated**:
+- **Gemma 4 E4B-IT** (Q4_0 GGUF) — current deployed model, **MCQ only so far**
 - **Gemma 3n E4B-IT** (4.1 GB, Q4_0 GGUF) — deployed in the MAM-AI app
 - **Gemma 3n E2B-IT** (2.8 GB, Q4_0 GGUF) — smaller variant
 - **MedGemma 4B-IT** (2.3 GB, Q4_0 GGUF) — medical-domain finetuned
@@ -29,6 +30,7 @@ On-device models run via llama-cpp-python with CUDA on an NVIDIA A100. GPT-5 via
 |---|:---:|:---:|:---:|:---:|
 | GPT-5 | **65.2** | 91.3 | 86.2 | 80.9 |
 | GPT-5 + RAG | 64.8 | **91.6** | **86.4** | **80.9** |
+| Gemma 4 E4B† | 37.0 | 40.8 | 51.0 | 42.9 |
 | Gemma E4B | 40.8 | 44.1 | 51.8 | 45.6 |
 | Gemma E4B + RAG | 38.2 | 41.8 | 50.2 | 43.4 |
 | MedGemma 4B | 37.6 | 44.8 | 51.0 | 44.5 |
@@ -37,6 +39,8 @@ On-device models run via llama-cpp-python with CUDA on an NVIDIA A100. GPT-5 via
 | Meditron3 + RAG | 28.2 | 37.1 | 39.8 | 35.0 |
 | Gemma E2B | 37.4 | 39.8 | 47.0 | 41.4 |
 | Gemma E2B + RAG | 32.7 | 37.5 | 41.4 | 37.2 |
+
+*†Gemma 4 E4B has only been evaluated on the three MCQ benchmarks so far. Open-ended evaluation is still pending.*
 
 ### Open-ended Benchmarks (weighted judge score /5)
 
@@ -148,6 +152,7 @@ Every on-device model sees **degraded MCQ accuracy** with RAG context (-2.2pp to
 | Model | NoRAG MCQ Avg | +RAG MCQ Avg | Delta |
 |---|:---:|:---:|:---:|
 | GPT-5 | 80.9% | 80.9% | 0.0 |
+| Gemma 4 E4B† | 42.9% | — | — |
 | Gemma E4B | 45.6% | 43.4% | -2.2 |
 | MedGemma 4B | 44.5% | 39.4% | -5.1 |
 | Meditron3 8B | 41.0% | 35.0% | -6.0 |
@@ -157,11 +162,11 @@ Every on-device model sees **degraded MCQ accuracy** with RAG context (-2.2pp to
 
 For on-device models, **clarity scores ~4.0/5** even when accuracy is 1–2/5. The models write convincingly when factually wrong — dangerous for medical applications where users may trust well-articulated but incorrect advice. GPT-5 does not exhibit this: its clarity (~4.9) is backed by high accuracy (~4.2).
 
-### 3. Gemma E4B is the best on-device model
+### 3. Gemma 4 E4B does not beat Gemma 3n E4B on MCQ quality
 
-Gemma E4B achieves the highest scores among on-device models in both MCQ (45.6%) and open-ended (3.06/5), and degrades the least with RAG (-2.2pp MCQ).
+Gemma 4 E4B scores **42.9% average MCQ accuracy**, below Gemma 3n E4B's **45.6%** by **2.7 percentage points**. Its strongest result is MedMCQA (51.0%), where it matches MedGemma 4B, but it underperforms Gemma 3n E4B on AfriMedQA (37.0% vs 40.8%) and MedQA USMLE (40.8% vs 44.1%).
 
-**On-device ranking**: (1) Gemma 3n E4B, (2) MedGemma 4B, (3) Meditron3 8B, (4) Gemma 3n E2B.
+Among models with full MCQ + open-ended evaluation, **Gemma 3n E4B remains the strongest on-device model overall**. On MCQ-only results, Gemma 4 E4B ranks below Gemma 3n E4B and MedGemma 4B, and above Gemma 3n E2B and Meditron3 8B.
 
 ### 4. GPT-5 is the quality ceiling
 
@@ -181,12 +186,16 @@ All models score lowest on AfriMedQA MCQ (28–65%), reflecting African clinical
 
 ## Recommendations
 
-1. **Keep Gemma 3n E4B** as the on-device model — best accuracy, quality, and RAG robustness among all tested local models.
+1. **Do not justify the model switch on MCQ quality alone.** Gemma 4 E4B improves neither average MCQ accuracy nor headline benchmark performance versus Gemma 3n E4B (42.9% vs 45.6%).
 
-2. **Improve RAG retrieval quality** — current pipeline degrades accuracy for all models. Options: raise similarity threshold, improve chunk relevance filtering, or only inject context above a confidence threshold.
+2. **Keep Gemma 3n E4B as the quality baseline** until Gemma 4 E4B's open-ended evaluation is complete and there is a clear reason to prefer it despite the CPU TTFT regression.
 
-3. **Address the fluency trap** — on-device models score ~4.0 clarity with ~2.5 accuracy. Consider adding uncertainty signals so users don't over-trust well-written but inaccurate responses.
+3. **Complete Gemma 4 E4B open-ended evaluation** before making a final deployment call. MCQ results alone are not enough to rule in or rule out Gemma 4 for clinical use.
 
-4. **E2B is viable for constrained devices** — at 2.8 GB (vs 4.1 GB), it retains ~90% of E4B's performance.
+4. **Improve RAG retrieval quality** — current pipeline degrades accuracy for all evaluated on-device models. Options: raise similarity threshold, improve chunk relevance filtering, or only inject context above a confidence threshold.
 
-5. **Complete GPT-5 Kenya Vignettes** — only 31/284 questions evaluated. Top up API credits and re-run; `--run-dir` auto-resume will continue from the checkpoint.
+5. **Address the fluency trap** — on-device models score ~4.0 clarity with ~2.5 accuracy. Consider adding uncertainty signals so users don't over-trust well-written but inaccurate responses.
+
+6. **E2B is viable for constrained devices** — at 2.8 GB (vs 4.1 GB), it retains ~90% of E4B's performance.
+
+7. **Complete GPT-5 Kenya Vignettes** — only 31/284 questions evaluated. Top up API credits and re-run; `--run-dir` auto-resume will continue from the checkpoint.
