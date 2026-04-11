@@ -50,8 +50,10 @@ models/
 # RAG output
 rag/out.txt
 
-# device_push — large binaries and PDFs (populate locally, see device_push/README.md)
+# device_push — large binaries and PDFs (populate via scripts/sync_rag_assets.sh)
 device_push/*.pdf
+device_push/docs/
+device_push/debug/
 device_push.zip
 
 # Misc

@@ -115,19 +115,18 @@ Models are fetched from a remote server on first launch and stored in `applicati
 
 ### Document Ingestion (RAG preprocessing)
 
-Documents are chunked and embedded offline using scripts in `rag/`:
+Chunking and embedding are managed in the companion `mamai-medical-guidelines` repo.
+This repo only consumes the published output via a versioned bundle.
 
-1. Extract text from PDFs using [MMORE](https://github.com/swiss-ai/mmore)
-2. Chunk documents with separator tags (`<sep>`, `<doc_sep>`)
-3. Embed chunks using Gecko model
-4. Store in SQLite vector database
+**To update RAG assets** (new guidelines or re-chunking):
+1. Run the producer pipeline in `mamai-medical-guidelines` and publish a new bundle
+2. Bump `rag-assets.lock.json` in this repo with the new version + manifest checksum
+3. Run `bash scripts/sync_rag_assets.sh` to install the bundle into `device_push/`
+4. Push to device (see `device_push/README.md`)
 
-**To add new documents**:
-1. Add chunks to `app/assets/mamai_trim.txt`
-2. Uncomment `memorizeChunks()` call in `RagPipeline.kt:103`
-3. Run app (waits while chunks are embedded and stored)
-4. Re-comment `memorizeChunks()`
-5. Use `adb` to pull updated `embeddings.sqlite` from device
+`memorizeChunks()` in `RagPipeline.kt` is intentionally commented out — embeddings
+are pre-computed in the producer repo and shipped as `embeddings.sqlite`, not
+generated on-device.
 
 ## Key Configuration
 

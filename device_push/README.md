@@ -1,52 +1,75 @@
 # device_push
 
 A staging folder with all files needed to set up the app on an Android device.
-Large binaries are gitignored — populate them locally before pushing.
+Large binaries are gitignored — populate them via the sync script (see below).
 
 ## Structure
 
 ```
 device_push/
-├── docs/       # 60 source PDF guidelines (gitignored)
-└── models/     # Gecko_1024_quant.tflite, sentencepiece.model, embeddings.sqlite (gitignored)
+├── docs/       # 55 source PDF guidelines, normalized filenames (gitignored)
+├── models/     # Gecko_1024_quant.tflite, sentencepiece.model, embeddings.sqlite (gitignored)
+└── debug/      # chunks_for_rag.txt for offline eval (gitignored, optional)
 ```
 
 ## Contents
 
-### LLM models
+### LLM models (populate manually)
 | File | Format | Notes |
 |------|--------|-------|
 | `models/gemma-4-E4B-it.litertlm` | LiteRT-LM | Current deployed model |
 | `models/gemma-3n-E4B-it-int4.litertlm` | LiteRT-LM | Previous deployed model (quality baseline) |
 | `models/gemma-3n-E4B-it-int4.task` | MediaPipe | Kept for MediaPipe compatibility testing |
 
-### Supporting files
+### RAG assets (managed by sync script)
 | File | Source | Size |
 |------|--------|------|
 | `models/Gecko_1024_quant.tflite` | embedding model | ~139 MB |
 | `models/sentencepiece.model` | tokenizer | ~0.8 MB |
-| `models/embeddings.sqlite` | pre-computed doc embeddings | ~43 MB |
-| `docs/*.pdf` (60 files) | source medical guidelines | ~91 MB |
+| `models/embeddings.sqlite` | pre-computed embeddings for 21,731 chunks | ~89 MB |
+| `docs/*.pdf` (55 files) | source medical guidelines, URL-safe names | ~91 MB |
 
-## Setup (first time)
+PDF filenames use normalized SOURCE ids (spaces/parens → underscores, e.g.
+`WHO_Abortion_Care_2022.pdf`). `openPdf()` in `MainActivity.kt` applies the
+same normalization rule before resolving the path.
+
+## Setup — RAG assets
+
+The pinned bundle version is recorded in `rag-assets.lock.json` at the repo root.
+Run the sync script to fetch and install it:
+
+```bash
+# From a published GitHub release (update rag-assets.lock.json first):
+bash scripts/sync_rag_assets.sh
+
+# From a local bundle directory (for development):
+bash scripts/sync_rag_assets.sh --local /path/to/rag-bundle-v1.0.0/
+
+# From a local tarball:
+bash scripts/sync_rag_assets.sh --tarball /path/to/rag-bundle-v1.0.0.tar.gz
+```
+
+The script verifies checksums and clears any old PDFs before installing.
+
+## Setup — LLM models (first time)
 
 ```bash
 # Hard-link LLM models from root models/ dir (no extra disk space)
 ln models/gemma-4-E4B-it.litertlm device_push/models/
 ln models/gemma-3n-E4B-it-int4.litertlm device_push/models/
-# gemma-3n-E4B-it-int4.task is already in device_push/models/
-
-# Hard-link supporting files
-ln ../mamai-medical-guidelines/processed/embeddings.sqlite device_push/models/
-
-# Copy PDFs
-find ../mamai-medical-guidelines/raw -name "*.pdf" -exec cp {} device_push/docs/ \;
 ```
 
 ## Push to device
 
 ```bash
-for f in device_push/models/* device_push/docs/*; do
+# Push RAG assets
+for f in device_push/models/embeddings.sqlite device_push/docs/*.pdf; do
+  ~/Library/Android/sdk/platform-tools/adb push "$f" /sdcard/Android/data/com.example.app/files/
+done
+
+# Push LLM + embedding models (first time or after update)
+for f in device_push/models/Gecko_1024_quant.tflite device_push/models/sentencepiece.model \
+          device_push/models/gemma-4-E4B-it.litertlm; do
   ~/Library/Android/sdk/platform-tools/adb push "$f" /sdcard/Android/data/com.example.app/files/
 done
 ```

@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "_comment": "Pin the RAG data bundle version consumed by this app. Run scripts/sync_rag_assets.sh to fetch and install the pinned bundle.",
+  "bundle_version": "v1.0.0",
+  "bundle_url": "https://github.com/TODO_ORG/mamai-medical-guidelines/releases/download/v1.0.0/rag-bundle-v1.0.0.tar.gz",
+  "manifest_sha256": "TODO_fill_after_publishing_release",
+  "producer_repo": "mamai-medical-guidelines",
+  "producer_commit": "33a83fa5b8ece6183831afe277d9a73001002613",
+  "chunk_count": 21731,
+  "source_count": 55
+}

@@ -124,20 +124,27 @@ adb logcat -s mam-ai      # View timing, memory, and inference logs
 
 ## RAG Document Pipeline
 
-The offline document ingestion process:
+Chunking and embedding are managed in the companion
+[mamai-medical-guidelines](https://github.com/TODO_ORG/mamai-medical-guidelines) repo,
+which publishes versioned bundles containing `embeddings.sqlite` and the 55 source PDFs.
 
-1. Curate medical guideline PDFs
-2. Extract text using [MMORE](https://github.com/swiss-ai/mmore)
-3. Chunk documents using the scripts in `rag/`
-4. Copy chunks to `app/assets/mamai_trim.txt`
-5. Uncomment `memorizeChunks()` in `RagPipeline.kt`, run the app (embeds chunks into SQLite)
-6. Re-comment `memorizeChunks()` and pull `embeddings.sqlite` from the device with `adb`
+To update the RAG assets in this repo, bump `rag-assets.lock.json` and run:
 
 ```bash
-cd rag
-pip install -r requirements.txt.txt
-python rag.py
+# Install from a local bundle (development):
+bash scripts/sync_rag_assets.sh --local /path/to/rag-bundle-<version>/
+
+# Install from a published GitHub release:
+bash scripts/sync_rag_assets.sh
 ```
+
+Then push to device (see `device_push/README.md`).
+
+**Producer pipeline** (in `mamai-medical-guidelines`):
+1. Curate PDFs → extract to markdown → chunk → embed (Gecko TFLite on cluster)
+2. `python scripts/package_bundle.py --version vX.Y.Z`
+3. Publish bundle as a GitHub release
+4. Update `rag-assets.lock.json` here with the new version + manifest checksum
 
 ## Model Files
 
