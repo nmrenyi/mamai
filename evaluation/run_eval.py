@@ -9,6 +9,7 @@ Usage:
 """
 
 import argparse
+import hashlib
 import json
 import os
 import time
@@ -40,6 +41,17 @@ DATASETS = {
 }
 
 CHECKPOINT_INTERVAL = 100
+
+
+def _file_sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        while True:
+            chunk = f.read(1024 * 1024)
+            if not chunk:
+                break
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def run_mcq(model, df, question_col, options_col, answer_col, max_tokens, max_questions,
@@ -296,6 +308,16 @@ def main():
     os.makedirs(run_dir, exist_ok=True)
 
     summary = []
+    rag_manifest = None
+    rag_manifest_sha256 = None
+    if args.rag:
+        manifest_path = os.path.join(args.rag, "manifest.json")
+        if os.path.exists(manifest_path):
+            with open(manifest_path) as f:
+                rag_manifest = json.load(f)
+            rag_manifest_sha256 = _file_sha256(manifest_path)
+            print(f"Loaded RAG manifest: {manifest_path}")
+
     for ds_name in dataset_names:
         filename, ds_type, q_col, opt_col, ans_col, ref_col = DATASETS[ds_name]
         filepath = os.path.join(args.data_dir, filename)
@@ -344,6 +366,26 @@ def main():
                 "max_tokens": args.max_tokens,
             },
         }
+        if rag_contexts is not None:
+            rag_context_metadata = {
+                "dir": os.path.abspath(args.rag) if args.rag else None,
+                "top_k": rag_data["config"].get("top_k"),
+                "n_questions": rag_data["config"].get("n_questions"),
+                "context_version": None,
+                "manifest_sha256": rag_manifest_sha256,
+            }
+            if rag_manifest is not None:
+                rag_context_metadata.update({
+                    "context_version": rag_manifest.get("context_version"),
+                    "created_at_utc": rag_manifest.get("created_at_utc"),
+                    "repo_ref": rag_manifest.get("repo_ref"),
+                    "repo_commit": rag_manifest.get("repo_commit"),
+                    "source_lock": rag_manifest.get("source_lock"),
+                    "artifacts": rag_manifest.get("artifacts"),
+                })
+            else:
+                rag_context_metadata["context_version"] = rag_data.get("metadata", {}).get("context_version")
+            metadata["rag_context"] = rag_context_metadata
 
         # Load previous checkpoint for resume
         # Priority: 1) own output file (auto-resume), 2) --resume dir

@@ -87,12 +87,23 @@ scp models/gemma-3n/gemma-3n-E4B-it-Q4_0.gguf $HOST:/mloscratch/users/$GASPAR/mo
   MODEL=gemma4-e4b \
   DATASETS=afrimedqa_mcq \
   MAX_QUESTIONS=5 \
-  RAG_DIR=/lightscratch/users/yiren/eval_output/rag_contexts
+  RAG_DIR=/lightscratch/users/yiren/eval_output/rag_contexts/<context-version>
 ```
 
 `submit_job.sh` automatically forwards the current local Git branch as `REPO_REF`
 unless you override it explicitly. Extra `KEY=VALUE` arguments are passed
 through to the cluster script as environment variables.
+
+**Versioned RAG context precompute:**
+```bash
+./cluster/submit_job.sh mamai-rag-precompute run_cluster_precompute.sh \
+  CONTEXT_VERSION=app-parity-v1-topk3-v1 \
+  DATASETS=all
+```
+
+This writes a versioned directory under `eval_output/rag_contexts/<context-version>/`
+with one JSON per dataset plus `manifest.json`. `+RAG` evaluation jobs should point
+`RAG_DIR` at that exact versioned directory, not at the mutable `rag_contexts/` root.
 
 **Interactive debugging:**
 ```bash
@@ -114,7 +125,16 @@ runai exec mamai-eval-debug -it bash
 Results saved as JSON in `results/`:
 ```json
 {
-  "metadata": { "model": "gemma3n-e4b", "dataset": "afrimedqa_mcq", ... },
+  "metadata": {
+    "model": "gemma3n-e4b",
+    "dataset": "afrimedqa_mcq",
+    "protocol_version": "app_parity_v1",
+    "rag_context": {
+      "dir": "/lightscratch/users/yiren/eval_output/rag_contexts/app-parity-v1-topk3-v1",
+      "context_version": "app-parity-v1-topk3-v1",
+      "manifest_sha256": "..."
+    }
+  },
   "aggregate_scores": { "accuracy": 0.45, "correct": 297, "total": 660 },
   "results": [
     { "question": "...", "model_response": "...", "correct": true, ... }
