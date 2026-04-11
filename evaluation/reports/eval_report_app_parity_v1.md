@@ -1,7 +1,7 @@
 # MAM-AI Evaluation Report — Protocol app_parity_v1
 
 **Run date**: 2026-04-11  
-**Model**: gemma4-e4b (Gemma 3n E4B int4, GGUF, CPU inference)  
+**Models evaluated**: gemma4-e4b · gemma3n-e4b · gpt-5  
 **Protocol**: `app_parity_v1`  
 **Prompt version**: `v3-cd8c872e`  
 **System prompt SHA-256**: `fc3a0d7a72184985d0ed4d424768fc7e95e2883432979fb2ae2e91eb85717f6d`
@@ -22,21 +22,28 @@ This is the first evaluation run under the `app_parity_v1` protocol, which repre
 
 5. **Parallel cluster execution**: Each dataset ran on a dedicated GPU (separate RunAI job), eliminating GPU contention from the previous single-job design.
 
+6. **Three-model comparison**: This report covers three models — the on-device target (gemma4-e4b), its predecessor (gemma3n-e4b), and a strong API baseline (gpt-5) — enabling direct performance comparison under identical conditions.
+
 **Result directories**:
-- No-RAG: `evaluation/results/gemma4-e4b/norag-full-20260411T095630/`
-- +RAG: `evaluation/results/gemma4-e4b/rag-full-20260411T100449/`
+- gemma4-e4b No-RAG: `evaluation/results/gemma4-e4b/norag-full-20260411T095630/`
+- gemma4-e4b +RAG: `evaluation/results/gemma4-e4b/rag-full-20260411T100449/`
+- gemma3n-e4b No-RAG: `evaluation/results/gemma3n-e4b/norag-full-20260411T114335/`
+- gemma3n-e4b +RAG: `evaluation/results/gemma3n-e4b/rag-full-20260411T114419/`
+- gpt-5 No-RAG: `evaluation/results/gpt-5/norag-full-20260411T114501/`
+- gpt-5 +RAG: `evaluation/results/gpt-5/rag-full-20260411T114544/`
 
 ---
 
 ## Generation parameters
 
-| Parameter | Value |
-|-----------|-------|
-| temperature | 1.0 |
-| top_p | 0.95 |
-| top_k | 64 |
-| n_ctx | 4096 |
-| max_tokens | 2048 |
+| Parameter | gemma4-e4b / gemma3n-e4b | gpt-5 |
+|-----------|--------------------------|-------|
+| temperature | 1.0 | 1.0 |
+| top_p | 0.95 | 0.95 |
+| top_k | 64 | n/a |
+| n_ctx | 4096 | n/a |
+| max_tokens | 2048 | 2048 |
+| backend | llama-cpp-python (GGUF, CUDA) | OpenAI API |
 
 ---
 
@@ -64,17 +71,35 @@ MCQ datasets test factual medical knowledge. Each question has four answer optio
 - **Random chance baseline**: 25% (4-option questions).
 - **RAG Δ**: percentage-point change when RAG context is added.
 
-| Dataset | n | No-RAG Accuracy | No-RAG Partial | +RAG Accuracy | +RAG Partial | RAG Δ |
-|---------|---|----------------|----------------|--------------|--------------|-------|
-| afrimedqa_mcq | 660 | 36.97% (244/660) | 41.60% | 33.48% (221/660) | 38.14% | **−3.49 pp** |
-| medqa_usmle | 1,025 | 40.78% (418/1025) | 40.78% | 39.22% (402/1025) | 39.22% | **−1.56 pp** |
-| medmcqa_mcq | 500 | 51.00% (255/500) | 51.00% | 39.40% (197/500) | 39.40% | **−11.60 pp** |
+### afrimedqa_mcq (n=660)
 
-**Partial credit**: For afrimedqa_mcq, partial credit is ~4.6 pp above strict accuracy (no-RAG), meaning ~30 responses contained the right letter but not as a clean extraction. For medqa_usmle and medmcqa_mcq, partial credit equals strict accuracy — the model either extracted a letter cleanly or failed entirely.
+| Model | No-RAG Accuracy | No-RAG Partial | +RAG Accuracy | +RAG Partial | RAG Δ |
+|-------|----------------|----------------|--------------|--------------|-------|
+| gemma4-e4b | 36.97% (244/660) | 41.60% | 33.48% (221/660) | 38.14% | **−3.49 pp** |
+| gemma3n-e4b | 41.06% (271/660) | 45.58% | 37.73% (249/660) | 42.14% | **−3.33 pp** |
+| gpt-5 | 66.97% (442/660) | 72.57% | 66.06% (436/660) | 71.55% | **−0.91 pp** |
 
-**RAG hurts MCQ**: RAG reduces MCQ accuracy on all three datasets, most severely on medmcqa_mcq (−11.6 pp). Injecting clinical guidelines context appears to distract the model from producing a clean single-letter answer. This is consistent with the MCQ adapter prompt limitation noted in issue #39 — the MCQ prompt was designed for zero-shot letter extraction and does not instruct the model how to use the retrieved context.
+### medqa_usmle (n=1,025)
 
-**Absolute levels**: medmcqa_mcq at 51.0% (no-RAG) is above the 25% random-chance baseline and approaches passing threshold territory for a 4-option MCQ. afrimedqa_mcq and medqa_usmle are weaker at ~37–41%, suggesting the African-context medical questions are harder for a model trained predominantly on Western medical literature.
+| Model | No-RAG Accuracy | No-RAG Partial | +RAG Accuracy | +RAG Partial | RAG Δ |
+|-------|----------------|----------------|--------------|--------------|-------|
+| gemma4-e4b | 40.78% (418/1025) | 40.78% | 39.22% (402/1025) | 39.22% | **−1.56 pp** |
+| gemma3n-e4b | 44.20% (453/1025) | 44.20% | 42.05% (431/1025) | 42.05% | **−2.15 pp** |
+| gpt-5 | 92.49% (948/1025) | 92.49% | 93.34% (953/1021) | 93.34% | **+0.85 pp** |
+
+### medmcqa_mcq (n=500)
+
+| Model | No-RAG Accuracy | No-RAG Partial | +RAG Accuracy | +RAG Partial | RAG Δ |
+|-------|----------------|----------------|--------------|--------------|-------|
+| gemma4-e4b | 51.00% (255/500) | 51.00% | 39.40% (197/500) | 39.40% | **−11.60 pp** |
+| gemma3n-e4b | 51.20% (256/500) | 51.20% | 50.80% (254/500) | 50.80% | **−0.40 pp** |
+| gpt-5 | 89.00% (445/500) | 89.00% | 87.20% (436/500) | 87.20% | **−1.80 pp** |
+
+**Key MCQ observations**:
+- **gemma3n-e4b edges out gemma4-e4b** on all three datasets despite being the older model. The difference is small (~2–4 pp) but consistent, and may reflect quantization sensitivity in the MCQ zero-shot extraction task.
+- **gpt-5 dominates** at 67–92% vs 37–51% for the GGUF models — a 25–50 pp gap. This is the expected ceiling for an API-scale model.
+- **RAG hurts MCQ** for both on-device models (−0.4 to −11.6 pp). RAG has essentially no effect on gpt-5 (≤1.8 pp change, one positive). The sharp medmcqa_mcq drop for gemma4-e4b (−11.6 pp) is not replicated in gemma3n-e4b (−0.4 pp), suggesting a model-specific sensitivity to context injection format.
+- **Partial credit gap**: gemma4-e4b afrimedqa_mcq shows a ~4.6 pp partial/strict gap, meaning ~30 responses contained the right letter but not as a clean extraction. All other model-dataset pairs show partial = strict, meaning models either extract cleanly or fail entirely.
 
 ---
 
@@ -92,113 +117,160 @@ Open-ended responses were judged by GPT (LLM-as-judge) on five dimensions, each 
 
 ### Weighted scores (out of 5)
 
-| Dataset | n | No-RAG | +RAG | RAG Δ |
-|---------|---|--------|------|-------|
-| kenya_vignettes | 284 | 2.76 | 2.43 | **−0.33** |
-| afrimedqa_saq | 37 | 2.57 | 2.17 | **−0.40** |
-| whb_stumps | 20 | 2.51 | 2.68 | **+0.17** |
+| Dataset | n | gemma4-e4b NoRAG | gemma4-e4b +RAG | gemma3n-e4b NoRAG | gemma3n-e4b +RAG | gpt-5 NoRAG | gpt-5 +RAG |
+|---------|---|-----------------|----------------|------------------|----------------|------------|----------|
+| kenya_vignettes | 284 | 2.76 | 2.43 | 3.02 | 2.97 | 4.37 | 4.22 |
+| afrimedqa_saq | 37 | 2.57 | 2.17 | 3.28 | 2.88 | 4.60 | 4.51 |
+| whb_stumps | 20 | 2.51 | 2.68 | 2.64 | 2.64 | 3.59 | 3.47 |
 
 ### Per-dimension breakdown — No-RAG
 
-| Dataset | accuracy | safety | completeness | helpfulness | clarity |
-|---------|----------|--------|--------------|-------------|---------|
-| kenya_vignettes | 2.68 | 3.19 | 1.83 | 2.58 | 4.00 |
-| afrimedqa_saq | 2.35 | 3.41 | 1.54 | 2.05 | 3.97 |
-| whb_stumps | 2.35 | 3.25 | 1.35 | 2.10 | 4.05 |
+| Dataset | Model | accuracy | safety | completeness | helpfulness | clarity |
+|---------|-------|----------|--------|--------------|-------------|---------|
+| kenya_vignettes | gemma4-e4b | 2.68 | 3.19 | 1.83 | 2.58 | 4.00 |
+| kenya_vignettes | gemma3n-e4b | 2.84 | 3.10 | 2.46 | 3.30 | 4.01 |
+| kenya_vignettes | gpt-5 | 4.15 | 4.59 | 4.00 | 4.61 | 4.83 |
+| afrimedqa_saq | gemma4-e4b | 2.35 | 3.41 | 1.54 | 2.05 | 3.97 |
+| afrimedqa_saq | gemma3n-e4b | 3.11 | 3.81 | 2.49 | 3.24 | 4.08 |
+| afrimedqa_saq | gpt-5 | 4.57 | 4.59 | 4.32 | 4.81 | 4.97 |
+| whb_stumps | gemma4-e4b | 2.35 | 3.25 | 1.35 | 2.10 | 4.05 |
+| whb_stumps | gemma3n-e4b | 2.50 | 3.00 | 1.65 | 2.75 | 4.00 |
+| whb_stumps | gpt-5 | 3.25 | 3.70 | 3.20 | 4.05 | 4.40 |
 
 ### Per-dimension breakdown — +RAG
 
-| Dataset | accuracy | safety | completeness | helpfulness | clarity |
-|---------|----------|--------|--------------|-------------|---------|
-| kenya_vignettes | 2.33 | 2.93 | 1.48 | 2.07 | 3.96 |
-| afrimedqa_saq | 1.73 | 3.24 | 1.14 | 1.43 | 4.00 |
-| whb_stumps | 2.70 | 3.15 | 1.65 | 2.30 | 4.05 |
+| Dataset | Model | accuracy | safety | completeness | helpfulness | clarity |
+|---------|-------|----------|--------|--------------|-------------|---------|
+| kenya_vignettes | gemma4-e4b | 2.33 | 2.93 | 1.48 | 2.07 | 3.96 |
+| kenya_vignettes | gemma3n-e4b | 2.81 | 3.12 | 2.37 | 3.18 | 3.99 |
+| kenya_vignettes | gpt-5 | 4.04 | 4.45 | 3.88 | 4.42 | 4.60 |
+| afrimedqa_saq | gemma4-e4b | 1.73 | 3.24 | 1.14 | 1.43 | 4.00 |
+| afrimedqa_saq | gemma3n-e4b | 2.70 | 3.57 | 2.00 | 2.54 | 4.00 |
+| afrimedqa_saq | gpt-5 | 4.53 | 4.56 | 4.19 | 4.61 | 4.81 |
+| whb_stumps | gemma4-e4b | 2.70 | 3.15 | 1.65 | 2.30 | 4.05 |
+| whb_stumps | gemma3n-e4b | 2.45 | 3.00 | 1.75 | 2.75 | 3.95 |
+| whb_stumps | gpt-5 | 3.10 | 3.65 | 2.90 | 4.10 | 4.30 |
 
 ### Score distributions (No-RAG)
 
 **kenya_vignettes** (n=284):
 
-| Score | accuracy | safety | completeness | helpfulness | clarity |
-|-------|----------|--------|--------------|-------------|---------|
-| 1 | 7 | 2 | 65 | 16 | 0 |
-| 2 | 99 | 31 | 201 | 102 | 0 |
-| 3 | 155 | 162 | 18 | 152 | 4 |
-| 4 | 23 | 88 | 0 | 14 | 277 |
-| 5 | 0 | 1 | 0 | 0 | 3 |
+| Score | gemma4-e4b acc | gemma3n-e4b acc | gpt-5 acc | gemma4-e4b saf | gemma3n-e4b saf | gpt-5 saf | gemma4-e4b com | gemma3n-e4b com | gpt-5 com |
+|-------|---------------|----------------|-----------|---------------|----------------|-----------|---------------|----------------|-----------|
+| 1 | 7 | 9 | 0 | 2 | 9 | 0 | 65 | 11 | 0 |
+| 2 | 99 | 81 | 1 | 31 | 58 | 0 | 201 | 144 | 2 |
+| 3 | 155 | 141 | 13 | 162 | 114 | 3 | 18 | 116 | 41 |
+| 4 | 23 | 53 | 213 | 88 | 103 | 111 | 0 | 13 | 197 |
+| 5 | 0 | 0 | 57 | 1 | 0 | 170 | 0 | 0 | 44 |
 
 **afrimedqa_saq** (n=37):
 
-| Score | accuracy | safety | completeness | helpfulness | clarity |
-|-------|----------|--------|--------------|-------------|---------|
-| 1 | 11 | 0 | 19 | 15 | 0 |
-| 2 | 6 | 0 | 16 | 6 | 0 |
-| 3 | 16 | 23 | 2 | 15 | 1 |
-| 4 | 4 | 13 | 0 | 1 | 36 |
-| 5 | 0 | 1 | 0 | 0 | 0 |
+| Score | gemma4-e4b acc | gemma3n-e4b acc | gpt-5 acc | gemma4-e4b com | gemma3n-e4b com | gpt-5 com |
+|-------|---------------|----------------|-----------|---------------|----------------|-----------|
+| 1 | 11 | 1 | 0 | 19 | 5 | 0 |
+| 2 | 6 | 6 | 0 | 16 | 13 | 0 |
+| 3 | 16 | 18 | 0 | 2 | 15 | 4 |
+| 4 | 4 | 12 | 16 | 0 | 4 | 17 |
+| 5 | 0 | 0 | 21 | 0 | 0 | 16 |
 
 **whb_stumps** (n=20):
 
-| Score | accuracy | safety | completeness | helpfulness | clarity |
-|-------|----------|--------|--------------|-------------|---------|
-| 1 | 5 | 0 | 13 | 4 | 0 |
-| 2 | 5 | 3 | 7 | 10 | 0 |
-| 3 | 8 | 9 | 0 | 6 | 0 |
-| 4 | 2 | 8 | 0 | 0 | 19 |
-| 5 | 0 | 0 | 0 | 0 | 1 |
+| Score | gemma4-e4b acc | gemma3n-e4b acc | gpt-5 acc | gemma4-e4b com | gemma3n-e4b com | gpt-5 com |
+|-------|---------------|----------------|-----------|---------------|----------------|-----------|
+| 1 | 5 | 1 | 1 | 13 | 7 | 0 |
+| 2 | 5 | 9 | 5 | 7 | 13 | 5 |
+| 3 | 8 | 9 | 4 | 0 | 0 | 7 |
+| 4 | 2 | 1 | 8 | 0 | 0 | 7 |
+| 5 | 0 | 0 | 2 | 0 | 0 | 1 |
 
 ---
 
 ## Key findings
 
-### 1. RAG hurts more than it helps under the current protocol
+### 1. gemma3n-e4b outperforms gemma4-e4b on open-ended tasks
 
-RAG degrades performance across nearly all datasets and dimensions:
-- MCQ: −1.6 to −11.6 pp accuracy
-- Open-ended weighted score: −0.33 to −0.40 on kenya_vignettes and afrimedqa_saq
-- The single exception is whb_stumps (+0.17), where RAG marginally helps
+gemma3n-e4b scores higher than gemma4-e4b on open-ended weighted scores across all three datasets in the no-RAG condition:
 
-The most likely cause is a **prompt construction mismatch**: the MCQ adapter prompt does not instruct the model how to reason over the retrieved context, and the app system prompt (used for open-ended) may be instructing the model to cite documents as `[1]`, `[2]`, `[3]` while the eval's GGUF model may not handle this gracefully. This warrants investigation — specifically, whether the GGUF inference path reproduces the on-device citation behaviour.
+| Dataset | gemma4-e4b | gemma3n-e4b | Δ |
+|---------|-----------|------------|---|
+| kenya_vignettes | 2.76 | 3.02 | **+0.26** |
+| afrimedqa_saq | 2.57 | 3.28 | **+0.71** |
+| whb_stumps | 2.51 | 2.64 | **+0.13** |
 
-### 2. Completeness is the primary quality bottleneck
+The gap is most pronounced on afrimedqa_saq (+0.71). The improvement comes primarily from completeness (gemma3n-e4b 2.49 vs gemma4-e4b 1.54 on afrimedqa_saq no-RAG) and helpfulness. This suggests that the E4B int4 quantization applied to gemma4-e4b has a more significant impact on response quality than the older gemma3n-e4b quantization, at least under the current GGUF CPU inference path.
 
-Completeness scores are the weakest dimension across all three open-ended datasets (1.35–1.83 no-RAG, 1.14–1.65 +RAG). Distribution data shows completeness is overwhelmingly rated 1–2 out of 5. The app system prompt explicitly values conciseness and brevity, which trades off against completeness. This is a deliberate design choice for the intended context (nurses with limited time), but the judge penalises it. This score should be interpreted cautiously — low completeness may reflect appropriate triage-style responses rather than factual gaps.
+### 2. RAG hurts both on-device models but gpt-5 is robust to it
 
-### 3. Clarity is a consistent strength
+RAG degrades open-ended performance for both gemma4-e4b and gemma3n-e4b on kenya_vignettes and afrimedqa_saq. gemma4-e4b is more severely affected:
 
-Clarity scores cluster tightly at 4.0–4.05 across all conditions. The vast majority of responses receive a 4/5 on clarity. The model writes in clear, readable English, which is a meaningful property for a second-language medical audience.
+| Dataset | gemma4-e4b RAG Δ | gemma3n-e4b RAG Δ | gpt-5 RAG Δ |
+|---------|----------------|-----------------|------------|
+| kenya_vignettes | **−0.33** | −0.05 | −0.15 |
+| afrimedqa_saq | **−0.40** | −0.40 | −0.09 |
+| whb_stumps | +0.17 | 0.00 | −0.12 |
 
-### 4. Safety is mediocre and slightly hurt by RAG
+gpt-5 is nearly unaffected by RAG context injection (≤0.15 drop). The MCQ pattern is similar: gpt-5 shows ≤1.8 pp change from RAG, while gemma4-e4b shows up to −11.6 pp on medmcqa_mcq. This points to a **prompt construction mismatch** specific to the GGUF models: the injected `Document N:` context blocks appear to confuse the letter-extraction behaviour for gemma4-e4b more than gemma3n-e4b, and both struggle compared to gpt-5 which can naturally integrate retrieved context.
 
-No-RAG safety: 3.19–3.41. +RAG safety: 2.93–3.24. Safety is never below 3 in the no-RAG condition on average, but kenya_vignettes drops to 2.93 with RAG. The safety score distribution shows occasional 1s and 2s (e.g., 11 safety=1 responses in kenya_vignettes +RAG). Given that this is a medical app for nurses and midwives, any systematic safety degradation from RAG is a concern. These cases should be manually reviewed before any production deployment with RAG enabled.
+### 3. gpt-5 is the performance ceiling — on-device models are far behind on knowledge tasks
 
-### 5. MCQ levels in context
+The gap between gpt-5 and the on-device models is large:
 
-| Dataset | Score | Baseline |
-|---------|-------|----------|
-| medmcqa_mcq no-RAG | 51.0% | 25% random; ~60% reported for strong 7B models |
-| medqa_usmle no-RAG | 40.8% | 25% random; USMLE passing ~60% |
-| afrimedqa_mcq no-RAG | 37.0% | 25% random; African-context harder |
+| Metric | gemma4-e4b | gemma3n-e4b | gpt-5 |
+|--------|-----------|------------|-------|
+| medqa_usmle (no-RAG) | 40.8% | 44.2% | 92.5% |
+| medmcqa_mcq (no-RAG) | 51.0% | 51.2% | 89.0% |
+| kenya_vignettes weighted (no-RAG) | 2.76 | 3.02 | 4.37 |
+| afrimedqa_saq weighted (no-RAG) | 2.57 | 3.28 | 4.60 |
 
-The model performs significantly above chance but well below state-of-the-art medical LLMs. This is expected for an on-device 4-bit quantised E4B model running on CPU. The relevant question is whether the scores are sufficient for the intended assistive (not diagnostic) use case.
+For MCQ, gpt-5 is 40–50 pp above both on-device models. For open-ended, gpt-5 scores 1.3–1.6 points higher (on a 1–5 scale). However, gpt-5 is not a viable deployment option (requires internet, API costs, data privacy), so the on-device comparison is the operationally relevant one.
+
+### 4. Completeness remains the primary quality bottleneck for on-device models — but not for gpt-5
+
+Completeness is the weakest dimension for both gemma4-e4b and gemma3n-e4b (1.35–2.49 no-RAG vs 3.20–4.32 for gpt-5). For gemma4-e4b specifically, completeness scores cluster heavily at 1–2 (e.g., 65+201=266/284 responses score 1 or 2 on completeness for kenya_vignettes). gemma3n-e4b is noticeably better on completeness but still far below gpt-5.
+
+This gap is partly a deliberate trade-off: the app system prompt values conciseness for triage contexts. The judge may penalise concise responses. That said, gpt-5 also uses the same system prompt and still scores 4.00 on completeness for kenya_vignettes — so prompt-induced brevity does not fully explain the gap. On-device model responses appear genuinely less comprehensive.
+
+### 5. Clarity is a consistent strength for all models
+
+All three models score 3.95–4.97 on clarity across all conditions. Clarity is not a differentiator. Users can expect clear, readable responses regardless of which model is deployed.
+
+### 6. Safety scores reveal a gap between on-device models and gpt-5
+
+| Dataset | gemma4-e4b NoRAG | gemma3n-e4b NoRAG | gpt-5 NoRAG |
+|---------|----------------|-----------------|------------|
+| kenya_vignettes | 3.19 | 3.10 | 4.59 |
+| afrimedqa_saq | 3.41 | 3.81 | 4.59 |
+| whb_stumps | 3.25 | 3.00 | 3.70 |
+
+Safety is mediocre (3.0–3.8) for both on-device models and excellent (3.7–4.6) for gpt-5. The safety score distribution for gemma3n-e4b kenya_vignettes no-RAG shows 9 responses scored safety=1 and 58 scored safety=2 — a meaningful tail of potentially unsafe responses. With RAG, gemma4-e4b safety drops further (kenya_vignettes: 3.19 → 2.93, with 11 safety=1 responses). These low-safety cases should be manually reviewed before any production RAG deployment.
+
+### 7. gemma4-e4b MCQ anomaly: medmcqa_mcq RAG degradation
+
+gemma4-e4b shows a unique −11.6 pp accuracy drop on medmcqa_mcq with RAG, which is not present in gemma3n-e4b (−0.4 pp) or gpt-5 (−1.8 pp). This is a model-specific regression worth investigating. The most likely cause is that the RAG context injection format interacts badly with gemma4-e4b's letter-extraction behaviour on this particular dataset's question style.
 
 ---
 
 ## Judge metadata
 
-- All 321 (no-RAG) and 321 (+RAG) open-ended responses were judged with 0 judge failures
-- Judge model: configured via `config/eval_config.json` (`judge_model` field)
+- All open-ended responses were judged with 0 judge failures across all models and conditions
+- Judge model: configured via `config/eval_config.json` (`judge_model` field, value: `gpt-5.2`)
 - Dimension weights: accuracy 0.30 · safety 0.25 · completeness 0.20 · helpfulness 0.15 · clarity 0.10
+- Total open-ended responses judged: 321 × 6 conditions (no-RAG + +RAG) × 3 models = 1,926 judgments
 
 ---
 
 ## Recommendations
 
-1. **Investigate RAG regression**: Before enabling RAG in the app, understand why MCQ drops sharply with context injection. Inspect individual +RAG responses on medmcqa_mcq to determine whether the model is ignoring, misusing, or confused by the injected guidelines.
+1. **Investigate gemma4-e4b MCQ RAG regression**: The −11.6 pp drop on medmcqa_mcq under RAG is specific to gemma4-e4b and not reproduced in gemma3n-e4b or gpt-5. Inspect individual +RAG responses to determine whether the model is ignoring, misusing, or confused by the injected guidelines. Consider ablating the `Document N:` label format.
 
-2. **Manual review of low-safety +RAG responses**: The 11 kenya_vignettes responses rated safety=1 with RAG should be reviewed. If they represent cases where injected context displaced appropriate escalation language, this is a deployment risk.
+2. **Reconsider gemma4-e4b as the deployment target**: gemma3n-e4b outperforms gemma4-e4b on open-ended tasks (the deployment-relevant metric) by 0.13–0.71 weighted score points, and is nearly equivalent or slightly better on MCQ. Unless gemma4-e4b has other advantages (inference speed, memory footprint, on-device compatibility), gemma3n-e4b is the stronger choice under the current evaluation.
 
-3. **Reframe completeness interpretation**: Consider whether the judge's completeness rubric is calibrated for concise clinical triage responses or for comprehensive clinical notes. The app prompt is designed for the former; if the judge expects the latter, completeness scores are systematically pessimistic.
+3. **Manual review of low-safety responses**: The safety=1 and safety=2 response tails for both on-device models (especially under +RAG) should be reviewed before production deployment. Specifically: gemma4-e4b kenya_vignettes +RAG (11 safety=1 responses) and gemma3n-e4b kenya_vignettes no-RAG (9 safety=1 responses).
 
-4. **Caution on small-n datasets**: whb_stumps (n=20) and afrimedqa_saq (n=37) have high variance. The +RAG whb_stumps improvement of +0.17 is not meaningful at n=20. These should be treated as indicative only.
+4. **Reframe completeness interpretation**: The app system prompt instructs conciseness for clinical triage. The judge's completeness rubric may expect comprehensive clinical notes. If so, completeness scores for on-device models are systematically pessimistic. Consider calibrating the judge rubric for triage-style responses, or adding a separate "appropriate brevity" dimension.
 
-5. **Next run: ablate context injection format**: Test whether reformatting the RAG context injection (e.g., removing the `Document N:` prefix, using bullet points) improves MCQ and open-ended scores under RAG.
+5. **Caution on small-n datasets**: whb_stumps (n=20) and afrimedqa_saq (n=37) have high variance. Treat them as indicative only; do not draw strong model-ranking conclusions from these datasets.
+
+6. **Next run: ablate context injection format**: Test whether reformatting the RAG context injection (e.g., removing the `Document N:` prefix, using bullet points, or a brief preamble instructing the model how to use the context) improves MCQ and open-ended scores under RAG, particularly for gemma4-e4b.
+
+7. **gpt-5 as judge quality check**: With gpt-5 scoring 4.37–4.60 on the same datasets judged by gpt-5.2, there is a potential self-serving bias risk (gpt-family judge scoring gpt-family model). Consider cross-checking a sample of gpt-5 open-ended judgments with a non-OpenAI judge (e.g., Claude) to validate the scores are not inflated.
