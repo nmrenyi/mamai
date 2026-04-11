@@ -69,15 +69,27 @@ class MainActivity : FlutterActivity() {
 
     /**
      * Opens a PDF from getExternalFilesDir at the given page using the device's
-     * default PDF viewer via FileProvider. The [source] parameter is the filename
-     * stem (e.g. "WHO_PositiveBirth_2018"); the file is expected at
-     * getExternalFilesDir(null)/WHO_PositiveBirth_2018.pdf.
+     * default PDF viewer via FileProvider. The [source] parameter is the raw SOURCE
+     * stem from the chunk metadata (e.g. "WHO_Abortion Care_2022"). It is normalized
+     * to a safe filename before resolving the file, matching the rule used by
+     * package_bundle.py in the mamai-medical-guidelines producer repo:
+     *   - replace any char that is not alphanumeric, '-', or '.' with '_'
+     *   - collapse consecutive underscores
+     *   - strip leading/trailing underscores
      *
+     * The file is expected at getExternalFilesDir(null)/<normalizedSource>.pdf.
      * Returns true if an app was found to handle the Intent, false otherwise.
      */
+    private fun normalizeSourceId(source: String): String =
+        source
+            .replace(Regex("[^A-Za-z0-9\\-.]"), "_")
+            .replace(Regex("_+"), "_")
+            .trim('_')
+
     private fun openPdf(source: String, page: Int): Boolean {
         val baseFolder = application.getExternalFilesDir(null) ?: return false
-        val pdfFile = File(baseFolder, "$source.pdf")
+        val normalizedSource = normalizeSourceId(source)
+        val pdfFile = File(baseFolder, "$normalizedSource.pdf")
 
         if (!pdfFile.exists()) {
             Log.w("mam-ai", "[PDF] file not found: ${pdfFile.absolutePath}")
@@ -90,7 +102,7 @@ class MainActivity : FlutterActivity() {
             pdfFile,
         )
 
-        Log.d("mam-ai", "[PDF] opening $source.pdf at page $page (0-idx=${page - 1})")
+        Log.d("mam-ai", "[PDF] opening $normalizedSource.pdf (source=$source) at page $page")
 
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "application/pdf")
