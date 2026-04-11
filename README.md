@@ -133,10 +133,13 @@ bash scripts/sync_rag_assets.sh
 # Optional: use aria2c for faster download/progress output
 bash scripts/sync_rag_assets.sh --aria2c
 
+# Download Gemma 4 + Gecko model files from HuggingFace into device_push/models/
+bash scripts/sync_models.sh
+
 # Push the staged bundle to a connected Android device
 bash scripts/push_to_device.sh
 
-# Also push Gecko + sentencepiece.model
+# Push Gecko + sentencepiece.model (and optionally Gemma)
 bash scripts/push_to_device.sh --models
 ```
 
@@ -156,16 +159,16 @@ successful push. See `device_push/README.md` for details.
 
 ## Model Files
 
-Downloaded on first launch from a temporary VPS and stored on-device:
+Downloaded on first launch and stored on-device. All files are fetched directly from public HuggingFace repos — no authentication required.
 
 | File | Description | Source |
 |---|---|---|
-| `gemma-3n-E4B-it-int4.task` | Gemma 3n E4B LLM (int4 quantized, 4.1 GB) | [Google](https://ai.google.dev/gemma) |
-| `Gecko_1024_quant.tflite` | Gecko embedding model (768-dim) | [litert-community/Gecko-110m-en](https://huggingface.co/litert-community/Gecko-110m-en) |
-| `sentencepiece.model` | Gecko tokenizer | [litert-community/Gecko-110m-en](https://huggingface.co/litert-community/Gecko-110m-en) |
-| `embeddings.sqlite` | Pre-computed embeddings for 2,826 guideline chunks | Generated in [mamai-medical-guidelines](https://github.com/nmrenyi/mamai-medical-guidelines) |
+| `gemma-4-E4B-it.litertlm` | Gemma 4 E4B LLM (int4 quantized, 3.65 GB) | [litert-community/gemma-4-E4B-it-litert-lm](https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm) |
+| `Gecko_1024_quant.tflite` | Gecko embedding model (768-dim, 146 MB) | [litert-community/Gecko-110m-en](https://huggingface.co/litert-community/Gecko-110m-en) |
+| `sentencepiece.model` | Gecko tokenizer (794 KB) | [litert-community/Gecko-110m-en](https://huggingface.co/litert-community/Gecko-110m-en) |
+| `embeddings.sqlite` | Pre-computed embeddings for guideline chunks | [mamai-medical-guidelines releases](https://github.com/nmrenyi/mamai-medical-guidelines/releases) |
 
-> **Note:** Gemma requires license acceptance before use. The temporary VPS hosting these files will only remain up during the Kaggle challenge judging period. To self-host, update the download URLs in `intro_page.dart` and replace `app/cert.pem` with your server's TLS certificate.
+> **Note:** Gemma requires license acceptance before use. The app presents the license dialog before downloading. Download URLs are defined in `_fileUrls` in `app/lib/screens/intro_page.dart` — update `embeddings.sqlite` URL there when bumping `rag-assets.lock.json` to a new RAG bundle version.
 
 ## Evaluation
 
@@ -218,15 +221,6 @@ source .venv/bin/activate
 pip install -r requirements.txt
 python main_training.py
 ```
-
-## Self-Hosting Model Files
-
-To serve the model files from your own server:
-
-1. Host the four model files behind nginx (or any HTTPS server)
-2. Update the download URLs in `app/lib/screens/intro_page.dart`
-3. Replace `app/cert.pem` with your server's TLS certificate
-4. Rebuild the APK
 
 ## License
 

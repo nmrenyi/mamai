@@ -4,10 +4,8 @@ import 'dart:io' as io;
 
 import 'package:app/locale_notifier.dart';
 import 'package:dio/dio.dart';
-import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:app/l10n/app_localizations.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -53,40 +51,34 @@ class _IntroPageState extends State<IntroPage> {
 
   Map<String, DownloadInProgress> downloads = HashMap();
 
-  /// Downloads a file from our remote server (easiest way for us to upload
-  /// everything)
-  downloadFileFromServer(String baseUrl, String filename) async {
+  // Download URLs for each model file.
+  // - Model files: public HuggingFace repos, no auth required.
+  // - embeddings.sqlite: published as a separate release asset alongside the
+  //   RAG bundle in mamai-medical-guidelines. Update this URL when bumping
+  //   rag-assets.lock.json to a new bundle version.
+  static const Map<String, String> _fileUrls = {
+    "gemma-4-E4B-it.litertlm":
+        "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm",
+    "Gecko_1024_quant.tflite":
+        "https://huggingface.co/litert-community/Gecko-110m-en/resolve/main/Gecko_1024_quant.tflite",
+    "sentencepiece.model":
+        "https://huggingface.co/litert-community/Gecko-110m-en/resolve/main/sentencepiece.model",
+    "embeddings.sqlite":
+        "https://github.com/nmrenyi/mamai-medical-guidelines/releases/download/v1.0.0/embeddings.sqlite",
+  };
+
+  /// Downloads a model file from HuggingFace or a GitHub release to the device.
+  downloadFile(String filename) async {
     Directory directory = await downloadDir();
 
     final download = DownloadInProgress(total: 1, current: 0, finished: false);
     downloads[filename] = download;
 
-    // We are using a self-signed cert so to trust only that we create our own
-    // dio HTTP client and check that the cert matches our self-signed cert
-    String serverCertPem = (await rootBundle.loadString(
-      'cert.pem',
-    )).replaceAll("\n", "").replaceAll("\r", "").replaceAll(" ", "").trim();
-
     final dio = Dio();
-    (dio.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
-      final client = HttpClient();
-      client.badCertificateCallback = (cert, host, port) {
-        return cert.pem.replaceAll("\n", "").replaceAll(" ", "").trim() ==
-            serverCertPem;
-      };
-      return client;
-    };
 
-    // TODO basic auth - we can gate the model if required with a password
-    // String basicAuthHeader = 'Basic ${base64.encode(utf8.encode(basicAuth))}'
-
-    // Send the request
     await dio.download(
-      baseUrl + filename,
+      _fileUrls[filename]!,
       '${directory.path}/$filename',
-      options: Options(
-        // headers: {"authorization": basicAuthHeader}, // TODO basic auth
-      ),
       onReceiveProgress: (current, int total) {
         setState(() {
           download.current = current;
@@ -250,7 +242,7 @@ class _IntroPageState extends State<IntroPage> {
           var accepted = await promptLicense(context, l10n);
           if (accepted ?? false) {
             for (var filename in files) {
-              downloadFileFromServer("https://152.67.91.164/", filename);
+              downloadFile(filename);
             }
           }
         },
