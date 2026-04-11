@@ -19,6 +19,7 @@ from tqdm import tqdm
 
 from inference import load_model
 from prompts import (TEMPERATURE, TOP_P, TOP_K, N_CTX, PROMPT_VERSION,
+                     PROTOCOL_VERSION, SPEC_SHA256,
                      build_mcq_prompt, build_mcq_messages, build_open_prompt, build_open_messages,
                      build_rag_mcq_prompt, build_rag_mcq_messages, build_rag_open_prompt, build_rag_open_messages)
 from scoring import JUDGE_DIMENSIONS, _parse_answer_set, create_judge_client, extract_letters, judge_response, score_mcq
@@ -326,7 +327,9 @@ def main():
             "dataset_type": ds_type,
             "n_questions": min(len(df), args.max_questions or len(df)),
             "timestamp": run_timestamp,
+            "protocol_version": PROTOCOL_VERSION,
             "prompt_version": PROMPT_VERSION,
+            "spec_sha256": SPEC_SHA256,
             "rag": rag_contexts is not None,
             "generation_params": {
                 "temperature": TEMPERATURE,
