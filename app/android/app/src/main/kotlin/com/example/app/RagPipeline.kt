@@ -49,8 +49,9 @@ class RagPipeline(application: Application) {
         application.assets.open("system_sw.txt").bufferedReader().use { it.readText() }
     private val runtimeConfig: JSONObject =
         JSONObject(application.assets.open("runtime_config.json").bufferedReader().use { it.readText() })
-    private val generationConfig = runtimeConfig.getJSONObject("generation")
-    private val retrievalConfig  = runtimeConfig.getJSONObject("retrieval")
+    private val generationConfig      = runtimeConfig.getJSONObject("generation")
+    private val retrievalConfig       = runtimeConfig.getJSONObject("retrieval")
+    private val contextInjectionConfig = runtimeConfig.getJSONObject("context_injection")
 
     @Volatile private lateinit var engine: Engine
 
@@ -227,10 +228,13 @@ class RagPipeline(application: Application) {
 
             val systemInstructions = if (language == "sw") systemInstructionsSw else systemInstructionsEn
             val contextLabel = if (language == "sw")
-                "MUKTADHA UNAOHUSIANA KUTOKA KWA MIONGOZO YA KIMATIBABU:"
+                contextInjectionConfig.getString("context_label_sw")
             else
-                "RELEVANT CONTEXT FROM MEDICAL GUIDELINES:"
-            val questionLabel = if (language == "sw") "Swali:" else "Question:"
+                contextInjectionConfig.getString("context_label_en")
+            val questionLabel = if (language == "sw")
+                contextInjectionConfig.getString("question_label_sw")
+            else
+                contextInjectionConfig.getString("question_label_en")
 
             // Build the final user message: retrieved context (if any) followed by the question.
             // LiteRT-LM handles the chat template internally, so we only supply the content.

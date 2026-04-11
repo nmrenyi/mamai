@@ -45,6 +45,8 @@ TOP_P: float = _runtime["generation"]["top_p"]
 TOP_K: int = _runtime["generation"]["top_k"]
 RETRIEVAL_TOP_K: int = _runtime["retrieval"]["top_k"]
 RETRIEVAL_THRESHOLD: float = _runtime["retrieval"]["similarity_threshold"]
+CONTEXT_LABEL: str = _runtime["context_injection"]["context_label_en"]
+QUESTION_LABEL: str = _runtime["context_injection"]["question_label_en"]
 
 # eval-only: LiteRT-LM manages context window internally, no app equivalent
 N_CTX = 4096
@@ -111,8 +113,8 @@ def build_rag_mcq_messages(question: str, options: str, context: str) -> dict:
     return {
         "system": MCQ_SYSTEM_PROMPT,
         "user": (
-            f"RELEVANT CONTEXT FROM MEDICAL GUIDELINES:\n{context}\n\n"
-            f"Question: {question}\nOptions:\n{options}"
+            f"{CONTEXT_LABEL}\n{context}\n\n"
+            f"{QUESTION_LABEL} {question}\nOptions:\n{options}"
         ),
     }
 
@@ -122,8 +124,8 @@ def build_rag_open_messages(question: str, context: str) -> dict:
     return {
         "system": OPEN_SYSTEM_PROMPT,
         "user": (
-            f"RELEVANT CONTEXT FROM MEDICAL GUIDELINES:\n{context}\n\n"
-            f"Question: {question}"
+            f"{CONTEXT_LABEL}\n{context}\n\n"
+            f"{QUESTION_LABEL} {question}"
         ),
     }
 
