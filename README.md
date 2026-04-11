@@ -131,11 +131,22 @@ which publishes versioned bundles containing `embeddings.sqlite` and the 55 sour
 To update the RAG assets in this repo, bump `rag-assets.lock.json` and run:
 
 ```bash
-# Sync the pinned GitHub release from rag-assets.lock.json:
+# Sync the pinned GitHub release into the local cache + device_push/
 bash scripts/sync_rag_assets.sh
+
+# Push the staged bundle to a connected Android device
+bash scripts/push_to_device.sh
+
+# Also push Gecko + sentencepiece.model
+bash scripts/push_to_device.sh --models
 ```
 
-Then push to device (see `device_push/README.md`).
+`sync_rag_assets.sh` keeps a local bundle cache in `_scratch/rag_bundle_cache/`
+and rebuilds the single active staged view in `device_push/`. The checked push
+script verifies that the staged bundle still matches `rag-assets.lock.json`
+before copying files to the device, then writes `rag_bundle_deployed.json` on
+the device only after a full successful push. See `device_push/README.md` for
+details.
 
 **Producer pipeline** (in `mamai-medical-guidelines`):
 1. Curate PDFs → extract to markdown → chunk → embed (Gecko TFLite on cluster)

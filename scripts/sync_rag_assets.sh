@@ -1,23 +1,26 @@
 #!/usr/bin/env bash
-# sync_rag_assets.sh — Fetch the pinned RAG bundle and install it into device_push/
+# sync_rag_assets.sh — Fetch the pinned RAG bundle into a local cache and
+# stage the active version into device_push/
 #
 # Reads rag-assets.lock.json from the repo root, downloads the bundle,
-# verifies checksums, and installs:
+# caches it under _scratch/rag_bundle_cache/<version>/, verifies checksums,
+# and installs:
 #   device_push/models/embeddings.sqlite
 #   device_push/docs/<normalized_source_id>.pdf  (55 files)
 #   device_push/debug/chunks_for_rag.txt          (optional, for eval)
-#   device_push/debug/rag_bundle_installed.json   (installed bundle provenance)
+#   device_push/debug/rag_bundle_staged.json      (staged bundle provenance)
 #
 # Usage:
 #   scripts/sync_rag_assets.sh               # fetch from bundle_url in lock file
 #
-# Requirements: curl, python3, sha256sum (macOS: shasum -a 256)
+# Requirements: python3, tar, curl or gh, sha256sum (macOS: shasum -a 256)
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LOCK_FILE="$REPO_ROOT/rag-assets.lock.json"
 DEVICE_PUSH="$REPO_ROOT/device_push"
+CACHE_ROOT="$REPO_ROOT/_scratch/rag_bundle_cache"
 
 # ---------------------------------------------------------------------------
 # Parse args
@@ -26,12 +29,11 @@ DEVICE_PUSH="$REPO_ROOT/device_push"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -h|--help)
-            awk 'NR >= 2 && NR <= 10 { sub(/^# ?/, ""); print }' "$0"
+            awk 'NR >= 2 && NR <= 14 { sub(/^# ?/, ""); print }' "$0"
             exit 0
             ;;
         *)
-            echo "ERROR: sync_rag_assets.sh does not accept custom source arguments." >&2
-            echo "       Update rag-assets.lock.json and rerun the script." >&2
+            echo "ERROR: unknown argument: $1" >&2
             exit 1
             ;;
     esac
@@ -49,10 +51,11 @@ fi
 BUNDLE_VERSION=$(python3 -c "import json,sys; print(json.load(open('$LOCK_FILE'))['bundle_version'])")
 BUNDLE_URL=$(python3     -c "import json,sys; print(json.load(open('$LOCK_FILE'))['bundle_url'])")
 LOCK_SHA=$(python3       -c "import json,sys; d=json.load(open('$LOCK_FILE')); print(d.get('manifest_sha256',''))")
+CACHE_DIR="$CACHE_ROOT/$BUNDLE_VERSION"
 
 echo "RAG asset sync"
 echo "  Bundle version : $BUNDLE_VERSION"
-echo "  Source         : GitHub release"
+echo "  Cache dir      : $CACHE_DIR"
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -61,6 +64,9 @@ echo ""
 
 TMP_DIR=""
 BUNDLE_DIR=""
+BUNDLE_SOURCE=""
+MANIFEST=""
+MANIFEST_SHA_ACTUAL=""
 
 cleanup() {
     if [[ -n "$TMP_DIR" && -d "$TMP_DIR" ]]; then
@@ -69,98 +75,129 @@ cleanup() {
 }
 trap cleanup EXIT
 
+compute_manifest_sha() {
+    if command -v sha256sum &>/dev/null; then
+        MANIFEST_SHA_ACTUAL=$(sha256sum "$MANIFEST" | awk '{print $1}')
+    else
+        MANIFEST_SHA_ACTUAL=$(shasum -a 256 "$MANIFEST" | awk '{print $1}')
+    fi
+}
+
+verify_bundle() {
+    MANIFEST="$BUNDLE_DIR/manifest.json"
+    if [[ ! -f "$MANIFEST" ]]; then
+        echo "ERROR: manifest.json not found in bundle: $BUNDLE_DIR" >&2
+        return 1
+    fi
+
+    compute_manifest_sha
+
+    if [[ -n "$LOCK_SHA" && "$LOCK_SHA" != "TODO"* ]]; then
+        echo "Verifying manifest.json checksum ..."
+        if [[ "$MANIFEST_SHA_ACTUAL" != "$LOCK_SHA" ]]; then
+            echo "ERROR: manifest.json checksum mismatch!" >&2
+            echo "  expected : $LOCK_SHA" >&2
+            echo "  actual   : $MANIFEST_SHA_ACTUAL" >&2
+            return 1
+        fi
+        echo "  manifest.json OK ($LOCK_SHA)"
+    fi
+
+    CHECKSUMS_FILE="$BUNDLE_DIR/checksums.sha256"
+    if [[ -f "$CHECKSUMS_FILE" ]]; then
+        echo "Verifying artifact checksums ..."
+        local fail=0
+        while IFS='  ' read -r expected_sha rel_path; do
+            local abs_path="$BUNDLE_DIR/$rel_path"
+            local actual_sha
+            if [[ ! -f "$abs_path" ]]; then
+                echo "  MISSING : $rel_path" >&2
+                fail=1
+                continue
+            fi
+            if command -v sha256sum &>/dev/null; then
+                actual_sha=$(sha256sum "$abs_path" | awk '{print $1}')
+            else
+                actual_sha=$(shasum -a 256 "$abs_path" | awk '{print $1}')
+            fi
+            if [[ "$actual_sha" != "$expected_sha" ]]; then
+                echo "  MISMATCH: $rel_path" >&2
+                fail=1
+            fi
+        done < "$CHECKSUMS_FILE"
+        if [[ $fail -ne 0 ]]; then
+            echo "ERROR: checksum verification failed" >&2
+            return 1
+        fi
+        echo "  All checksums OK"
+    fi
+
+    return 0
+}
+
+download_bundle_to_cache() {
+    TMP_DIR=$(mktemp -d)
+    local tarball="$TMP_DIR/bundle.tar.gz"
+    local extracted_dir=""
+
+    echo "Cache miss or invalid cache entry. Downloading $BUNDLE_URL ..."
+
+    # GitHub release asset downloads can require auth-aware redirect handling.
+    # Prefer gh when available, otherwise fall back to curl for public repos.
+    if command -v gh &>/dev/null; then
+        local gh_repo gh_tag gh_file
+        gh_repo=$(echo "$BUNDLE_URL" | sed -E 's|https://github.com/([^/]+/[^/]+)/releases/.*|\1|')
+        gh_tag=$(echo "$BUNDLE_URL"  | sed -E 's|.*/releases/download/([^/]+)/.*|\1|')
+        gh_file=$(basename "$BUNDLE_URL")
+        echo "Downloading via gh: $gh_repo $gh_tag $gh_file ..."
+        gh release download "$gh_tag" --repo "$gh_repo" --pattern "$gh_file" --dir "$TMP_DIR"
+        mv "$TMP_DIR/$gh_file" "$tarball"
+    else
+        curl -L --progress-bar -o "$tarball" "$BUNDLE_URL"
+    fi
+
+    echo "Extracting ..."
+    tar -xzf "$tarball" -C "$TMP_DIR"
+    extracted_dir=$(find "$TMP_DIR" -maxdepth 1 -type d -name "rag-bundle-*" | head -1)
+    if [[ -z "$extracted_dir" ]]; then
+        echo "ERROR: could not find rag-bundle-* directory inside download" >&2
+        exit 1
+    fi
+
+    rm -rf "$CACHE_DIR"
+    mkdir -p "$CACHE_DIR"
+    cp -R "$extracted_dir"/. "$CACHE_DIR"/
+}
+
 if [[ "$BUNDLE_URL" == *"TODO"* ]]; then
     echo "ERROR: bundle_url in $LOCK_FILE is still a placeholder." >&2
     echo "       Publish a GitHub release and update rag-assets.lock.json first." >&2
     exit 1
 fi
 
-TMP_DIR=$(mktemp -d)
-TARBALL="$TMP_DIR/bundle.tar.gz"
-# GitHub release asset downloads require auth-aware redirects.
-# Use gh CLI if available (respects GITHUB_TOKEN / keyring auth),
-# otherwise fall back to curl which works for public repos.
-if command -v gh &>/dev/null; then
-    # Extract "owner/repo" and tag from the URL
-    GH_REPO=$(echo "$BUNDLE_URL" | sed -E 's|https://github.com/([^/]+/[^/]+)/releases/.*|\1|')
-    GH_TAG=$(echo "$BUNDLE_URL"  | sed -E 's|.*/releases/download/([^/]+)/.*|\1|')
-    GH_FILE=$(basename "$BUNDLE_URL")
-    echo "Downloading via gh: $GH_REPO $GH_TAG $GH_FILE ..."
-    gh release download "$GH_TAG" --repo "$GH_REPO" --pattern "$GH_FILE" --dir "$TMP_DIR"
-    mv "$TMP_DIR/$GH_FILE" "$TARBALL"
+mkdir -p "$CACHE_ROOT"
+
+if [[ -d "$CACHE_DIR" ]]; then
+    BUNDLE_DIR="$CACHE_DIR"
+    BUNDLE_SOURCE="cache"
+    echo "Found cached bundle: $CACHE_DIR"
+    if ! verify_bundle; then
+        echo "Cached bundle failed verification. Refreshing from GitHub release ..."
+        download_bundle_to_cache
+        BUNDLE_DIR="$CACHE_DIR"
+        BUNDLE_SOURCE="github_release"
+        verify_bundle
+    fi
 else
-    echo "Downloading $BUNDLE_URL ..."
-    curl -L --progress-bar -o "$TARBALL" "$BUNDLE_URL"
-fi
-echo "Extracting ..."
-tar -xzf "$TARBALL" -C "$TMP_DIR"
-BUNDLE_DIR=$(find "$TMP_DIR" -maxdepth 1 -type d -name "rag-bundle-*" | head -1)
-if [[ -z "$BUNDLE_DIR" ]]; then
-    echo "ERROR: could not find rag-bundle-* directory inside download" >&2
-    exit 1
+    download_bundle_to_cache
+    BUNDLE_DIR="$CACHE_DIR"
+    BUNDLE_SOURCE="github_release"
+    verify_bundle
 fi
 
 echo "  Bundle dir     : $BUNDLE_DIR"
+echo "  Bundle source  : $BUNDLE_SOURCE"
 echo ""
-
-# ---------------------------------------------------------------------------
-# Verify manifest checksum (if lock file has one)
-# ---------------------------------------------------------------------------
-
-MANIFEST="$BUNDLE_DIR/manifest.json"
-if [[ ! -f "$MANIFEST" ]]; then
-    echo "ERROR: manifest.json not found in bundle" >&2
-    exit 1
-fi
-
-if command -v sha256sum &>/dev/null; then
-    MANIFEST_SHA_ACTUAL=$(sha256sum "$MANIFEST" | awk '{print $1}')
-else
-    MANIFEST_SHA_ACTUAL=$(shasum -a 256 "$MANIFEST" | awk '{print $1}')
-fi
-
-if [[ -n "$LOCK_SHA" && "$LOCK_SHA" != "TODO"* ]]; then
-    echo "Verifying manifest.json checksum ..."
-    if [[ "$MANIFEST_SHA_ACTUAL" != "$LOCK_SHA" ]]; then
-        echo "ERROR: manifest.json checksum mismatch!" >&2
-        echo "  expected : $LOCK_SHA" >&2
-        echo "  actual   : $MANIFEST_SHA_ACTUAL" >&2
-        exit 1
-    fi
-    echo "  manifest.json OK ($LOCK_SHA)"
-fi
-
-# ---------------------------------------------------------------------------
-# Verify per-file checksums from checksums.sha256
-# ---------------------------------------------------------------------------
-
-CHECKSUMS_FILE="$BUNDLE_DIR/checksums.sha256"
-if [[ -f "$CHECKSUMS_FILE" ]]; then
-    echo "Verifying artifact checksums ..."
-    FAIL=0
-    while IFS='  ' read -r expected_sha rel_path; do
-        abs_path="$BUNDLE_DIR/$rel_path"
-        if [[ ! -f "$abs_path" ]]; then
-            echo "  MISSING : $rel_path" >&2
-            FAIL=1
-            continue
-        fi
-        if command -v sha256sum &>/dev/null; then
-            actual_sha=$(sha256sum "$abs_path" | awk '{print $1}')
-        else
-            actual_sha=$(shasum -a 256 "$abs_path" | awk '{print $1}')
-        fi
-        if [[ "$actual_sha" != "$expected_sha" ]]; then
-            echo "  MISMATCH: $rel_path" >&2
-            FAIL=1
-        fi
-    done < "$CHECKSUMS_FILE"
-    if [[ $FAIL -ne 0 ]]; then
-        echo "ERROR: checksum verification failed" >&2
-        exit 1
-    fi
-    echo "  All checksums OK"
-fi
 
 # ---------------------------------------------------------------------------
 # Read manifest for version info
@@ -223,9 +260,9 @@ if [[ -f "$SRC_CHUNKS" ]]; then
     echo "Installed debug/chunks_for_rag.txt"
 fi
 
-# Stamp the installed bundle metadata into device_push/ so the staging folder is
+# Stamp the staged bundle metadata into device_push/ so the staging folder is
 # self-describing even though the large bundle files themselves are gitignored.
-INSTALL_RECORD="$DEBUG_DIR/rag_bundle_installed.json"
+INSTALL_RECORD="$DEBUG_DIR/rag_bundle_staged.json"
 python3 - <<PY
 import json
 from datetime import datetime, timezone
@@ -235,8 +272,8 @@ lock = json.loads(Path("$LOCK_FILE").read_text())
 manifest = json.loads(Path("$MANIFEST").read_text())
 record = {
     "schema_version": 1,
-    "installed_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
-    "sync_mode": "github_release",
+    "staged_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+    "sync_mode": "$BUNDLE_SOURCE",
     "bundle_version_locked": lock.get("bundle_version", ""),
     "bundle_version_manifest": manifest.get("bundle_version", ""),
     "bundle_url": lock.get("bundle_url", ""),
@@ -248,10 +285,11 @@ record = {
     "source_count_locked": lock.get("source_count"),
     "chunk_count_manifest": manifest.get("chunk_count"),
     "source_count_manifest": manifest.get("source_count"),
+    "cache_dir": "$CACHE_DIR",
 }
 Path("$INSTALL_RECORD").write_text(json.dumps(record, indent=2) + "\n")
 PY
-echo "Stamped installed bundle metadata: $INSTALL_RECORD"
+echo "Stamped staged bundle metadata: $INSTALL_RECORD"
 
 # ---------------------------------------------------------------------------
 # Summary
@@ -260,7 +298,5 @@ echo "Stamped installed bundle metadata: $INSTALL_RECORD"
 echo ""
 echo "Sync complete."
 echo ""
-echo "Next: push to device"
-echo "  for f in device_push/models/embeddings.sqlite device_push/docs/*.pdf; do"
-echo '    ~/Library/Android/sdk/platform-tools/adb push "$f" /sdcard/Android/data/com.example.app/files/'
-echo "  done"
+echo "Next: push the staged bundle to device"
+echo "  bash scripts/push_to_device.sh"

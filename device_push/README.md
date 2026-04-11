@@ -1,7 +1,8 @@
 # device_push
 
 A staging folder with all files needed to set up the app on an Android device.
-Large binaries are gitignored — populate them via the sync script (see below).
+Large binaries are gitignored — populate them via the sync/push scripts (see
+below).
 
 ## Structure
 
@@ -9,7 +10,7 @@ Large binaries are gitignored — populate them via the sync script (see below).
 device_push/
 ├── docs/       # 55 source PDF guidelines, normalized filenames (gitignored)
 ├── models/     # Gecko_1024_quant.tflite, sentencepiece.model, embeddings.sqlite (gitignored)
-└── debug/      # chunks_for_rag.txt + installed bundle metadata (gitignored)
+└── debug/      # chunks_for_rag.txt + staged bundle metadata (gitignored)
 ```
 
 ## Contents
@@ -28,7 +29,7 @@ device_push/
 | `models/sentencepiece.model` | tokenizer | ~0.8 MB |
 | `models/embeddings.sqlite` | pre-computed embeddings for 21,731 chunks | ~89 MB |
 | `docs/*.pdf` (55 files) | source medical guidelines, URL-safe names | ~91 MB |
-| `debug/rag_bundle_installed.json` | installed bundle provenance | small |
+| `debug/rag_bundle_staged.json` | staged bundle provenance | small |
 
 PDF filenames use normalized SOURCE ids (spaces/parens → underscores, e.g.
 `WHO_Abortion_Care_2022.pdf`). `openPdf()` in `MainActivity.kt` applies the
@@ -44,9 +45,10 @@ Run the sync script to fetch and install the pinned GitHub release:
 bash scripts/sync_rag_assets.sh
 ```
 
-The script verifies checksums, clears any old PDFs before installing, and writes
-`debug/rag_bundle_installed.json` so `device_push/` records exactly which RAG
-bundle version was staged.
+The sync script caches downloaded bundles under `_scratch/rag_bundle_cache/`,
+rebuilds the single active staged view in `device_push/`, and writes
+`debug/rag_bundle_staged.json` so `device_push/` records exactly which RAG
+bundle version is currently staged on the host.
 
 ## Setup — LLM models (first time)
 
@@ -59,16 +61,23 @@ ln models/gemma-3n-E4B-it-int4.litertlm device_push/models/
 ## Push to device
 
 ```bash
-# Push RAG assets
-for f in device_push/models/embeddings.sqlite device_push/docs/*.pdf; do
-  ~/Library/Android/sdk/platform-tools/adb push "$f" /sdcard/Android/data/com.example.app/files/
-done
+# Push staged RAG assets (embeddings.sqlite + PDFs + provenance stamp)
+bash scripts/push_to_device.sh
 
-# Push LLM + embedding models (first time or after update)
-for f in device_push/models/Gecko_1024_quant.tflite device_push/models/sentencepiece.model \
-          device_push/models/gemma-4-E4B-it.litertlm; do
-  ~/Library/Android/sdk/platform-tools/adb push "$f" /sdcard/Android/data/com.example.app/files/
-done
+# Also push Gecko + sentencepiece.model
+bash scripts/push_to_device.sh --models
+
+# If multiple devices are connected
+bash scripts/push_to_device.sh --serial <device-id>
 ```
 
-The device directory corresponds to `getExternalFilesDir(null)` on Android.
+`push_to_device.sh` verifies that the staged bundle in `device_push/` matches
+`rag-assets.lock.json` before pushing. If the staging area is stale or partial,
+it fails and tells you to rerun `sync_rag_assets.sh`. After a full successful
+push, it writes `rag_bundle_deployed.json` on the Android device as the device's
+deployment receipt.
+
+The device directory corresponds to `getExternalFilesDir(null)` on Android. The
+Gemma `.litertlm` model is still handled separately (manual sideload or
+first-launch download), because the RAG bundle workflow only manages the
+embeddings database and source PDFs.
