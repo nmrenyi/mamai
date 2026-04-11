@@ -125,7 +125,7 @@ adb logcat -s mam-ai      # View timing, memory, and inference logs
 ## RAG Document Pipeline
 
 Chunking and embedding are managed in the companion
-[mamai-medical-guidelines](https://github.com/TODO_ORG/mamai-medical-guidelines) repo,
+[mamai-medical-guidelines](https://github.com/nmrenyi/mamai-medical-guidelines) repo,
 which publishes versioned bundles containing `embeddings.sqlite` and the 55 source PDFs.
 
 To update the RAG assets in this repo, bump `rag-assets.lock.json` and run:
