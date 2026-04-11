@@ -43,12 +43,17 @@ Run the sync script to fetch and install the pinned GitHub release:
 ```bash
 # Update rag-assets.lock.json first if you want a newer bundle:
 bash scripts/sync_rag_assets.sh
+
+# Optional: use aria2c for faster download/progress output
+bash scripts/sync_rag_assets.sh --aria2c
 ```
 
 The sync script caches downloaded bundles under `_scratch/rag_bundle_cache/`,
 rebuilds the single active staged view in `device_push/`, and writes
 `debug/rag_bundle_staged.json` so `device_push/` records exactly which RAG
-bundle version is currently staged on the host.
+bundle version is currently staged on the host. By default it prefers `gh`
+for GitHub release asset downloads; `--aria2c` is an explicit override when
+you want faster transfer/progress output.
 
 ## Setup — LLM models (first time)
 

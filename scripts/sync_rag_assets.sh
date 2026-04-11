@@ -12,8 +12,10 @@
 #
 # Usage:
 #   scripts/sync_rag_assets.sh               # fetch from bundle_url in lock file
+#   scripts/sync_rag_assets.sh --aria2c      # use aria2c instead of gh/curl
 #
-# Requirements: python3, tar, curl or gh, sha256sum (macOS: shasum -a 256)
+# Requirements: python3, tar, curl or gh (optional: aria2c), sha256sum
+# (macOS: shasum -a 256)
 
 set -euo pipefail
 
@@ -21,6 +23,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LOCK_FILE="$REPO_ROOT/rag-assets.lock.json"
 DEVICE_PUSH="$REPO_ROOT/device_push"
 CACHE_ROOT="$REPO_ROOT/_scratch/rag_bundle_cache"
+USE_ARIA2C=0
 
 # ---------------------------------------------------------------------------
 # Parse args
@@ -28,8 +31,12 @@ CACHE_ROOT="$REPO_ROOT/_scratch/rag_bundle_cache"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --aria2c)
+            USE_ARIA2C=1
+            shift
+            ;;
         -h|--help)
-            awk 'NR >= 2 && NR <= 14 { sub(/^# ?/, ""); print }' "$0"
+            awk 'NR >= 2 && NR <= 16 { sub(/^# ?/, ""); print }' "$0"
             exit 0
             ;;
         *)
@@ -142,9 +149,26 @@ download_bundle_to_cache() {
 
     echo "Cache miss or invalid cache entry. Downloading $BUNDLE_URL ..."
 
-    # GitHub release asset downloads can require auth-aware redirect handling.
-    # Prefer gh when available, otherwise fall back to curl for public repos.
-    if command -v gh &>/dev/null; then
+    # Default path prefers gh because GitHub release asset downloads can require
+    # auth-aware redirect handling. --aria2c is an explicit speed/progress
+    # override for cases where the direct release URL is sufficient.
+    if [[ "$USE_ARIA2C" -eq 1 ]]; then
+        if ! command -v aria2c &>/dev/null; then
+            echo "ERROR: --aria2c was requested but aria2c is not installed." >&2
+            exit 1
+        fi
+        echo "Downloading via aria2c ..."
+        aria2c \
+            --allow-overwrite=true \
+            --auto-file-renaming=false \
+            --console-log-level=warn \
+            --summary-interval=1 \
+            --max-connection-per-server=8 \
+            --split=8 \
+            --dir="$TMP_DIR" \
+            --out="$(basename "$tarball")" \
+            "$BUNDLE_URL"
+    elif command -v gh &>/dev/null; then
         local gh_repo gh_tag gh_file
         gh_repo=$(echo "$BUNDLE_URL" | sed -E 's|https://github.com/([^/]+/[^/]+)/releases/.*|\1|')
         gh_tag=$(echo "$BUNDLE_URL"  | sed -E 's|.*/releases/download/([^/]+)/.*|\1|')
