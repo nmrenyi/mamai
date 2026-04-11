@@ -13,9 +13,11 @@ Single source of truth for the system prompt text:
 """
 
 import hashlib
+import json
 from pathlib import Path
 
 _PROMPTS_DIR = Path(__file__).parent / "prompts"
+_runtime = json.loads((_PROMPTS_DIR / "runtime_config.json").read_text())
 
 # --- App system prompt (single source of truth: evaluation/prompts/system_en.txt) ---
 
@@ -37,10 +39,14 @@ MCQ_SYSTEM_PROMPT = (
 # Open-ended eval uses the real app prompt — scores now reflect deployed behavior.
 OPEN_SYSTEM_PROMPT = APP_SYSTEM_PROMPT
 
-# --- On-device generation parameters (RagPipeline.kt SamplerConfig) ---
-TEMPERATURE = 1.0
-TOP_P = 0.95
-TOP_K = 64
+# --- Runtime parameters (single source of truth: evaluation/prompts/runtime_config.json) ---
+TEMPERATURE: float = _runtime["generation"]["temperature"]
+TOP_P: float = _runtime["generation"]["top_p"]
+TOP_K: int = _runtime["generation"]["top_k"]
+RETRIEVAL_TOP_K: int = _runtime["retrieval"]["top_k"]
+RETRIEVAL_THRESHOLD: float = _runtime["retrieval"]["similarity_threshold"]
+
+# eval-only: LiteRT-LM manages context window internally, no app equivalent
 N_CTX = 4096
 
 # --- Protocol versioning ---

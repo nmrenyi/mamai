@@ -25,6 +25,7 @@ import kotlinx.coroutines.guava.await
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.util.Optional
+import org.json.JSONObject
 import java.util.concurrent.Executors
 import kotlin.jvm.optionals.getOrNull
 
@@ -39,13 +40,17 @@ data class RetrievedDoc(
 class RagPipeline(application: Application) {
     private val baseFolder = application.getExternalFilesDir(null).toString() + "/"
 
-    // Load system prompts from assets — single source of truth shared with evaluation/.
-    // Crashes immediately (IOException) if either file is missing from the APK, which is
-    // the correct behavior: a silent fallback to an empty prompt would be worse.
+    // Load system prompts and runtime config from assets.
+    // Single source of truth shared with evaluation/ — crashes immediately (IOException)
+    // if any asset file is missing from the APK.
     private val systemInstructionsEn: String =
         application.assets.open("system_en.txt").bufferedReader().use { it.readText() }
     private val systemInstructionsSw: String =
         application.assets.open("system_sw.txt").bufferedReader().use { it.readText() }
+    private val runtimeConfig: JSONObject =
+        JSONObject(application.assets.open("runtime_config.json").bufferedReader().use { it.readText() })
+    private val generationConfig = runtimeConfig.getJSONObject("generation")
+    private val retrievalConfig  = runtimeConfig.getJSONObject("retrieval")
 
     @Volatile private lateinit var engine: Engine
 
@@ -200,7 +205,11 @@ class RagPipeline(application: Application) {
             val docs = if (useRetrieval) {
                 val retrievalRequest = RetrievalRequest.create(
                     prompt,
-                    RetrievalConfig.create(3, 0.0f, TaskType.RETRIEVAL_QUERY)
+                    RetrievalConfig.create(
+                    retrievalConfig.getInt("top_k"),
+                    retrievalConfig.getDouble("similarity_threshold").toFloat(),
+                    TaskType.RETRIEVAL_QUERY
+                )
                 )
                 val rawResults = textMemory.retrieveResults(retrievalRequest).await().getEntities().map { e -> e.data }.toList()
                 val parsedDocs = rawResults.map { parseChunkMetadata(it) }
@@ -237,7 +246,11 @@ class RagPipeline(application: Application) {
                     if (turn["role"] == "user") Message.user(turn["text"] ?: "")
                     else Message.model(turn["text"] ?: "")
                 },
-                samplerConfig = SamplerConfig(topK = 64, topP = 0.95, temperature = 1.0),
+                samplerConfig = SamplerConfig(
+                    topK = generationConfig.getInt("top_k"),
+                    topP = generationConfig.getDouble("top_p"),
+                    temperature = generationConfig.getDouble("temperature"),
+                ),
             )
 
             if (BuildConfig.DEBUG) {
