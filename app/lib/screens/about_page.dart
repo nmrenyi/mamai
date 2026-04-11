@@ -1,8 +1,40 @@
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:app/l10n/app_localizations.dart';
 
-class AboutPage extends StatelessWidget {
+class AboutPage extends StatefulWidget {
   const AboutPage({super.key});
+
+  @override
+  State<AboutPage> createState() => _AboutPageState();
+}
+
+class _AboutPageState extends State<AboutPage> {
+  static const _platform = MethodChannel(
+    "io.github.mzsfighters.mam_ai/request_generation",
+  );
+
+  late final Future<RagBundleInfo?> _bundleInfoFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _bundleInfoFuture = _loadBundleInfo();
+  }
+
+  Future<RagBundleInfo?> _loadBundleInfo() async {
+    try {
+      final raw = await _platform.invokeMapMethod<String, dynamic>(
+        "getDeployedRagBundleInfo",
+      );
+      if (raw == null) return null;
+      return RagBundleInfo.fromMap(raw);
+    } on PlatformException {
+      return null;
+    } on MissingPluginException {
+      return null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,6 +77,8 @@ class AboutPage extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 36),
+            _BundleInfoCard(bundleInfoFuture: _bundleInfoFuture),
+            const SizedBox(height: 36),
 
             // Partnership
             Text(
@@ -72,6 +106,148 @@ class AboutPage extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class RagBundleInfo {
+  final String bundleVersion;
+  final String deployedAtUtc;
+
+  const RagBundleInfo({
+    required this.bundleVersion,
+    required this.deployedAtUtc,
+  });
+
+  factory RagBundleInfo.fromMap(Map<String, dynamic> raw) {
+    return RagBundleInfo(
+      bundleVersion: raw['bundleVersion']?.toString() ?? '',
+      deployedAtUtc: raw['deployedAtUtc']?.toString() ?? '',
+    );
+  }
+}
+
+class _BundleInfoCard extends StatelessWidget {
+  final Future<RagBundleInfo?> bundleInfoFuture;
+
+  const _BundleInfoCard({required this.bundleInfoFuture});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xffF8F5F1),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xffE7DED3)),
+      ),
+      child: FutureBuilder<RagBundleInfo?>(
+        future: bundleInfoFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2.4),
+              ),
+            );
+          }
+
+          final info = snapshot.data;
+          if (info == null || info.bundleVersion.isEmpty) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l10n.aboutKnowledgeBundleTitle,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xff4E4338),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  l10n.aboutKnowledgeBundleUnavailable,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xff786A5E),
+                    height: 1.5,
+                  ),
+                ),
+              ],
+            );
+          }
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l10n.aboutKnowledgeBundleTitle,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xff4E4338),
+                ),
+              ),
+              const SizedBox(height: 14),
+              _BundleInfoRow(
+                label: l10n.aboutKnowledgeBundleVersionLabel,
+                value: info.bundleVersion,
+              ),
+              if (info.deployedAtUtc.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                _BundleInfoRow(
+                  label: l10n.aboutKnowledgeBundleDeployedLabel,
+                  value: info.deployedAtUtc,
+                ),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _BundleInfoRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _BundleInfoRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 76,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Color(0xff786A5E),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: SelectableText(
+            value,
+            style: const TextStyle(
+              fontSize: 13,
+              color: Color(0xff2D241C),
+              height: 1.5,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

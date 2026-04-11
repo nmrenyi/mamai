@@ -278,6 +278,30 @@ abstract class AppLocalizations {
   /// **'A clinical decision-support tool for nurse-midwives in Zanzibar. Offers fully offline, on-device answers grounded in medical guidelines — covering maternal health, obstetrics, and neonatal care — for reliable, private support at the point of care.'**
   String get aboutDescription;
 
+  /// No description provided for @aboutKnowledgeBundleTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Knowledge bundle'**
+  String get aboutKnowledgeBundleTitle;
+
+  /// No description provided for @aboutKnowledgeBundleUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Bundle metadata is not available on this device yet.'**
+  String get aboutKnowledgeBundleUnavailable;
+
+  /// No description provided for @aboutKnowledgeBundleVersionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Version'**
+  String get aboutKnowledgeBundleVersionLabel;
+
+  /// No description provided for @aboutKnowledgeBundleDeployedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Deployed'**
+  String get aboutKnowledgeBundleDeployedLabel;
+
   /// No description provided for @drawerAbout.
   ///
   /// In en, this message translates to:

@@ -44,6 +44,10 @@
 
   "aboutTitle": "Kuhusu",
   "aboutDescription": "Chombo cha msaada wa maamuzi ya kimatibabu kwa wauguzi-wakunga Zanzibar. Kinatoa majibu kamili bila mtandao, yanayolingana na miongozo ya kimatibabu — inayoshughulikia afya ya uzazi, uzazishaji, na utunzaji wa watoto wachanga — kwa msaada wa kuaminika, wa siri mahali pa huduma.",
+  "aboutKnowledgeBundleTitle": "Kifurushi cha maarifa",
+  "aboutKnowledgeBundleUnavailable": "Taarifa za kifurushi bado hazipatikani kwenye kifaa hiki.",
+  "aboutKnowledgeBundleVersionLabel": "Toleo",
+  "aboutKnowledgeBundleDeployedLabel": "Kimepelekwa",
 
   "drawerAbout": "Kuhusu MAM-AI",
   "drawerTitle": "Mazungumzo ya zamani",

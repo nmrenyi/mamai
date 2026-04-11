@@ -109,6 +109,19 @@ class AppLocalizationsEn extends AppLocalizations {
       'A clinical decision-support tool for nurse-midwives in Zanzibar. Offers fully offline, on-device answers grounded in medical guidelines — covering maternal health, obstetrics, and neonatal care — for reliable, private support at the point of care.';
 
   @override
+  String get aboutKnowledgeBundleTitle => 'Knowledge bundle';
+
+  @override
+  String get aboutKnowledgeBundleUnavailable =>
+      'Bundle metadata is not available on this device yet.';
+
+  @override
+  String get aboutKnowledgeBundleVersionLabel => 'Version';
+
+  @override
+  String get aboutKnowledgeBundleDeployedLabel => 'Deployed';
+
+  @override
   String get drawerAbout => 'About MAM-AI';
 
   @override

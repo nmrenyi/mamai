@@ -9,6 +9,7 @@ import io.flutter.plugin.common.MethodChannel
 import androidx.lifecycle.lifecycleScope
 import io.flutter.plugin.common.EventChannel
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 import java.io.File
 
 class MainActivity : FlutterActivity() {
@@ -58,6 +59,9 @@ class MainActivity : FlutterActivity() {
                     val opened = openPdf(source, page)
                     result.success(opened)
                 }
+                "getDeployedRagBundleInfo" -> {
+                    result.success(getDeployedRagBundleInfo())
+                }
                 else -> {
                     result.notImplemented()
                 }
@@ -85,6 +89,36 @@ class MainActivity : FlutterActivity() {
             .replace(Regex("[^A-Za-z0-9\\-.]"), "_")
             .replace(Regex("_+"), "_")
             .trim('_')
+
+    private fun getDeployedRagBundleInfo(): Map<String, Any>? {
+        val baseFolder = application.getExternalFilesDir(null) ?: return null
+        val deployRecord = File(baseFolder, "rag_bundle_deployed.json")
+
+        if (!deployRecord.exists()) {
+            return null
+        }
+
+        return try {
+            val json = JSONObject(deployRecord.readText())
+            hashMapOf<String, Any>().apply {
+                json.optString("bundle_version").takeIf { it.isNotBlank() }?.let {
+                    put("bundleVersion", it)
+                }
+                json.optString("deployed_at_utc").takeIf { it.isNotBlank() }?.let {
+                    put("deployedAtUtc", it)
+                }
+                json.optString("producer_commit").takeIf { it.isNotBlank() }?.let {
+                    put("producerCommit", it)
+                }
+                json.optString("manifest_sha256").takeIf { it.isNotBlank() }?.let {
+                    put("manifestSha256", it)
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("mam-ai", "[RAG] failed to read deployed bundle metadata", e)
+            null
+        }
+    }
 
     private fun openPdf(source: String, page: Int): Boolean {
         val baseFolder = application.getExternalFilesDir(null) ?: return false
@@ -127,4 +161,3 @@ class MainActivity : FlutterActivity() {
         }
     }
 }
-

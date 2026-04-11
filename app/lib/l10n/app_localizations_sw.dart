@@ -109,6 +109,19 @@ class AppLocalizationsSw extends AppLocalizations {
       'Chombo cha msaada wa maamuzi ya kimatibabu kwa wauguzi-wakunga Zanzibar. Kinatoa majibu kamili bila mtandao, yanayolingana na miongozo ya kimatibabu — inayoshughulikia afya ya uzazi, uzazishaji, na utunzaji wa watoto wachanga — kwa msaada wa kuaminika, wa siri mahali pa huduma.';
 
   @override
+  String get aboutKnowledgeBundleTitle => 'Kifurushi cha maarifa';
+
+  @override
+  String get aboutKnowledgeBundleUnavailable =>
+      'Taarifa za kifurushi bado hazipatikani kwenye kifaa hiki.';
+
+  @override
+  String get aboutKnowledgeBundleVersionLabel => 'Toleo';
+
+  @override
+  String get aboutKnowledgeBundleDeployedLabel => 'Kimepelekwa';
+
+  @override
   String get drawerAbout => 'Kuhusu MAM-AI';
 
   @override
