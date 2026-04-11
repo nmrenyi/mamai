@@ -79,14 +79,6 @@ mamai/
 │   │   ├── BenchmarkActivity.kt     # Headless latency benchmarking
 │   │   └── BenchmarkQueries.kt      # Predefined test queries
 │   └── pubspec.yaml
-├── rag/                    # Document preprocessing & chunking (Python)
-│   └── text_extraction_json.py      # JSONL text extraction utility
-├── finetune/               # Gemma finetuning (Python, not deployed in app)
-│   ├── main_training.py             # Training entry point
-│   ├── config.py                    # Hyperparameters & paths
-│   ├── model_setup.py               # LoRA + quantization setup
-│   ├── data_processing.py           # QA dataset formatting
-│   └── training.py                  # SFTTrainer wrapper
 ├── evaluation/             # Model quality & latency benchmarking
 │   ├── cluster/                     # RunAI cluster job scripts
 │   ├── reports/                     # Final evaluation reports
@@ -171,7 +163,7 @@ Downloaded on first launch from a temporary VPS and stored on-device:
 | `gemma-3n-E4B-it-int4.task` | Gemma 3n E4B LLM (int4 quantized, 4.1 GB) | [Google](https://ai.google.dev/gemma) |
 | `Gecko_1024_quant.tflite` | Gecko embedding model (768-dim) | [litert-community/Gecko-110m-en](https://huggingface.co/litert-community/Gecko-110m-en) |
 | `sentencepiece.model` | Gecko tokenizer | [litert-community/Gecko-110m-en](https://huggingface.co/litert-community/Gecko-110m-en) |
-| `embeddings.sqlite` | Pre-computed embeddings for 2,826 guideline chunks | Generated via `rag/` pipeline |
+| `embeddings.sqlite` | Pre-computed embeddings for 2,826 guideline chunks | Generated in [mamai-medical-guidelines](https://github.com/nmrenyi/mamai-medical-guidelines) |
 
 > **Note:** Gemma requires license acceptance before use. The temporary VPS hosting these files will only remain up during the Kaggle challenge judging period. To self-host, update the download URLs in `intro_page.dart` and replace `app/cert.pem` with your server's TLS certificate.
 
@@ -214,7 +206,7 @@ This has not yet been isolated as a standalone benchmark. For now, the closest s
 
 ## Finetuning
 
-We finetuned Gemma 3n E4B on medical QA data using LoRA (not yet deployed in the app).
+Gemma 3n E4B was finetuned on medical QA data using LoRA by an earlier team member (not deployed in the app). The training code has been removed from this repo; artefacts are archived externally.
 
 - [Finetuning Dataset](https://drive.google.com/drive/folders/1vdheVGdrOTXwekaIrSkve7JF28Tpq1Xf?usp=sharing)
 - [Finetuned Model](https://huggingface.co/fiifidawson/mam-ai-gemma-3n-medical-finetuned)
