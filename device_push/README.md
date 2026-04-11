@@ -8,27 +8,36 @@ below).
 
 ```
 device_push/
-├── docs/       # 55 source PDF guidelines, normalized filenames (gitignored)
-├── models/     # Gecko_1024_quant.tflite, sentencepiece.model, embeddings.sqlite (gitignored)
-└── debug/      # chunks_for_rag.txt + staged bundle metadata (gitignored)
+├── bundle/     # sync-managed RAG assets — rm -rf bundle/ to wipe (gitignored)
+│   ├── embeddings.sqlite
+│   └── docs/   # 55 source PDFs, normalized filenames
+├── models/     # static ML model files, manually placed (gitignored)
+│   ├── Gecko_1024_quant.tflite
+│   ├── sentencepiece.model
+│   ├── gemma-4-E4B-it.litertlm
+│   ├── gemma-3n-E4B-it-int4.litertlm
+│   └── gemma-3n-E4B-it-int4.task
+└── debug/      # provenance stamps + chunks_for_rag.txt (gitignored)
 ```
+
+`bundle/` is entirely owned by `sync_rag_assets.sh` — it is atomically rebuilt on every sync run. `models/` is never touched by the sync script.
 
 ## Contents
 
-### LLM models (populate manually)
+### Static ML models (populate manually)
 | File | Format | Notes |
 |------|--------|-------|
 | `models/gemma-4-E4B-it.litertlm` | LiteRT-LM | Current deployed model |
 | `models/gemma-3n-E4B-it-int4.litertlm` | LiteRT-LM | Previous deployed model (quality baseline) |
 | `models/gemma-3n-E4B-it-int4.task` | MediaPipe | Kept for MediaPipe compatibility testing |
+| `models/Gecko_1024_quant.tflite` | TFLite | Embedding model |
+| `models/sentencepiece.model` | tokenizer | Tokenizer for Gecko |
 
-### RAG assets (managed by sync script)
+### RAG bundle assets (managed by sync script)
 | File | Source | Size |
 |------|--------|------|
-| `models/Gecko_1024_quant.tflite` | embedding model | ~139 MB |
-| `models/sentencepiece.model` | tokenizer | ~0.8 MB |
-| `models/embeddings.sqlite` | pre-computed embeddings for 21,731 chunks | ~89 MB |
-| `docs/*.pdf` (55 files) | source medical guidelines, URL-safe names | ~91 MB |
+| `bundle/embeddings.sqlite` | pre-computed embeddings for 21,731 chunks | ~89 MB |
+| `bundle/docs/*.pdf` (55 files) | source medical guidelines, URL-safe names | ~91 MB |
 | `debug/rag_bundle_staged.json` | staged bundle provenance | small |
 
 PDF filenames use normalized SOURCE ids (spaces/parens → underscores, e.g.
@@ -48,12 +57,11 @@ bash scripts/sync_rag_assets.sh
 bash scripts/sync_rag_assets.sh --aria2c
 ```
 
-The sync script caches downloaded bundles under `_scratch/rag_bundle_cache/`,
-rebuilds the single active staged view in `device_push/`, and writes
-`debug/rag_bundle_staged.json` so `device_push/` records exactly which RAG
-bundle version is currently staged on the host. By default it prefers `gh`
-for GitHub release asset downloads; `--aria2c` is an explicit override when
-you want faster transfer/progress output.
+The sync script atomically wipes and rebuilds `device_push/bundle/` from the
+pinned GitHub release, then writes `debug/rag_bundle_staged.json` recording
+exactly which bundle version is staged. By default it prefers `gh` for GitHub
+release asset downloads; `--aria2c` is an explicit override for faster
+transfer. To wipe the staged bundle entirely: `rm -rf device_push/bundle/`.
 
 ## Setup — LLM models (first time)
 

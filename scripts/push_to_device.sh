@@ -106,8 +106,8 @@ fi
 # Verify staged files
 # ---------------------------------------------------------------------------
 
-EMBEDDINGS_SQLITE="$DEVICE_PUSH/models/embeddings.sqlite"
-DOCS_DIR="$DEVICE_PUSH/docs"
+EMBEDDINGS_SQLITE="$DEVICE_PUSH/bundle/embeddings.sqlite"
+DOCS_DIR="$DEVICE_PUSH/bundle/docs"
 GECKO_MODEL="$DEVICE_PUSH/models/Gecko_1024_quant.tflite"
 TOKENIZER_MODEL="$DEVICE_PUSH/models/sentencepiece.model"
 

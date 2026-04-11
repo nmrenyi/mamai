@@ -5,8 +5,8 @@
 # Reads rag-assets.lock.json from the repo root, downloads the bundle,
 # caches it under _scratch/rag_bundle_cache/<version>/, verifies checksums,
 # and installs:
-#   device_push/models/embeddings.sqlite
-#   device_push/docs/<normalized_source_id>.pdf  (55 files)
+#   device_push/bundle/embeddings.sqlite
+#   device_push/bundle/docs/<normalized_source_id>.pdf  (55 files)
 #   device_push/debug/chunks_for_rag.txt          (optional, for eval)
 #   device_push/debug/rag_bundle_staged.json      (staged bundle provenance)
 #
@@ -241,11 +241,11 @@ echo ""
 # Install embeddings.sqlite
 # ---------------------------------------------------------------------------
 
-MODELS_DIR="$DEVICE_PUSH/models"
-mkdir -p "$MODELS_DIR"
+BUNDLE_STAGE="$DEVICE_PUSH/bundle"
+mkdir -p "$BUNDLE_STAGE/docs"
 
 SRC_SQLITE="$BUNDLE_DIR/runtime/embeddings.sqlite"
-DST_SQLITE="$MODELS_DIR/embeddings.sqlite"
+DST_SQLITE="$BUNDLE_STAGE/embeddings.sqlite"
 echo "Installing embeddings.sqlite ..."
 cp -f "$SRC_SQLITE" "$DST_SQLITE"
 SIZE_MB=$(python3 -c "import os; print(f'{os.path.getsize(\"$DST_SQLITE\")/1024/1024:.1f}')")
@@ -255,11 +255,10 @@ echo "  -> $DST_SQLITE  (${SIZE_MB} MB)"
 # Install PDFs (replacing old non-normalized names)
 # ---------------------------------------------------------------------------
 
-DOCS_DIR="$DEVICE_PUSH/docs"
-mkdir -p "$DOCS_DIR"
+DOCS_DIR="$BUNDLE_STAGE/docs"
 
 # Remove old PDFs (may have non-normalized names from before this workflow)
-echo "Clearing old PDFs from device_push/docs/ ..."
+echo "Clearing old PDFs from device_push/bundle/docs/ ..."
 find "$DOCS_DIR" -name "*.pdf" -delete
 
 BUNDLE_DOCS="$BUNDLE_DIR/docs"
