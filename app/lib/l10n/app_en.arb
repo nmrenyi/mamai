@@ -97,10 +97,10 @@
   "introDescription": "Trusted clinical answers, offline and always ready.",
   "introPartnership": "In partnership with",
 
-  "licenseTitle": "Accept Gemma3n license",
-  "licenseIntro": "Please read and accept Gemma3n's license and prohibited usage policy.",
-  "licenseTermsText": "Gemma is provided under and subject to the Gemma Terms of Use found at",
-  "licenseUsagePolicyLink": "Gemma3n usage policy",
+  "licenseTitle": "Gemma Model License",
+  "licenseIntro": "This app runs the Gemma 4 model on your device. Before downloading, you must read and accept Google's Gemma Terms of Use and Prohibited Use Policy.",
+  "licenseTermsText": "The Gemma model is provided under Google's Terms of Use at",
+  "licenseUsagePolicyLink": "Gemma prohibited use policy",
   "licenseAccept": "Accept",
   "licenseDeny": "Deny",
 

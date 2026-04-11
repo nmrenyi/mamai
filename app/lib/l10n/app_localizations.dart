@@ -443,25 +443,25 @@ abstract class AppLocalizations {
   /// No description provided for @licenseTitle.
   ///
   /// In en, this message translates to:
-  /// **'Accept Gemma3n license'**
+  /// **'Gemma Model License'**
   String get licenseTitle;
 
   /// No description provided for @licenseIntro.
   ///
   /// In en, this message translates to:
-  /// **'Please read and accept Gemma3n\'s license and prohibited usage policy.'**
+  /// **'This app runs the Gemma 4 model on your device. Before downloading, you must read and accept Google\'s Gemma Terms of Use and Prohibited Use Policy.'**
   String get licenseIntro;
 
   /// No description provided for @licenseTermsText.
   ///
   /// In en, this message translates to:
-  /// **'Gemma is provided under and subject to the Gemma Terms of Use found at'**
+  /// **'The Gemma model is provided under Google\'s Terms of Use at'**
   String get licenseTermsText;
 
   /// No description provided for @licenseUsagePolicyLink.
   ///
   /// In en, this message translates to:
-  /// **'Gemma3n usage policy'**
+  /// **'Gemma prohibited use policy'**
   String get licenseUsagePolicyLink;
 
   /// No description provided for @licenseAccept.
