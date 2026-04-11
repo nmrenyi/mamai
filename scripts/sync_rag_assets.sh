@@ -98,8 +98,21 @@ case "$MODE" in
         fi
         TMP_DIR=$(mktemp -d)
         TARBALL="$TMP_DIR/bundle.tar.gz"
-        echo "Downloading $BUNDLE_URL ..."
-        curl -L --progress-bar -o "$TARBALL" "$BUNDLE_URL"
+        # GitHub release asset downloads require auth-aware redirects.
+        # Use gh CLI if available (respects GITHUB_TOKEN / keyring auth),
+        # otherwise fall back to curl which works for public repos.
+        if command -v gh &>/dev/null; then
+            # Extract "owner/repo" and tag from the URL
+            GH_REPO=$(echo "$BUNDLE_URL" | sed -E 's|https://github.com/([^/]+/[^/]+)/releases/.*|\1|')
+            GH_TAG=$(echo "$BUNDLE_URL"  | sed -E 's|.*/releases/download/([^/]+)/.*|\1|')
+            GH_FILE=$(basename "$BUNDLE_URL")
+            echo "Downloading via gh: $GH_REPO $GH_TAG $GH_FILE ..."
+            gh release download "$GH_TAG" --repo "$GH_REPO" --pattern "$GH_FILE" --dir "$TMP_DIR"
+            mv "$TMP_DIR/$GH_FILE" "$TARBALL"
+        else
+            echo "Downloading $BUNDLE_URL ..."
+            curl -L --progress-bar -o "$TARBALL" "$BUNDLE_URL"
+        fi
         echo "Extracting ..."
         tar -xzf "$TARBALL" -C "$TMP_DIR"
         BUNDLE_DIR=$(find "$TMP_DIR" -maxdepth 1 -type d -name "rag-bundle-*" | head -1)
