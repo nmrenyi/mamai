@@ -56,7 +56,13 @@ This is the first evaluation run under the `app_parity_v1` protocol, which repre
 
 ## MCQ Results
 
-MCQ datasets test factual medical knowledge. Score = fraction of questions where the model's response contained the correct answer letter.
+MCQ datasets test factual medical knowledge. Each question has four answer options (A–D); the model must identify the correct one.
+
+**Scoring definitions**:
+- **Accuracy** (strict): the model's response must contain *only* the correct letter as a clean extraction (e.g. "B"). If the response is ambiguous or multi-letter, it scores 0.
+- **Partial credit accuracy**: a softer metric that scores 1 if the correct letter appears *anywhere* in the response, even amid hedging or multiple letters (e.g. "Between B and C, I'd lean toward B" counts as correct for B). Where accuracy = partial, the model either cleanly extracted a letter or failed entirely with no middle ground.
+- **Random chance baseline**: 25% (4-option questions).
+- **RAG Δ**: percentage-point change when RAG context is added.
 
 | Dataset | n | No-RAG Accuracy | No-RAG Partial | +RAG Accuracy | +RAG Partial | RAG Δ |
 |---------|---|----------------|----------------|--------------|--------------|-------|
@@ -64,7 +70,7 @@ MCQ datasets test factual medical knowledge. Score = fraction of questions where
 | medqa_usmle | 1,025 | 40.78% (418/1025) | 40.78% | 39.22% (402/1025) | 39.22% | **−1.56 pp** |
 | medmcqa_mcq | 500 | 51.00% (255/500) | 51.00% | 39.40% (197/500) | 39.40% | **−11.60 pp** |
 
-**Partial credit**: For afrimedqa_mcq, partial credit is ~4.6 pp above strict accuracy (no-RAG), suggesting the model often produces a response near-correct but with imprecise letter formatting. For medqa_usmle and medmcqa_mcq, partial credit equals strict accuracy — responses either clearly hit or miss.
+**Partial credit**: For afrimedqa_mcq, partial credit is ~4.6 pp above strict accuracy (no-RAG), meaning ~30 responses contained the right letter but not as a clean extraction. For medqa_usmle and medmcqa_mcq, partial credit equals strict accuracy — the model either extracted a letter cleanly or failed entirely.
 
 **RAG hurts MCQ**: RAG reduces MCQ accuracy on all three datasets, most severely on medmcqa_mcq (−11.6 pp). Injecting clinical guidelines context appears to distract the model from producing a clean single-letter answer. This is consistent with the MCQ adapter prompt limitation noted in issue #39 — the MCQ prompt was designed for zero-shot letter extraction and does not instruct the model how to use the retrieved context.
 
