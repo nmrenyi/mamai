@@ -32,9 +32,14 @@ DATASETS = {
     "afrimedqa_saq": ("afrimedqa_saq.tsv", "question_clean"),
 }
 
-DEFAULT_DB = "../app/model_backup/embeddings.sqlite"
-DEFAULT_GECKO = "../app/model_backup/Gecko_1024_quant.tflite"
-DEFAULT_TOKENIZER = "../app/model_backup/sentencepiece.model"
+_REPO_ROOT = Path(__file__).parents[1]
+_APP_CONFIG = json.loads((_REPO_ROOT / "config" / "app_config.json").read_text())
+
+# Default to the current staged device_push layout. Cluster jobs can override these
+# explicitly with --db-path/--gecko-model/--tokenizer.
+DEFAULT_DB = str(_REPO_ROOT / "device_push" / "bundle" / "embeddings.sqlite")
+DEFAULT_GECKO = str(_REPO_ROOT / "device_push" / "models" / _APP_CONFIG["embedding_model"])
+DEFAULT_TOKENIZER = str(_REPO_ROOT / "device_push" / "models" / _APP_CONFIG["tokenizer"])
 
 
 def main():

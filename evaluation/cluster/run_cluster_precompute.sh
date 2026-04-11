@@ -1,5 +1,6 @@
 #!/bin/bash
-set -e
+set -euo pipefail
+
 echo "=== INSTALLING DEPENDENCIES ==="
 apt-get update && apt-get install -y python3.10 python3-pip git > /dev/null 2>&1
 ln -sf /usr/bin/python3.10 /usr/bin/python3
@@ -7,48 +8,76 @@ echo "=== INSTALLING PYTHON PACKAGES ==="
 pip3 install --no-cache-dir numpy pandas tqdm sentencepiece ai-edge-litert > /dev/null 2>&1
 echo "=== DEPS DONE ==="
 
-rm -rf /tmp/eval_code
-git clone --branch eval --depth 1 https://github.com/nmrenyi/mamai.git /tmp/eval_code
-cd /tmp/eval_code/evaluation
-ln -s /lightscratch/users/yiren/eval_code/data data
+REPO_URL="${REPO_URL:-https://github.com/nmrenyi/mamai.git}"
+REPO_REF="${REPO_REF:-main}"
+WORKTREE="${WORKTREE:-/tmp/eval_code}"
+DATA_SOURCE_DIR="${DATA_SOURCE_DIR:-/lightscratch/users/yiren/eval_code/data}"
+DB_PATH="${DB_PATH:-/lightscratch/users/yiren/model_backup/embeddings.sqlite}"
+GECKO_MODEL="${GECKO_MODEL:-/lightscratch/users/yiren/model_backup/Gecko_1024_quant.tflite}"
+TOKENIZER="${TOKENIZER:-/lightscratch/users/yiren/model_backup/sentencepiece.model}"
+OUTPUT_DIR="${OUTPUT_DIR:-/lightscratch/users/yiren/eval_output/rag_contexts}"
+DATASETS="${DATASETS:-all}"
+TOP_K="${TOP_K:-3}"
+MAX_QUESTIONS="${MAX_QUESTIONS:-}"
+MEDMCQA_MAX_QUESTIONS="${MEDMCQA_MAX_QUESTIONS:-500}"
 
-MODEL_DIR=/lightscratch/users/yiren/model_backup
-OUT_DIR=/lightscratch/users/yiren/eval_output/rag_contexts
-mkdir -p $OUT_DIR
+echo "=== CHECKOUT ==="
+rm -rf "$WORKTREE"
+git clone --branch "$REPO_REF" --depth 1 "$REPO_URL" "$WORKTREE"
+cd "$WORKTREE/evaluation"
+rm -rf data
+ln -s "$DATA_SOURCE_DIR" data
 
-echo "=== STARTING RAG PRE-COMPUTATION ==="
+mkdir -p "$OUTPUT_DIR"
 
-# Run each dataset individually, writing directly to PVC.
-# Skip datasets that already have results (survives container restarts).
-for ds in afrimedqa_mcq medqa_usmle kenya_vignettes whb_stumps afrimedqa_saq; do
-  if [ -f "$OUT_DIR/${ds}.json" ]; then
-    echo "SKIP $ds: already exists on PVC"
-    continue
-  fi
-  echo "Processing $ds..."
-  python3 precompute_retrieval.py \
-    --db-path $MODEL_DIR/embeddings.sqlite \
-    --gecko-model $MODEL_DIR/Gecko_1024_quant.tflite \
-    --tokenizer $MODEL_DIR/sentencepiece.model \
-    --output-dir $OUT_DIR \
-    --top-k 3 \
-    --datasets $ds
-done
-
-# medmcqa_mcq: only first 500 (matches eval cap)
-if [ -f "$OUT_DIR/medmcqa_mcq.json" ]; then
-  echo "SKIP medmcqa_mcq: already exists on PVC"
+if [ "$DATASETS" = "all" ]; then
+  DATASET_LIST=(
+    "afrimedqa_mcq"
+    "medqa_usmle"
+    "medmcqa_mcq"
+    "kenya_vignettes"
+    "whb_stumps"
+    "afrimedqa_saq"
+  )
 else
-  echo "Processing medmcqa_mcq (capped at 500)..."
-  python3 precompute_retrieval.py \
-    --db-path $MODEL_DIR/embeddings.sqlite \
-    --gecko-model $MODEL_DIR/Gecko_1024_quant.tflite \
-    --tokenizer $MODEL_DIR/sentencepiece.model \
-    --output-dir $OUT_DIR \
-    --top-k 3 \
-    --datasets medmcqa_mcq \
-    --max-questions 500
+  IFS=',' read -r -a DATASET_LIST <<< "$DATASETS"
 fi
 
-echo "=== ALL DONE ==="
-ls -lh $OUT_DIR/
+echo "=== STARTING RAG PRECOMPUTATION ==="
+echo "REPO_REF=$REPO_REF"
+echo "OUTPUT_DIR=$OUTPUT_DIR"
+echo "TOP_K=$TOP_K"
+echo "DATASETS=${DATASET_LIST[*]}"
+
+for RAW_DS in "${DATASET_LIST[@]}"; do
+  DS="$(echo "$RAW_DS" | xargs)"
+  if [ -z "$DS" ]; then
+    continue
+  fi
+
+  if [ -f "$OUTPUT_DIR/${DS}.json" ]; then
+    echo "SKIP $DS: already exists"
+    continue
+  fi
+
+  DATASET_ARGS=(
+    --db-path "$DB_PATH"
+    --gecko-model "$GECKO_MODEL"
+    --tokenizer "$TOKENIZER"
+    --output-dir "$OUTPUT_DIR"
+    --top-k "$TOP_K"
+    --datasets "$DS"
+  )
+
+  if [ -n "$MAX_QUESTIONS" ]; then
+    DATASET_ARGS+=(--max-questions "$MAX_QUESTIONS")
+  elif [ "$DS" = "medmcqa_mcq" ] && [ -n "$MEDMCQA_MAX_QUESTIONS" ]; then
+    DATASET_ARGS+=(--max-questions "$MEDMCQA_MAX_QUESTIONS")
+  fi
+
+  echo "Processing $DS..."
+  python3 precompute_retrieval.py "${DATASET_ARGS[@]}"
+done
+
+echo "=== PRECOMPUTE COMPLETE ==="
+find "$OUTPUT_DIR" -maxdepth 1 -type f | sort

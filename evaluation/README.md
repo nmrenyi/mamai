@@ -8,7 +8,7 @@ Benchmarks on-device models on medical QA datasets using batch inference + scori
 evaluation/
 ├── cluster/                    # RunAI cluster job scripts
 │   ├── submit_job.sh           # Generic RunAI job submitter
-│   ├── run_cluster.sh          # Base cluster entrypoint
+│   ├── run_cluster.sh          # Generic cluster eval entrypoint (env-driven)
 │   ├── run_cluster_precompute.sh
 │   └── run_cluster_gemma4_e4b_open.sh
 ├── reports/                    # Final evaluation reports
@@ -51,8 +51,8 @@ python run_eval.py --model gemma3n-e4b --model-dir models --datasets afrimedqa_m
 # Full MCQ benchmark
 python run_eval.py --model gemma3n-e4b --model-dir models --datasets afrimedqa_mcq,medqa_usmle,medmcqa_mcq
 
-# With Gemini judge for open-ended datasets
-export GEMINI_API_KEY=your-key-here
+# With OpenAI judge for open-ended datasets
+export OPENAI_API_KEY=your-key-here
 python run_eval.py --model gemma3n-e4b --model-dir models --datasets all --judge
 ```
 
@@ -72,21 +72,27 @@ scp models/gemma-3n/gemma-3n-E4B-it-Q4_0.gguf $HOST:/mloscratch/users/$GASPAR/mo
 
 **Submit job** (see `cluster/submit_job.sh` for the full wrapper):
 ```bash
-runai submit \
-  --name mamai-eval \
-  --image registry.rcp.epfl.ch/multimeditron/mamai-eval:latest \
-  --pvc light-scratch:/mloscratch \
-  --large-shm \
-  --gpu 1 \
-  --node-pool h100 \
-  --run-as-gid 84257 \
-  -e MODEL_DIR=/mloscratch/users/$GASPAR/models \
-  -e OUTPUT_DIR=/mloscratch/users/$GASPAR/eval_results \
-  -e GEMINI_API_KEY_FILE_AT=/mloscratch/users/$GASPAR/keys/gemini_key.txt \
-  -- python3 run_eval.py --model gemma3n-e4b --datasets all --judge \
-     --model-dir /mloscratch/users/$GASPAR/models \
-     --output-dir /mloscratch/users/$GASPAR/eval_results
+./cluster/submit_job.sh mamai-gemma4-smoke run_cluster.sh \
+  MODEL=gemma4-e4b \
+  DATASETS=afrimedqa_mcq \
+  MAX_QUESTIONS=5
+
+./cluster/submit_job.sh mamai-gemma4-open-smoke run_cluster.sh \
+  MODEL=gemma4-e4b \
+  DATASETS=kenya_vignettes \
+  MAX_QUESTIONS=5 \
+  JUDGE=1
+
+./cluster/submit_job.sh mamai-gemma4-rag-smoke run_cluster.sh \
+  MODEL=gemma4-e4b \
+  DATASETS=afrimedqa_mcq \
+  MAX_QUESTIONS=5 \
+  RAG_DIR=/lightscratch/users/yiren/eval_output/rag_contexts
 ```
+
+`submit_job.sh` automatically forwards the current local Git branch as `REPO_REF`
+unless you override it explicitly. Extra `KEY=VALUE` arguments are passed
+through to the cluster script as environment variables.
 
 **Interactive debugging:**
 ```bash
