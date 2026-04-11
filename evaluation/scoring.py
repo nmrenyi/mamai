@@ -6,6 +6,10 @@ import json
 import os
 import re
 import time
+from pathlib import Path
+
+_evalcfg = json.loads((Path(__file__).parents[1] / "config/eval_config.json").read_text())
+JUDGE_TEMPERATURE: float = _evalcfg["judge_temperature"]
 
 
 def extract_letters(response: str) -> set[str]:
@@ -259,7 +263,7 @@ def judge_response(
             result = client.chat.completions.create(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.0,
+                temperature=JUDGE_TEMPERATURE,
             )
             break
         except Exception as e:

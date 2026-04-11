@@ -3,23 +3,23 @@ Prompt templates for medical QA evaluation.
 
 Protocol: app_parity_v1
   The open-ended system prompt is the same text as the deployed Android app
-  (evaluation/prompts/system_en.txt), so open-ended eval scores reflect actual
+  (config/prompts/system_en.txt), so open-ended eval scores reflect actual
   app behavior. MCQ uses a separate adapter prompt (MCQ_SYSTEM_PROMPT) because
   the app prompt is not designed to output a single letter — see GitHub issue #39.
 
-Single source of truth for the system prompt text:
-  evaluation/prompts/system_en.txt  (canonical)
-  app/android/app/src/main/assets/system_en.txt  (symlink → canonical)
+Single source of truth for all config: config/ at repo root.
 """
 
 import hashlib
 import json
 from pathlib import Path
 
-_PROMPTS_DIR = Path(__file__).parent / "prompts"
-_runtime = json.loads((_PROMPTS_DIR / "runtime_config.json").read_text())
+_CONFIG_DIR  = Path(__file__).parents[1] / "config"
+_PROMPTS_DIR = _CONFIG_DIR / "prompts"
+_runtime  = json.loads((_CONFIG_DIR / "runtime_config.json").read_text())
+_evalcfg  = json.loads((_CONFIG_DIR / "eval_config.json").read_text())
 
-# --- App system prompt (single source of truth: evaluation/prompts/system_en.txt) ---
+# --- App system prompt (single source of truth: config/prompts/system_en.txt) ---
 
 APP_SYSTEM_PROMPT: str = (_PROMPTS_DIR / "system_en.txt").read_text(encoding="utf-8").rstrip("\n")
 APP_SYSTEM_PROMPT_SW: str = (_PROMPTS_DIR / "system_sw.txt").read_text(encoding="utf-8").rstrip("\n")
@@ -49,14 +49,14 @@ CONTEXT_LABEL: str = _runtime["context_injection"]["context_label_en"]
 QUESTION_LABEL: str = _runtime["context_injection"]["question_label_en"]
 
 # eval-only: LiteRT-LM manages context window internally, no app equivalent
-N_CTX = 4096
+N_CTX: int = _evalcfg["n_ctx"]
 
 # --- Protocol versioning ---
 
 PROTOCOL_VERSION = "app_parity_v1"
 
 def _spec_sha256() -> str:
-    """SHA-256 of the canonical English system prompt file."""
+    """SHA-256 of the canonical English system prompt file (config/prompts/system_en.txt)."""
     return hashlib.sha256((_PROMPTS_DIR / "system_en.txt").read_bytes()).hexdigest()
 
 SPEC_SHA256: str = _spec_sha256()

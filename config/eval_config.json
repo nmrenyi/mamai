@@ -1,0 +1,6 @@
+{
+  "n_ctx": 4096,
+  "max_tokens": 2048,
+  "judge_model": "gpt-5.2",
+  "judge_temperature": 0.0
+}

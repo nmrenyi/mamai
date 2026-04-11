@@ -31,7 +31,7 @@ android {
 
     sourceSets {
         getByName("main") {
-            assets.srcDirs("src/main/assets", "../../../evaluation/prompts")
+            assets.srcDirs("src/main/assets", "../../../config")
         }
     }
 

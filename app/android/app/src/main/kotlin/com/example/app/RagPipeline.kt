@@ -40,17 +40,19 @@ data class RetrievedDoc(
 class RagPipeline(application: Application) {
     private val baseFolder = application.getExternalFilesDir(null).toString() + "/"
 
-    // Load system prompts and runtime config from assets.
-    // Single source of truth shared with evaluation/ — crashes immediately (IOException)
-    // if any asset file is missing from the APK.
+    // Load all config from assets (config/ at repo root, added as Gradle srcDir).
+    // Asset paths are relative to config/. Crashes immediately (IOException) if any
+    // file is missing from the APK — fail loud rather than silently wrong.
     private val systemInstructionsEn: String =
-        application.assets.open("system_en.txt").bufferedReader().use { it.readText() }
+        application.assets.open("prompts/system_en.txt").bufferedReader().use { it.readText() }
     private val systemInstructionsSw: String =
-        application.assets.open("system_sw.txt").bufferedReader().use { it.readText() }
+        application.assets.open("prompts/system_sw.txt").bufferedReader().use { it.readText() }
     private val runtimeConfig: JSONObject =
         JSONObject(application.assets.open("runtime_config.json").bufferedReader().use { it.readText() })
-    private val generationConfig      = runtimeConfig.getJSONObject("generation")
-    private val retrievalConfig       = runtimeConfig.getJSONObject("retrieval")
+    private val appConfig: JSONObject =
+        JSONObject(application.assets.open("app_config.json").bufferedReader().use { it.readText() })
+    private val generationConfig       = runtimeConfig.getJSONObject("generation")
+    private val retrievalConfig        = runtimeConfig.getJSONObject("retrieval")
     private val contextInjectionConfig = runtimeConfig.getJSONObject("context_injection")
 
     @Volatile private lateinit var engine: Engine
@@ -64,15 +66,15 @@ class RagPipeline(application: Application) {
 
         val t1 = System.currentTimeMillis()
         embedder = GeckoEmbeddingModel(
-            baseFolder + GECKO_MODEL,
-            Optional.of(baseFolder + TOKENIZER_MODEL),
-            USE_GPU_FOR_EMBEDDINGS,
+            baseFolder + appConfig.getString("embedding_model"),
+            Optional.of(baseFolder + appConfig.getString("tokenizer")),
+            appConfig.getBoolean("use_gpu_for_embeddings"),
         )
         Log.w("mam-ai", "[TIMING] GeckoEmbeddingModel constructor: ${System.currentTimeMillis() - t1}ms")
 
         val t2 = System.currentTimeMillis()
         textMemory = DefaultSemanticTextMemory(
-            SqliteVectorStore(768, baseFolder + "embeddings.sqlite"), embedder
+            SqliteVectorStore(appConfig.getInt("embedding_dim"), baseFolder + "embeddings.sqlite"), embedder
         )
         Log.w("mam-ai", "[TIMING] Remaining init (memory): ${System.currentTimeMillis() - t2}ms")
         Log.w("mam-ai", "[TIMING] Total main-thread init: ${System.currentTimeMillis() - t0}ms")
@@ -98,7 +100,7 @@ class RagPipeline(application: Application) {
                 Log.w("mam-ai", "[TIMING] Engine.initialize() starting...")
                 engine = Engine(
                     EngineConfig(
-                        modelPath = baseFolder + GEMMA_MODEL,
+                        modelPath = baseFolder + appConfig.getString("llm_model"),
                         backend = Backend.CPU(),
                         cacheDir = application.cacheDir.path,
                     )
@@ -294,13 +296,8 @@ class RagPipeline(application: Application) {
         }
 
     companion object {
-        private const val USE_GPU_FOR_EMBEDDINGS = false
         private val CHUNK_SEPARATORS = listOf("<sep>", "<doc_sep>")
         // Matches the [SOURCE:stem|PAGE:n] prefix written by chunk_guidelines.py
         private val METADATA_PREFIX = Regex("""^\[SOURCE:([^|]+)\|PAGE:(\d+)\]""")
-
-        private const val GEMMA_MODEL = "gemma-4-E4B-it.litertlm"
-        private const val TOKENIZER_MODEL = "sentencepiece.model"
-        private const val GECKO_MODEL = "Gecko_1024_quant.tflite"
     }
 }

@@ -13,11 +13,13 @@ Usage:
 import argparse
 import json
 import os
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
+from prompts import RETRIEVAL_TOP_K
 from retrieval import GeckoEmbedder, build_index, load_vector_store, retrieve
 
 # Same dataset registry as run_eval.py
@@ -42,7 +44,7 @@ def main():
     parser.add_argument("--tokenizer", default=DEFAULT_TOKENIZER, help="Path to sentencepiece.model")
     parser.add_argument("--data-dir", default="data", help="Directory containing dataset TSV files")
     parser.add_argument("--output-dir", default="data/rag_contexts", help="Output directory for JSON files")
-    parser.add_argument("--top-k", type=int, default=3, help="Number of chunks to retrieve per question")
+    parser.add_argument("--top-k", type=int, default=RETRIEVAL_TOP_K, help="Number of chunks to retrieve per question")
     parser.add_argument("--datasets", default="all", help="Comma-separated dataset names, or 'all'")
     parser.add_argument("--max-questions", type=int, default=None, help="Limit questions per dataset")
     args = parser.parse_args()

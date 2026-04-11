@@ -19,9 +19,14 @@ from tqdm import tqdm
 
 from inference import load_model
 from prompts import (TEMPERATURE, TOP_P, TOP_K, N_CTX, PROMPT_VERSION,
-                     PROTOCOL_VERSION, SPEC_SHA256,
+                     PROTOCOL_VERSION, SPEC_SHA256, RETRIEVAL_TOP_K,
                      build_mcq_prompt, build_mcq_messages, build_open_prompt, build_open_messages,
                      build_rag_mcq_prompt, build_rag_mcq_messages, build_rag_open_prompt, build_rag_open_messages)
+
+# Eval-only defaults from eval_config.json (CLI flags override these)
+import json as _json
+from pathlib import Path as _Path
+_evalcfg = _json.loads((_Path(__file__).parents[1] / "config/eval_config.json").read_text())
 from scoring import JUDGE_DIMENSIONS, _parse_answer_set, create_judge_client, extract_letters, judge_response, score_mcq
 
 # Dataset registry: name -> (filename, type, question_col, options_col, answer_col, reference_col)
@@ -249,10 +254,10 @@ def main():
     parser.add_argument("--model-dir", default="models", help="Directory containing model files (not needed for API models)")
     parser.add_argument("--datasets", required=True, help="Comma-separated dataset names, or 'all'")
     parser.add_argument("--output-dir", default="results", help="Directory for output JSON files")
-    parser.add_argument("--max-tokens", type=int, default=2048, help="Max tokens to generate")
+    parser.add_argument("--max-tokens", type=int, default=_evalcfg["max_tokens"], help="Max tokens to generate")
     parser.add_argument("--max-questions", type=int, default=None, help="Limit questions per dataset (for debugging)")
     parser.add_argument("--judge", action="store_true", help="Enable LLM-as-judge for open-ended datasets")
-    parser.add_argument("--judge-model", default="gpt-5.2", help="OpenAI model for judging")
+    parser.add_argument("--judge-model", default=_evalcfg["judge_model"], help="OpenAI model for judging")
     parser.add_argument("--n-gpu-layers", type=int, default=None, help="GPU layers for GGUF (-1 = all, 0 = CPU, default: auto-detect)")
     parser.add_argument("--data-dir", default="data", help="Directory containing dataset TSV files")
     parser.add_argument("--rag", default=None, help="Path to pre-computed RAG contexts dir (from precompute_retrieval.py)")
