@@ -99,6 +99,10 @@ mamai/
 └── CLAUDE.md               # Developer instructions for Claude Code
 ```
 
+## Project Tracking
+
+Work tracking lives in [GitHub Issues](https://github.com/nmrenyi/mamai/issues). This repo does not maintain a separate local `TODO.md`.
+
 ## Building from Source
 
 ### Prerequisites
