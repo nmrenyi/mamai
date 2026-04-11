@@ -27,7 +27,6 @@ import java.io.InputStreamReader
 import java.util.Optional
 import org.json.JSONObject
 import java.util.concurrent.Executors
-import kotlin.jvm.optionals.getOrNull
 
 /** A retrieved document chunk with its source metadata. */
 data class RetrievedDoc(
@@ -209,10 +208,10 @@ class RagPipeline(application: Application) {
                 val retrievalRequest = RetrievalRequest.create(
                     prompt,
                     RetrievalConfig.create(
-                    retrievalConfig.getInt("top_k"),
-                    retrievalConfig.getDouble("similarity_threshold").toFloat(),
-                    TaskType.RETRIEVAL_QUERY
-                )
+                        retrievalConfig.getInt("top_k"),
+                        retrievalConfig.getDouble("similarity_threshold").toFloat(),
+                        TaskType.RETRIEVAL_QUERY,
+                    ),
                 )
                 val rawResults = textMemory.retrieveResults(retrievalRequest).await().getEntities().map { e -> e.data }.toList()
                 val parsedDocs = rawResults.map { parseChunkMetadata(it) }
