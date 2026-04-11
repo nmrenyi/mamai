@@ -6,11 +6,10 @@
 #   device_push/models/embeddings.sqlite
 #   device_push/docs/<normalized_source_id>.pdf  (55 files)
 #   device_push/debug/chunks_for_rag.txt          (optional, for eval)
+#   device_push/debug/rag_bundle_installed.json   (installed bundle provenance)
 #
 # Usage:
 #   scripts/sync_rag_assets.sh               # fetch from bundle_url in lock file
-#   scripts/sync_rag_assets.sh --local /path/to/rag-bundle-v1.0.0/  # use local bundle dir
-#   scripts/sync_rag_assets.sh --tarball /path/to/rag-bundle-v1.0.0.tar.gz
 #
 # Requirements: curl, python3, sha256sum (macOS: shasum -a 256)
 
@@ -24,18 +23,17 @@ DEVICE_PUSH="$REPO_ROOT/device_push"
 # Parse args
 # ---------------------------------------------------------------------------
 
-MODE="remote"   # remote | local | tarball
-LOCAL_PATH=""
-
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --local)    MODE="local";   LOCAL_PATH="$2"; shift 2 ;;
-        --tarball)  MODE="tarball"; LOCAL_PATH="$2"; shift 2 ;;
         -h|--help)
-            sed -n '2,12p' "$0" | sed 's/^# //'
+            awk 'NR >= 2 && NR <= 10 { sub(/^# ?/, ""); print }' "$0"
             exit 0
             ;;
-        *) echo "Unknown argument: $1" >&2; exit 1 ;;
+        *)
+            echo "ERROR: sync_rag_assets.sh does not accept custom source arguments." >&2
+            echo "       Update rag-assets.lock.json and rerun the script." >&2
+            exit 1
+            ;;
     esac
 done
 
@@ -54,7 +52,7 @@ LOCK_SHA=$(python3       -c "import json,sys; d=json.load(open('$LOCK_FILE')); p
 
 echo "RAG asset sync"
 echo "  Bundle version : $BUNDLE_VERSION"
-echo "  Mode           : $MODE"
+echo "  Source         : GitHub release"
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -71,57 +69,36 @@ cleanup() {
 }
 trap cleanup EXIT
 
-case "$MODE" in
-    local)
-        BUNDLE_DIR="$LOCAL_PATH"
-        if [[ ! -d "$BUNDLE_DIR" ]]; then
-            echo "ERROR: local bundle dir not found: $BUNDLE_DIR" >&2
-            exit 1
-        fi
-        ;;
-    tarball)
-        TMP_DIR=$(mktemp -d)
-        echo "Extracting $LOCAL_PATH ..."
-        tar -xzf "$LOCAL_PATH" -C "$TMP_DIR"
-        BUNDLE_DIR=$(find "$TMP_DIR" -maxdepth 1 -type d -name "rag-bundle-*" | head -1)
-        if [[ -z "$BUNDLE_DIR" ]]; then
-            echo "ERROR: could not find rag-bundle-* directory inside tarball" >&2
-            exit 1
-        fi
-        ;;
-    remote)
-        if [[ "$BUNDLE_URL" == *"TODO"* ]]; then
-            echo "ERROR: bundle_url in $LOCK_FILE is still a placeholder." >&2
-            echo "       Publish a GitHub release and update rag-assets.lock.json first," >&2
-            echo "       or use --local / --tarball for a local bundle." >&2
-            exit 1
-        fi
-        TMP_DIR=$(mktemp -d)
-        TARBALL="$TMP_DIR/bundle.tar.gz"
-        # GitHub release asset downloads require auth-aware redirects.
-        # Use gh CLI if available (respects GITHUB_TOKEN / keyring auth),
-        # otherwise fall back to curl which works for public repos.
-        if command -v gh &>/dev/null; then
-            # Extract "owner/repo" and tag from the URL
-            GH_REPO=$(echo "$BUNDLE_URL" | sed -E 's|https://github.com/([^/]+/[^/]+)/releases/.*|\1|')
-            GH_TAG=$(echo "$BUNDLE_URL"  | sed -E 's|.*/releases/download/([^/]+)/.*|\1|')
-            GH_FILE=$(basename "$BUNDLE_URL")
-            echo "Downloading via gh: $GH_REPO $GH_TAG $GH_FILE ..."
-            gh release download "$GH_TAG" --repo "$GH_REPO" --pattern "$GH_FILE" --dir "$TMP_DIR"
-            mv "$TMP_DIR/$GH_FILE" "$TARBALL"
-        else
-            echo "Downloading $BUNDLE_URL ..."
-            curl -L --progress-bar -o "$TARBALL" "$BUNDLE_URL"
-        fi
-        echo "Extracting ..."
-        tar -xzf "$TARBALL" -C "$TMP_DIR"
-        BUNDLE_DIR=$(find "$TMP_DIR" -maxdepth 1 -type d -name "rag-bundle-*" | head -1)
-        if [[ -z "$BUNDLE_DIR" ]]; then
-            echo "ERROR: could not find rag-bundle-* directory inside download" >&2
-            exit 1
-        fi
-        ;;
-esac
+if [[ "$BUNDLE_URL" == *"TODO"* ]]; then
+    echo "ERROR: bundle_url in $LOCK_FILE is still a placeholder." >&2
+    echo "       Publish a GitHub release and update rag-assets.lock.json first." >&2
+    exit 1
+fi
+
+TMP_DIR=$(mktemp -d)
+TARBALL="$TMP_DIR/bundle.tar.gz"
+# GitHub release asset downloads require auth-aware redirects.
+# Use gh CLI if available (respects GITHUB_TOKEN / keyring auth),
+# otherwise fall back to curl which works for public repos.
+if command -v gh &>/dev/null; then
+    # Extract "owner/repo" and tag from the URL
+    GH_REPO=$(echo "$BUNDLE_URL" | sed -E 's|https://github.com/([^/]+/[^/]+)/releases/.*|\1|')
+    GH_TAG=$(echo "$BUNDLE_URL"  | sed -E 's|.*/releases/download/([^/]+)/.*|\1|')
+    GH_FILE=$(basename "$BUNDLE_URL")
+    echo "Downloading via gh: $GH_REPO $GH_TAG $GH_FILE ..."
+    gh release download "$GH_TAG" --repo "$GH_REPO" --pattern "$GH_FILE" --dir "$TMP_DIR"
+    mv "$TMP_DIR/$GH_FILE" "$TARBALL"
+else
+    echo "Downloading $BUNDLE_URL ..."
+    curl -L --progress-bar -o "$TARBALL" "$BUNDLE_URL"
+fi
+echo "Extracting ..."
+tar -xzf "$TARBALL" -C "$TMP_DIR"
+BUNDLE_DIR=$(find "$TMP_DIR" -maxdepth 1 -type d -name "rag-bundle-*" | head -1)
+if [[ -z "$BUNDLE_DIR" ]]; then
+    echo "ERROR: could not find rag-bundle-* directory inside download" >&2
+    exit 1
+fi
 
 echo "  Bundle dir     : $BUNDLE_DIR"
 echo ""
@@ -136,17 +113,18 @@ if [[ ! -f "$MANIFEST" ]]; then
     exit 1
 fi
 
+if command -v sha256sum &>/dev/null; then
+    MANIFEST_SHA_ACTUAL=$(sha256sum "$MANIFEST" | awk '{print $1}')
+else
+    MANIFEST_SHA_ACTUAL=$(shasum -a 256 "$MANIFEST" | awk '{print $1}')
+fi
+
 if [[ -n "$LOCK_SHA" && "$LOCK_SHA" != "TODO"* ]]; then
     echo "Verifying manifest.json checksum ..."
-    if command -v sha256sum &>/dev/null; then
-        ACTUAL=$(sha256sum "$MANIFEST" | awk '{print $1}')
-    else
-        ACTUAL=$(shasum -a 256 "$MANIFEST" | awk '{print $1}')
-    fi
-    if [[ "$ACTUAL" != "$LOCK_SHA" ]]; then
+    if [[ "$MANIFEST_SHA_ACTUAL" != "$LOCK_SHA" ]]; then
         echo "ERROR: manifest.json checksum mismatch!" >&2
         echo "  expected : $LOCK_SHA" >&2
-        echo "  actual   : $ACTUAL" >&2
+        echo "  actual   : $MANIFEST_SHA_ACTUAL" >&2
         exit 1
     fi
     echo "  manifest.json OK ($LOCK_SHA)"
@@ -236,13 +214,44 @@ echo "  -> $DOCS_DIR/  ($PDF_COUNT files)"
 # Install debug chunks (optional)
 # ---------------------------------------------------------------------------
 
+DEBUG_DIR="$DEVICE_PUSH/debug"
+mkdir -p "$DEBUG_DIR"
+
 SRC_CHUNKS="$BUNDLE_DIR/debug/chunks_for_rag.txt"
 if [[ -f "$SRC_CHUNKS" ]]; then
-    DEBUG_DIR="$DEVICE_PUSH/debug"
-    mkdir -p "$DEBUG_DIR"
     cp -f "$SRC_CHUNKS" "$DEBUG_DIR/chunks_for_rag.txt"
     echo "Installed debug/chunks_for_rag.txt"
 fi
+
+# Stamp the installed bundle metadata into device_push/ so the staging folder is
+# self-describing even though the large bundle files themselves are gitignored.
+INSTALL_RECORD="$DEBUG_DIR/rag_bundle_installed.json"
+python3 - <<PY
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+
+lock = json.loads(Path("$LOCK_FILE").read_text())
+manifest = json.loads(Path("$MANIFEST").read_text())
+record = {
+    "schema_version": 1,
+    "installed_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+    "sync_mode": "github_release",
+    "bundle_version_locked": lock.get("bundle_version", ""),
+    "bundle_version_manifest": manifest.get("bundle_version", ""),
+    "bundle_url": lock.get("bundle_url", ""),
+    "manifest_sha256_locked": lock.get("manifest_sha256", ""),
+    "manifest_sha256_actual": "$MANIFEST_SHA_ACTUAL",
+    "producer_repo": lock.get("producer_repo", ""),
+    "producer_commit": lock.get("producer_commit", ""),
+    "chunk_count_locked": lock.get("chunk_count"),
+    "source_count_locked": lock.get("source_count"),
+    "chunk_count_manifest": manifest.get("chunk_count"),
+    "source_count_manifest": manifest.get("source_count"),
+}
+Path("$INSTALL_RECORD").write_text(json.dumps(record, indent=2) + "\n")
+PY
+echo "Stamped installed bundle metadata: $INSTALL_RECORD"
 
 # ---------------------------------------------------------------------------
 # Summary

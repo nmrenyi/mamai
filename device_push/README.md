@@ -9,7 +9,7 @@ Large binaries are gitignored — populate them via the sync script (see below).
 device_push/
 ├── docs/       # 55 source PDF guidelines, normalized filenames (gitignored)
 ├── models/     # Gecko_1024_quant.tflite, sentencepiece.model, embeddings.sqlite (gitignored)
-└── debug/      # chunks_for_rag.txt for offline eval (gitignored, optional)
+└── debug/      # chunks_for_rag.txt + installed bundle metadata (gitignored)
 ```
 
 ## Contents
@@ -28,6 +28,7 @@ device_push/
 | `models/sentencepiece.model` | tokenizer | ~0.8 MB |
 | `models/embeddings.sqlite` | pre-computed embeddings for 21,731 chunks | ~89 MB |
 | `docs/*.pdf` (55 files) | source medical guidelines, URL-safe names | ~91 MB |
+| `debug/rag_bundle_installed.json` | installed bundle provenance | small |
 
 PDF filenames use normalized SOURCE ids (spaces/parens → underscores, e.g.
 `WHO_Abortion_Care_2022.pdf`). `openPdf()` in `MainActivity.kt` applies the
@@ -36,20 +37,16 @@ same normalization rule before resolving the path.
 ## Setup — RAG assets
 
 The pinned bundle version is recorded in `rag-assets.lock.json` at the repo root.
-Run the sync script to fetch and install it:
+Run the sync script to fetch and install the pinned GitHub release:
 
 ```bash
-# From a published GitHub release (update rag-assets.lock.json first):
+# Update rag-assets.lock.json first if you want a newer bundle:
 bash scripts/sync_rag_assets.sh
-
-# From a local bundle directory (for development):
-bash scripts/sync_rag_assets.sh --local /path/to/rag-bundle-v1.0.0/
-
-# From a local tarball:
-bash scripts/sync_rag_assets.sh --tarball /path/to/rag-bundle-v1.0.0.tar.gz
 ```
 
-The script verifies checksums and clears any old PDFs before installing.
+The script verifies checksums, clears any old PDFs before installing, and writes
+`debug/rag_bundle_installed.json` so `device_push/` records exactly which RAG
+bundle version was staged.
 
 ## Setup — LLM models (first time)
 

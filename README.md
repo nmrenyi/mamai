@@ -131,10 +131,7 @@ which publishes versioned bundles containing `embeddings.sqlite` and the 55 sour
 To update the RAG assets in this repo, bump `rag-assets.lock.json` and run:
 
 ```bash
-# Install from a local bundle (development):
-bash scripts/sync_rag_assets.sh --local /path/to/rag-bundle-<version>/
-
-# Install from a published GitHub release:
+# Sync the pinned GitHub release from rag-assets.lock.json:
 bash scripts/sync_rag_assets.sh
 ```
 
