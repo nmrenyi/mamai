@@ -16,7 +16,13 @@ set -euo pipefail
 JOB_NAME="${1:-mamai-eval-run}"
 SCRIPT_NAME="${2:-run_cluster.sh}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SCRIPT_PATH="$SCRIPT_DIR/$SCRIPT_NAME"
+if [[ "$SCRIPT_NAME" = /* ]]; then
+  SCRIPT_PATH="$SCRIPT_NAME"
+elif [[ "$SCRIPT_NAME" == */* ]]; then
+  SCRIPT_PATH="$(cd "$(dirname "$SCRIPT_NAME")" && pwd)/$(basename "$SCRIPT_NAME")"
+else
+  SCRIPT_PATH="$SCRIPT_DIR/$SCRIPT_NAME"
+fi
 shift $(( $# >= 1 ? 1 : 0 ))
 shift $(( $# >= 1 ? 1 : 0 ))
 EXTRA_ENV=("$@")
