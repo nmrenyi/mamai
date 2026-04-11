@@ -29,6 +29,12 @@ android {
         versionName = flutter.versionName
     }
 
+    sourceSets {
+        getByName("main") {
+            assets.srcDirs("src/main/assets", "../../../evaluation/prompts")
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false

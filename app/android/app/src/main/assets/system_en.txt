@@ -1,1 +1,0 @@
-../../../../../../evaluation/prompts/system_en.txt
