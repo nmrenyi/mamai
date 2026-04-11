@@ -53,7 +53,7 @@ rag/out.txt
 # device_push — large binaries (populate via scripts/sync_rag_assets.sh + manual hard-links)
 device_push/bundle/
 device_push/models/
-device_push/debug/
+device_push/bundle/debug/
 device_push.zip
 
 # Misc

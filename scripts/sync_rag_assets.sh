@@ -7,8 +7,8 @@
 # and installs:
 #   device_push/bundle/embeddings.sqlite
 #   device_push/bundle/docs/<normalized_source_id>.pdf  (55 files)
-#   device_push/debug/chunks_for_rag.txt          (optional, for eval)
-#   device_push/debug/rag_bundle_staged.json      (staged bundle provenance)
+#   device_push/bundle/debug/chunks_for_rag.txt    (optional, for eval)
+#   device_push/bundle/debug/rag_bundle_staged.json  (staged bundle provenance)
 #
 # Usage:
 #   scripts/sync_rag_assets.sh               # fetch from bundle_url in lock file
@@ -274,17 +274,16 @@ echo "  -> $DOCS_DIR/  ($PDF_COUNT files)"
 # Install debug chunks (optional)
 # ---------------------------------------------------------------------------
 
-DEBUG_DIR="$DEVICE_PUSH/debug"
+DEBUG_DIR="$BUNDLE_STAGE/debug"
 mkdir -p "$DEBUG_DIR"
 
 SRC_CHUNKS="$BUNDLE_DIR/debug/chunks_for_rag.txt"
 if [[ -f "$SRC_CHUNKS" ]]; then
     cp -f "$SRC_CHUNKS" "$DEBUG_DIR/chunks_for_rag.txt"
-    echo "Installed debug/chunks_for_rag.txt"
+    echo "Installed bundle/debug/chunks_for_rag.txt"
 fi
 
-# Stamp the staged bundle metadata into device_push/ so the staging folder is
-# self-describing even though the large bundle files themselves are gitignored.
+# Stamp the staged bundle metadata so the staging folder is self-describing.
 INSTALL_RECORD="$DEBUG_DIR/rag_bundle_staged.json"
 python3 - <<PY
 import json

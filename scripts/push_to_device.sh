@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # push_to_device.sh — Verify the staged RAG bundle and push it to an Android device
 #
-# Reads rag-assets.lock.json and device_push/debug/rag_bundle_staged.json,
+# Reads rag-assets.lock.json and device_push/bundle/debug/rag_bundle_staged.json,
 # verifies the staged bundle matches the pinned lock file, checks adb/device
 # availability, removes stale PDFs on the device, and pushes the staged files.
 # After all pushes succeed, it writes rag_bundle_deployed.json on the device.
@@ -16,7 +16,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LOCK_FILE="$REPO_ROOT/rag-assets.lock.json"
 DEVICE_PUSH="$REPO_ROOT/device_push"
-INSTALL_RECORD="$DEVICE_PUSH/debug/rag_bundle_staged.json"
+INSTALL_RECORD="$DEVICE_PUSH/bundle/debug/rag_bundle_staged.json"
 DEVICE_DIR="/sdcard/Android/data/com.example.app/files"
 DEPLOY_RECORD_NAME="rag_bundle_deployed.json"
 

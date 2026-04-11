@@ -10,17 +10,18 @@ below).
 device_push/
 ├── bundle/     # sync-managed RAG assets — rm -rf bundle/ to wipe (gitignored)
 │   ├── embeddings.sqlite
-│   └── docs/   # 55 source PDFs, normalized filenames
+│   ├── docs/   # 55 source PDFs, normalized filenames
+│   └── debug/  # provenance stamp + chunks_for_rag.txt
 ├── models/     # static ML model files, manually placed (gitignored)
 │   ├── Gecko_1024_quant.tflite
 │   ├── sentencepiece.model
 │   ├── gemma-4-E4B-it.litertlm
 │   ├── gemma-3n-E4B-it-int4.litertlm
 │   └── gemma-3n-E4B-it-int4.task
-└── debug/      # provenance stamps + chunks_for_rag.txt (gitignored)
+└── models/     # static ML model files, manually placed (gitignored)
 ```
 
-`bundle/` is entirely owned by `sync_rag_assets.sh` — it is atomically rebuilt on every sync run. `models/` is never touched by the sync script.
+`bundle/` is entirely owned by `sync_rag_assets.sh` — it is atomically rebuilt on every sync run, including its `debug/` provenance stamp. `models/` is never touched by the sync script. To wipe everything the sync produced: `rm -rf device_push/bundle/`.
 
 ## Contents
 
@@ -38,7 +39,7 @@ device_push/
 |------|--------|------|
 | `bundle/embeddings.sqlite` | pre-computed embeddings for 21,731 chunks | ~89 MB |
 | `bundle/docs/*.pdf` (55 files) | source medical guidelines, URL-safe names | ~91 MB |
-| `debug/rag_bundle_staged.json` | staged bundle provenance | small |
+| `bundle/debug/rag_bundle_staged.json` | staged bundle provenance | small |
 
 PDF filenames use normalized SOURCE ids (spaces/parens → underscores, e.g.
 `WHO_Abortion_Care_2022.pdf`). `openPdf()` in `MainActivity.kt` applies the
