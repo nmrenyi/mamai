@@ -3,8 +3,9 @@ import 'dart:io';
 import 'dart:io' as io;
 
 import 'package:app/locale_notifier.dart';
+import 'package:archive/archive.dart';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, compute;
 import 'package:flutter/material.dart';
 import 'package:app/l10n/app_localizations.dart';
 import 'package:path_provider/path_provider.dart';
@@ -51,33 +52,37 @@ class _IntroPageState extends State<IntroPage> {
 
   Map<String, DownloadInProgress> downloads = HashMap();
 
-  // Download URLs for each model file.
-  // - Model files: public HuggingFace repos, no auth required.
-  // - embeddings.sqlite: published as a separate release asset alongside the
-  //   RAG bundle in mamai-medical-guidelines. Update this URL when bumping
-  //   rag-assets.lock.json to a new bundle version.
-  static const Map<String, String> _fileUrls = {
+  // Model files downloaded individually from HuggingFace (public, no auth).
+  // Update these URLs if the model repos publish new versions.
+  static const Map<String, String> _modelFileUrls = {
     "gemma-4-E4B-it.litertlm":
         "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm",
     "Gecko_1024_quant.tflite":
         "https://huggingface.co/litert-community/Gecko-110m-en/resolve/main/Gecko_1024_quant.tflite",
     "sentencepiece.model":
         "https://huggingface.co/litert-community/Gecko-110m-en/resolve/main/sentencepiece.model",
-    "embeddings.sqlite":
-        "https://github.com/nmrenyi/mamai-medical-guidelines/releases/download/v1.0.0/embeddings.sqlite",
   };
 
-  /// Downloads a model file from HuggingFace or a GitHub release to the device.
-  downloadFile(String filename) async {
-    Directory directory = await downloadDir();
+  // RAG bundle: embeddings.sqlite + 55 guideline PDFs, packaged as a tar.gz
+  // from the mamai-medical-guidelines GitHub release.
+  // Update this URL when bumping rag-assets.lock.json to a new bundle version.
+  static const String _ragBundleUrl =
+      "https://github.com/nmrenyi/mamai-medical-guidelines/releases/download/v1.0.0/rag-bundle-v1.0.0.tar.gz";
 
+  // Key used in the downloads map to track bundle download progress.
+  static const String _bundleKey = '__rag_bundle__';
+
+  // Marker file written after successful bundle extraction.
+  static const String _bundleMarker = '.rag_bundle_ready';
+
+  /// Downloads a single model file from HuggingFace.
+  Future<void> downloadFile(String filename) async {
+    final directory = await downloadDir();
     final download = DownloadInProgress(total: 1, current: 0, finished: false);
-    downloads[filename] = download;
+    setState(() => downloads[filename] = download);
 
-    final dio = Dio();
-
-    await dio.download(
-      _fileUrls[filename]!,
+    await Dio().download(
+      _modelFileUrls[filename]!,
       '${directory.path}/$filename',
       onReceiveProgress: (current, int total) {
         setState(() {
@@ -86,8 +91,35 @@ class _IntroPageState extends State<IntroPage> {
         });
       },
     );
-
     download.finished = true;
+  }
+
+  /// Downloads the RAG bundle tar.gz and extracts embeddings.sqlite + PDFs.
+  Future<void> downloadAndExtractBundle() async {
+    final directory = await downloadDir();
+    final tmpPath = '${directory.path}/rag-bundle.tar.gz.tmp';
+    final download = DownloadInProgress(total: 1, current: 0, finished: false);
+    setState(() => downloads[_bundleKey] = download);
+
+    await Dio().download(
+      _ragBundleUrl,
+      tmpPath,
+      onReceiveProgress: (current, int total) {
+        setState(() {
+          download.current = current;
+          download.total = total;
+        });
+      },
+    );
+
+    // Decompress and extract in a background isolate to avoid blocking the UI.
+    await compute(_extractBundleFiles, {
+      'tmpPath': tmpPath,
+      'destDir': directory.path,
+      'markerPath': '${directory.path}/$_bundleMarker',
+    });
+
+    setState(() => download.finished = true);
   }
 
   // ======= Download related properties ============
@@ -122,26 +154,22 @@ class _IntroPageState extends State<IntroPage> {
 
   bool get downloadsDone {
     if (downloads.isEmpty && _downloadDir != null) {
-      bool done = files
-          .map((file) => io.File("${_downloadDir!.path}/$file").existsSync())
-          .reduce((a, b) => a && b);
-
-      if (done) {
-        // Little bit of a hack over doing a checksum but is is ok for an mvp
-        int fileSize = files
-            .map((file) => io.File("${_downloadDir!.path}/$file").lengthSync())
-            .reduce((a, b) => a + b);
-        debugPrint('Downloaded files total size: $fileSize bytes');
-        // Accept any total > 3 GB — ensures Gemma model is present
-        // (Gemma 4 E4B is 3.4 GB; Gemma 3n E4B was 4.6 GB).
-        if (fileSize > 3000000000) {
-          return true;
-        }
+      final modelsReady = _modelFiles.every(
+          (f) => io.File('${_downloadDir!.path}/$f').existsSync());
+      final bundleReady = io.File(
+          '${_downloadDir!.path}/$_bundleMarker').existsSync();
+      if (modelsReady && bundleReady) {
+        // Sanity-check: Gemma 4 E4B is 3.65 GB — reject truncated downloads.
+        final gemmaSize = io.File(
+            '${_downloadDir!.path}/gemma-4-E4B-it.litertlm').lengthSync();
+        debugPrint('Gemma model size: $gemmaSize bytes');
+        return gemmaSize > 3000000000;
       }
+      return false;
     }
 
     return downloads.isNotEmpty &&
-        downloads.values.map((d) => d.finished).fold(true, (a, b) => a && b);
+        downloads.values.every((d) => d.finished);
   }
 
   bool get downloadsStarted => downloads.isNotEmpty;
@@ -149,12 +177,11 @@ class _IntroPageState extends State<IntroPage> {
   /// Whether the LLM has been loaded yet
   bool llmInitialized = false;
 
-  /// List of remote model files to download
-  static const List<String> files = [
+  // Model files downloaded individually from HuggingFace.
+  static const List<String> _modelFiles = [
     "gemma-4-E4B-it.litertlm",
     "sentencepiece.model",
     "Gecko_1024_quant.tflite",
-    "embeddings.sqlite",
   ];
 
   @override
@@ -241,9 +268,10 @@ class _IntroPageState extends State<IntroPage> {
         onPressed: () async {
           var accepted = await promptLicense(context, l10n);
           if (accepted ?? false) {
-            for (var filename in files) {
+            for (final filename in _modelFiles) {
               downloadFile(filename);
             }
+            downloadAndExtractBundle();
           }
         },
         style: ElevatedButton.styleFrom(
@@ -386,6 +414,37 @@ class _IntroPageState extends State<IntroPage> {
       ),
     );
   }
+}
+
+// Top-level function so it can run in a separate isolate via compute().
+// Decompresses the RAG bundle tar.gz, writes embeddings.sqlite and all
+// guideline PDFs to destDir, deletes the temp file, then writes a marker.
+Future<void> _extractBundleFiles(Map<String, String> args) async {
+  final tmpPath = args['tmpPath']!;
+  final destDir = args['destDir']!;
+  final markerPath = args['markerPath']!;
+
+  final bytes = io.File(tmpPath).readAsBytesSync();
+  final archive = TarDecoder().decodeBytes(GZipDecoder().decodeBytes(bytes));
+
+  for (final file in archive.files) {
+    if (!file.isFile) continue;
+    final name = file.name;
+
+    String? destPath;
+    if (name.contains('runtime/') && name.endsWith('embeddings.sqlite')) {
+      destPath = '$destDir/embeddings.sqlite';
+    } else if (name.contains('/docs/') && name.endsWith('.pdf')) {
+      destPath = '$destDir/${name.split('/').last}';
+    }
+
+    if (destPath != null) {
+      io.File(destPath).writeAsBytesSync(file.content as List<int>);
+    }
+  }
+
+  io.File(tmpPath).deleteSync();
+  io.File(markerPath).writeAsStringSync('ok');
 }
 
 Future<bool?> promptLicense(
