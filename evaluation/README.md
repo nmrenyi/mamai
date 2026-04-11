@@ -1,6 +1,32 @@
 ## Evaluation
 
-Benchmarks Gemma 3n E4B/E2B and MedGemma on medical QA datasets using batch inference + scoring.
+Benchmarks on-device models on medical QA datasets using batch inference + scoring.
+
+### Structure
+
+```
+evaluation/
+├── cluster/                    # RunAI cluster job scripts
+│   ├── submit_job.sh           # Generic RunAI job submitter
+│   ├── run_cluster.sh          # Base cluster entrypoint
+│   ├── run_cluster_precompute.sh
+│   └── run_cluster_gemma4_e4b_open.sh
+├── reports/                    # Final evaluation reports
+│   ├── eval_report_no_rag.md
+│   ├── eval_report.md
+│   ├── latency_report.md
+│   └── benchmark_report.md
+├── data/                       # Benchmark datasets (.tsv)
+├── run_eval.py                 # Main evaluation harness
+├── scoring.py                  # LLM-as-judge scoring
+├── inference.py                # Model registry + inference
+├── prompts.py                  # Prompt templates
+├── retrieval.py                # RAG retrieval
+├── precompute_retrieval.py     # Precompute embeddings
+├── benchmark_latency.py        # Latency analysis
+├── requirements.txt
+└── Dockerfile
+```
 
 ### Datasets
 
@@ -44,7 +70,7 @@ docker push registry.rcp.epfl.ch/multimeditron/mamai-eval:latest
 scp models/gemma-3n/gemma-3n-E4B-it-Q4_0.gguf $HOST:/mloscratch/users/$GASPAR/models/gemma-3n/
 ```
 
-**Submit job:**
+**Submit job** (see `cluster/submit_job.sh` for the full wrapper):
 ```bash
 runai submit \
   --name mamai-eval \

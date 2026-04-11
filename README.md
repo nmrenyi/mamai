@@ -80,24 +80,22 @@ mamai/
 │   │   └── BenchmarkQueries.kt      # Predefined test queries
 │   └── pubspec.yaml
 ├── rag/                    # Document preprocessing & chunking (Python)
-│   ├── rag.py                       # Chunking, embedding, and RAG evaluation
-│   ├── chunks_testing.py            # Chunk analysis utilities
-│   └── text_extraction_json.py      # JSONL text extraction
-├── finetune/               # Gemma 3n finetuning (Python, not deployed in app)
+│   └── text_extraction_json.py      # JSONL text extraction utility
+├── finetune/               # Gemma finetuning (Python, not deployed in app)
 │   ├── main_training.py             # Training entry point
 │   ├── config.py                    # Hyperparameters & paths
 │   ├── model_setup.py               # LoRA + quantization setup
 │   ├── data_processing.py           # QA dataset formatting
 │   └── training.py                  # SFTTrainer wrapper
 ├── evaluation/             # Model quality & latency benchmarking
+│   ├── cluster/                     # RunAI cluster job scripts
+│   ├── reports/                     # Final evaluation reports
 │   ├── run_eval.py                  # Main evaluation harness
 │   ├── scoring.py                   # LLM-as-judge scoring
-│   ├── benchmark_latency.py         # On-device latency analysis
-│   └── reports/
-│       ├── eval_report_no_rag.md    # Quality results (no-RAG, 5 models × 6 datasets)
-│       ├── eval_report.md           # Quality results (full, incl. +RAG variants)
-│       ├── latency_report.md        # On-device latency results
-│       └── benchmark_report.md      # CPU inference benchmark (MediaPipe vs LiteRT-LM)
+│   └── benchmark_latency.py         # On-device latency analysis
+├── device_push/            # Staging area for adb push to device
+│   ├── docs/                        # Source PDF guidelines (gitignored)
+│   └── models/                      # Gecko TFLite, embeddings, tokenizer (gitignored)
 └── CLAUDE.md               # Developer instructions for Claude Code
 ```
 
