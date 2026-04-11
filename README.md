@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://youtu.be/M_Kruluel28">Demo Video</a> · <a href="https://www.kaggle.com/competitions/google-gemma-3n-hackathon">Gemma 3n Kaggle Challenge</a> · <a href="evaluation/reports/eval_report_no_rag.md">Eval Report</a> · <a href="evaluation/reports/latency_report.md">Latency Report</a>
+  <a href="https://youtu.be/M_Kruluel28">Demo Video</a> · <a href="https://www.kaggle.com/competitions/google-gemma-3n-hackathon">Gemma 3n Kaggle Challenge</a> · <a href="evaluation/reports/eval_report_app_parity_v1.md">Eval Report</a> · <a href="evaluation/reports/latency_report.md">Latency Report</a>
 </p>
 
 ---
@@ -181,13 +181,13 @@ Downloaded on first launch from a temporary VPS and stored on-device:
 
 We evaluate model accuracy across multiple medical QA benchmarks, including MCQ datasets (AfriMedQA, MedQA USMLE, MedMCQA) and open-ended clinical vignettes (Kenya Vignettes, AfriMedQA SAQ, WHB Stumps). Open-ended responses are scored by an LLM judge on accuracy, safety, completeness, helpfulness, and clarity.
 
-- **Best overall model**: GPT-5 at **80.9%** average MCQ accuracy and **4.47/5** average open-ended judge score
-- **Best fully evaluated on-device model**: Gemma 3n E4B at **45.6%** MCQ and **3.06/5** open-ended
-- **Current deployed model check**: Gemma 4 E4B reaches **42.9%** average MCQ accuracy and **2.94/5** open-ended (no RAG), which is below Gemma 3n E4B on both MCQ (**45.6%**) and open-ended (**3.06/5**)
-- **RAG currently hurts MCQ performance** for all evaluated on-device models, with Gemma 3n E4B dropping from **45.6% → 43.4%**
-- **Gemma 4 E4B +RAG evaluation is still pending**
+- **Best overall model**: GPT-5 at **82.8%** average MCQ accuracy and **4.19/5** average open-ended judge score (no-RAG)
+- **Best on-device model**: Gemma 3n E4B at **45.5%** average MCQ and **2.98/5** open-ended (no-RAG)
+- **Current deployed model**: Gemma 4 E4B at **42.9%** average MCQ and **2.61/5** open-ended (no-RAG) — below Gemma 3n E4B on both metrics
+- **RAG hurts on-device models**: Gemma 4 E4B drops from **42.9% → 43.4%** average MCQ under RAG; Gemma 3n E4B drops from **45.5% → 43.4%**; GPT-5 is largely unaffected
+- All three models fully evaluated under the `app_parity_v1` protocol (unified config, same system prompt as APK, versioned RAG contexts)
 
-See [evaluation/reports/eval_report_no_rag.md](evaluation/reports/eval_report_no_rag.md) for the full benchmark tables.
+See [evaluation/reports/eval_report_app_parity_v1.md](evaluation/reports/eval_report_app_parity_v1.md) for the full benchmark tables.
 
 ### Latency
 
@@ -198,7 +198,7 @@ We benchmark on-device latency on real Android hardware, measuring time-to-first
 - The current conclusion is that **Gemma 4 E4B is not yet a clear CPU-only upgrade**: decode is faster, but TTFT is worse and MCQ accuracy is lower
 - GPU evaluation remains blocked on a LiteRT-LM Android release with working GPU decode for E4B
 
-See [evaluation/reports/benchmark_report.md](evaluation/reports/benchmark_report.md) and [evaluation/reports/latency_report.md](evaluation/reports/latency_report.md) for details.
+See [evaluation/reports/latency_report.md](evaluation/reports/latency_report.md) for details.
 
 ### Stability
 
@@ -210,7 +210,7 @@ A dedicated stability benchmark has not yet been published as a separate report.
 
 A dedicated evaluation of how the app handles high-stakes clinical emergencies — including postpartum hemorrhage, eclampsia, neonatal respiratory distress, and sepsis. We assess whether the model correctly identifies emergency escalation triggers, avoids underreacting to critical presentations, and produces safe, actionable guidance aligned with MOHSW Zanzibar protocols.
 
-This has not yet been isolated as a standalone benchmark. For now, the closest signal is the open-ended judge scoring in [evaluation/reports/eval_report_no_rag.md](evaluation/reports/eval_report_no_rag.md), where on-device models trail GPT-5 most sharply on **accuracy** and **safety**.
+This has not yet been isolated as a standalone benchmark. For now, the closest signal is the open-ended judge scoring in [evaluation/reports/eval_report_app_parity_v1.md](evaluation/reports/eval_report_app_parity_v1.md), where on-device models trail GPT-5 most sharply on **accuracy** and **safety**.
 
 ## Finetuning
 

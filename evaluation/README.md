@@ -12,10 +12,9 @@ evaluation/
 │   ├── run_cluster_precompute.sh
 │   └── run_cluster_gemma4_e4b_open.sh
 ├── reports/                    # Final evaluation reports
-│   ├── eval_report_no_rag.md
-│   ├── eval_report.md
-│   ├── latency_report.md
-│   └── benchmark_report.md
+│   ├── eval_report_app_parity_v1.md   # Current: 3-model MCQ + open-ended (app_parity_v1 protocol)
+│   ├── latency_report.md              # Current: on-device latency benchmarks
+│   └── legacy/                        # Archived earlier reports
 ├── data/                       # Benchmark datasets (.tsv)
 ├── run_eval.py                 # Main evaluation harness
 ├── scoring.py                  # LLM-as-judge scoring
