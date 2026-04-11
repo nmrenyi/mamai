@@ -4,8 +4,9 @@ Prompt templates for medical QA evaluation.
 Protocol: app_parity_v1
   The open-ended system prompt is the same text as the deployed Android app
   (config/prompts/system_en.txt), so open-ended eval scores reflect actual
-  app behavior. MCQ uses a separate adapter prompt (MCQ_SYSTEM_PROMPT) because
-  the app prompt is not designed to output a single letter — see GitHub issue #39.
+  app behavior. MCQ uses a separate adapter prompt from
+  config/prompts/mcq_system.txt because the app prompt is not designed to
+  output a single letter — see GitHub issue #39.
 
 Single source of truth for all config: config/ at repo root.
 """
@@ -28,13 +29,7 @@ APP_SYSTEM_PROMPT_SW: str = (_PROMPTS_DIR / "system_sw.txt").read_text(encoding=
 # NOT the app prompt. Required because the app prompt produces clinical prose,
 # which breaks single-letter extraction. MCQ scores are a knowledge proxy,
 # not a deployment-fidelity measure. See GitHub issue #39.
-
-MCQ_SYSTEM_PROMPT = (
-    "You are a medical expert taking a clinical exam. "
-    "Answer each multiple-choice question by selecting the single best answer. "
-    "Reply with ONLY the letter of the correct option (e.g., 'B'). "
-    "Do not add explanations or disclaimers."
-)
+MCQ_SYSTEM_PROMPT: str = (_PROMPTS_DIR / "mcq_system.txt").read_text(encoding="utf-8").rstrip("\n")
 
 # Open-ended eval uses the real app prompt — scores now reflect deployed behavior.
 OPEN_SYSTEM_PROMPT = APP_SYSTEM_PROMPT
