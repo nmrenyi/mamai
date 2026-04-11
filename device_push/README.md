@@ -13,19 +13,30 @@ device_push/
 
 ## Contents
 
+### LLM models
+| File | Format | Notes |
+|------|--------|-------|
+| `models/gemma-4-E4B-it.litertlm` | LiteRT-LM | Current deployed model |
+| `models/gemma-3n-E4B-it-int4.litertlm` | LiteRT-LM | Previous deployed model (quality baseline) |
+| `models/gemma-3n-E4B-it-int4.task` | MediaPipe | Kept for MediaPipe compatibility testing |
+
+### Supporting files
 | File | Source | Size |
 |------|--------|------|
-| `models/Gecko_1024_quant.tflite` | `app/model_backup/` | ~139 MB |
-| `models/sentencepiece.model` | `app/model_backup/` | ~0.8 MB |
-| `models/embeddings.sqlite` | `mamai-medical-guidelines/processed/` | ~43 MB |
-| `docs/*.pdf` (60 files) | `mamai-medical-guidelines/raw/` | ~91 MB |
+| `models/Gecko_1024_quant.tflite` | embedding model | ~139 MB |
+| `models/sentencepiece.model` | tokenizer | ~0.8 MB |
+| `models/embeddings.sqlite` | pre-computed doc embeddings | ~43 MB |
+| `docs/*.pdf` (60 files) | source medical guidelines | ~91 MB |
 
 ## Setup (first time)
 
 ```bash
-# Hard-link model files (no extra disk space)
-ln app/model_backup/Gecko_1024_quant.tflite device_push/models/
-ln app/model_backup/sentencepiece.model device_push/models/
+# Hard-link LLM models from root models/ dir (no extra disk space)
+ln models/gemma-4-E4B-it.litertlm device_push/models/
+ln models/gemma-3n-E4B-it-int4.litertlm device_push/models/
+# gemma-3n-E4B-it-int4.task is already in device_push/models/
+
+# Hard-link supporting files
 ln ../mamai-medical-guidelines/processed/embeddings.sqlite device_push/models/
 
 # Copy PDFs
