@@ -1,19 +1,27 @@
-# MAM-AI TODO
+# Work Tracking
 
-## Immediate (unblocked)
+This repo does not use `TODO.md` as an actionable task list anymore.
 
-- [ ] **Evaluate Gemma 4 E4B quality** — Run the same 6-benchmark suite from `evaluation/EVAL_REPORT.md` against the currently deployed Gemma 4 E4B model. Compare MCQ accuracy and open-ended scores against the Gemma 3n E4B baseline. Update `EVAL_REPORT.md` with results.
+GitHub issues are the source of truth. Keep this file only as a lightweight index of the current work order. Do not add new local TODO items here; open or update a GitHub issue instead.
 
-- [ ] **Test GPU backend with E2B** — Switch `feat/gpu-backend` branch to use `gemma-4-E2B-it.litertlm` instead of E4B (community reports E2B works on GPU while E4B crashes). Measure TTFT and decode speed on device. If GPU TTFT is significantly lower, E2B on GPU may outperform E4B on CPU overall — and it is 1 GB smaller.
+## Current Priority Order
 
-- [ ] **Fix RAG pipeline retrieval** — `EVAL_REPORT.md` shows RAG hurts MCQ accuracy for all on-device models (-2 to -6 pp). Current similarity threshold is 0.0 (no filtering) in `app/android/app/src/main/kotlin/com/example/app/RagPipeline.kt:183`. Options: raise the threshold, reduce retrieved chunks from 3 to fewer, or only inject context above a confidence cutoff.
+1. [#43](https://github.com/nmrenyi/mamai/issues/43) Re-run the full `app_parity_v1` evaluation matrix and refresh reports
+2. [#42](https://github.com/nmrenyi/mamai/issues/42) Build a doc-grounded benchmark from the bundled clinical guideline corpus
+3. [#41](https://github.com/nmrenyi/mamai/issues/41) Add retrieval-only evaluation for the bundled guideline corpus
+4. [#40](https://github.com/nmrenyi/mamai/issues/40) Prototype agentic guideline search with LiteRT-LM tool calling
 
-## Near-term
+## Related Issues
 
-- [ ] **Complete GPT-5 Kenya Vignettes evaluation** — Only 31/284 questions evaluated before API quota ran out. Top up credits and resume using `--run-dir` auto-resume.
+- [#22](https://github.com/nmrenyi/mamai/issues/22) Experiment with retrieval parameters (`top_k`, threshold)
+- [#34](https://github.com/nmrenyi/mamai/issues/34) RAG evaluation strategy: frameworks, metrics, gaps, and potential contributions
+- [#35](https://github.com/nmrenyi/mamai/issues/35) Explore Gemma 4 tool use / function calling capabilities
+- [#36](https://github.com/nmrenyi/mamai/issues/36) Query rewriting: reformulate user input before retrieval to improve RAG quality
+- [#37](https://github.com/nmrenyi/mamai/issues/37) MCQ extractor misses Gemma 4 outputs with trailing quote/tag tokens
 
-- [ ] **Finalize and commit README** — README has uncommitted edits replacing evaluation results with "coming soon" placeholders. Once Gemma 4 E4B evaluation results are ready, update with real numbers and commit.
+## Other Open Work
 
-## Blocked
-
-- [ ] **GPU backend with E4B** — Waiting for LiteRT-LM 0.10.1 on Google Maven. The 0.10.0 Android AAR crashes on GPU decode (`Failed to clEnqueueNDRangeKernel`). Track: [google-ai-edge/LiteRT-LM#1850](https://github.com/google-ai-edge/LiteRT-LM/issues/1850).
+- [#29](https://github.com/nmrenyi/mamai/issues/29) Verify Swahili translations with a medical professional
+- [#31](https://github.com/nmrenyi/mamai/issues/31) Model download: decouple from self-hosted VPS
+- [#24](https://github.com/nmrenyi/mamai/issues/24) Add confidence / uncertainty signal to the UI
+- [google-ai-edge/LiteRT-LM#1850](https://github.com/google-ai-edge/LiteRT-LM/issues/1850) Track GPU decode crash for E4B
