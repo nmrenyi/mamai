@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:app/l10n/app_localizations.dart';
 import 'package:markdown_widget/markdown_widget.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../conversation_store.dart';
 import 'about_page.dart';
 import 'pdf_viewer_page.dart';
@@ -703,15 +702,6 @@ class _SearchPageState extends State<SearchPage> {
     super.dispose();
   }
 
-  void _toggleLocale() async {
-    final newLocale = appLocale.value.languageCode == 'en'
-        ? const Locale('sw')
-        : const Locale('en');
-    appLocale.value = newLocale;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('locale', newLocale.languageCode);
-  }
-
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -785,34 +775,6 @@ class _SearchPageState extends State<SearchPage> {
         ),
         backgroundColor: Color(0xffDE7356),
         actions: [
-          // Language toggle: shows current language code in a rounded badge
-          ValueListenableBuilder<Locale>(
-            valueListenable: appLocale,
-            builder: (_, locale, __) => Padding(
-              padding: const EdgeInsets.only(right: 4),
-              child: GestureDetector(
-                onTap: _toggleLocale,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    locale.languageCode.toUpperCase(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
           IconButton(
             icon: const Icon(Icons.add_comment, color: Colors.white),
             tooltip: l10n.tooltipNewConversation,

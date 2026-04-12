@@ -4,14 +4,12 @@ import 'dart:collection';
 import 'dart:io';
 import 'dart:io' as io;
 import 'dart:isolate';
-import 'package:app/locale_notifier.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:app/l10n/app_localizations.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
 import 'search_page.dart';
@@ -890,39 +888,6 @@ class _IntroPageState extends State<IntroPage> {
                             // ── Action block ─────────────────────────────
                             Column(
                               children: [
-                                // Language toggle
-                                Center(
-                                  child: ValueListenableBuilder<Locale>(
-                                    valueListenable: appLocale,
-                                    builder: (_, locale, __) => TextButton(
-                                      onPressed: () async {
-                                        final newLocale =
-                                            locale.languageCode == 'en'
-                                            ? const Locale('sw')
-                                            : const Locale('en');
-                                        appLocale.value = newLocale;
-                                        final prefs =
-                                            await SharedPreferences.getInstance();
-                                        await prefs.setString(
-                                          'locale',
-                                          newLocale.languageCode,
-                                        );
-                                      },
-                                      child: Text(
-                                        locale.languageCode == 'en'
-                                            ? AppLocalizations.of(
-                                                context,
-                                              ).switchToSwahili
-                                            : AppLocalizations.of(
-                                                context,
-                                              ).switchToEnglish,
-                                        style: const TextStyle(
-                                          color: Color(0xffDE7356),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
                                 const SizedBox(height: 16),
                                 // Next button
                                 nextButton,
