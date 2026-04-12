@@ -1,0 +1,4 @@
+storeFile=/absolute/path/to/release.keystore
+storePassword=change-me
+keyAlias=release
+keyPassword=change-me

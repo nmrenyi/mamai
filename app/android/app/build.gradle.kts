@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -5,10 +7,31 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
+}
+
+fun propOrEnv(envName: String, propertyName: String): String? =
+    System.getenv(envName)?.takeIf { it.isNotBlank() }
+        ?: (keystoreProperties.getProperty(propertyName)?.takeIf { it.isNotBlank() })
+
 android {
     namespace = "com.example.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = "27.0.12077973"
+    val releaseStoreFile = propOrEnv("ANDROID_KEYSTORE_PATH", "storeFile")
+    val releaseStorePassword = propOrEnv("ANDROID_KEYSTORE_PASSWORD", "storePassword")
+    val releaseKeyAlias = propOrEnv("ANDROID_KEY_ALIAS", "keyAlias")
+    val releaseKeyPassword = propOrEnv("ANDROID_KEY_PASSWORD", "keyPassword")
+    val hasCustomReleaseSigning = listOf(
+        releaseStoreFile,
+        releaseStorePassword,
+        releaseKeyAlias,
+        releaseKeyPassword,
+    ).all { !it.isNullOrBlank() }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -35,15 +58,30 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            if (hasCustomReleaseSigning) {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
 
             isShrinkResources = false
 
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Real releases use the configured keystore; local/CI validation
+            // falls back to the debug keystore when no release secrets exist.
+            signingConfig = if (hasCustomReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }
