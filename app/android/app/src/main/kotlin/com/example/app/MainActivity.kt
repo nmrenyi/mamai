@@ -1,11 +1,7 @@
 package com.example.app
 
-import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
 import android.util.Log
-import androidx.core.app.ActivityCompat
 import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -79,20 +75,11 @@ class MainActivity : FlutterActivity() {
                     result.success(getPinnedRagBundleInfo())
                 }
                 "startDownloadService" -> {
-                    // Request POST_NOTIFICATIONS permission on Android 13+ so the
-                    // download notification is visible.  The service starts regardless
-                    // of whether the user grants the permission — the ForegroundService
-                    // still protects the process from being killed.
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                        checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
-                            != PackageManager.PERMISSION_GRANTED
-                    ) {
-                        ActivityCompat.requestPermissions(
-                            this,
-                            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                            /* requestCode = */ 100,
-                        )
-                    }
+                    // Start the ForegroundService so the OS keeps the process alive
+                    // while downloads run in the background.  We do NOT request
+                    // POST_NOTIFICATIONS at runtime: on Android ≤ 12 the notification
+                    // appears automatically; on Android 13+ the service still runs and
+                    // protects the process — the notification is just not visible.
                     DownloadForegroundService.start(applicationContext)
                     result.success(null)
                 }
