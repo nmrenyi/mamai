@@ -212,41 +212,18 @@ class _IntroPageState extends State<IntroPage> {
     }).ignore();
   }
 
-  /// Follows any redirects for [url] and returns the final resolved URL.
-  ///
-  /// GitHub release assets redirect to a short-lived signed Azure CDN URL.
-  /// Streaming with [ResponseType.stream] is unreliable through cross-origin
-  /// redirects in Dart's HttpClient (Range header can be silently dropped).
-  /// Resolving up-front lets the actual streaming request go straight to the
-  /// CDN with no redirect, ensuring the Range header is always honoured.
-  Future<String> _resolveRedirectUrl(String url) async {
-    try {
-      // Short timeouts: this is a best-effort redirect probe, not the real
-      // download.  If it takes too long we fall back gracefully rather than
-      // blocking the actual stream for 15 s.
-      final dio = Dio(BaseOptions(
-        connectTimeout: const Duration(seconds: 8),
-        receiveTimeout: const Duration(seconds: 8),
-      ));
-      final resp = await dio.head<dynamic>(
-        url,
-        options: Options(
-          followRedirects: true,
-          validateStatus: (s) => s != null && s < 500,
-        ),
-      );
-      return resp.realUri.toString();
-    } catch (_) {
-      return url; // fallback: stream from original URL and let Dio try
-    }
-  }
-
   /// Downloads [url] to [destPath], resuming from any existing partial file.
   ///
   /// Sends `Range: bytes=<size>-` if a partial file exists.  If the server
   /// honours the range (HTTP 206) the file is opened in append mode; if it
   /// returns 200 instead the partial file is overwritten from scratch.
   /// A 30-second per-chunk idle timeout detects stalled connections.
+  ///
+  /// We let Dio follow redirects rather than pre-resolving them.  Pre-resolving
+  /// (HEAD → CDN URL → direct GET) breaks proxy setups (e.g. Clash) where the
+  /// redirect destination CDN has a DIRECT routing rule while the origin host
+  /// goes through a proxy tunnel.  Letting the proxy handle the redirect chain
+  /// end-to-end keeps all traffic on the correct route.
   Future<void> _downloadWithResume({
     required String url,
     required String destPath,
@@ -256,28 +233,17 @@ class _IntroPageState extends State<IntroPage> {
     final existingSize =
         destFile.existsSync() ? destFile.lengthSync() : 0;
 
-    // Resolve any redirect (e.g. GitHub → Azure CDN) before streaming so that
-    // the Range header is sent directly to the final server.
-    // If resolution fails the original URL is returned; in that case we keep
-    // followRedirects: true so the stream still works (the Range header may be
-    // dropped cross-origin, but at least the download doesn't fail outright).
-    final resolvedUrl = await _resolveRedirectUrl(url);
-    final redirectResolved = resolvedUrl != url;
-
-    // Longer connect timeout for the real streaming request: slow mobile
-    // connections can take > 15 s to establish the TCP + TLS handshake.
+    // Longer connect timeout: slow mobile connections (and proxy tunnels) can
+    // take > 15 s to establish TCP + TLS on the first attempt.
     final dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 30)));
     late final Response<ResponseBody> response;
     try {
       response = await dio.get<ResponseBody>(
-        resolvedUrl,
+        url,
         options: Options(
           responseType: ResponseType.stream,
           headers: existingSize > 0 ? {'Range': 'bytes=$existingSize-'} : {},
-          // Only disable redirect following when we confirmed the CDN URL —
-          // if resolution fell back to the original URL, keep following so
-          // the 302 from GitHub is not treated as a hard error.
-          followRedirects: !redirectResolved,
+          followRedirects: true,
         ),
       );
     } on DioException catch (e) {
