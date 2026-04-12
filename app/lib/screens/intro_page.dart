@@ -231,22 +231,40 @@ class _IntroPageState extends State<IntroPage> {
     required String url,
     required String destPath,
     required DownloadInProgress download,
-    int maxAttempts = 5,
+    int maxConsecutiveFailures = 5,
   }) async {
     const delays = [2, 4, 8, 16, 30];
-    for (int attempt = 0; attempt < maxAttempts; attempt++) {
+    // Counts failures in a row without meaningful progress. Reset to 0
+    // whenever an attempt downloads at least 1 MB, so a flaky connection
+    // that keeps making progress never hits the ceiling.
+    int consecutiveFailures = 0;
+    const progressThreshold = 1 * 1024 * 1024; // 1 MB
+
+    while (true) {
+      final bytesBefore =
+          io.File(destPath).existsSync() ? io.File(destPath).lengthSync() : 0;
       try {
         await _downloadWithResume(url: url, destPath: destPath, download: download);
         return; // success
       } catch (e) {
-        if (attempt < maxAttempts - 1) {
-          final delaySec = delays[attempt.clamp(0, delays.length - 1)];
-          setState(() => download.markReconnecting());
-          await Future.delayed(Duration(seconds: delaySec));
-          // loop continues → _downloadWithResume will resume from disk offset
+        final bytesAfter =
+            io.File(destPath).existsSync() ? io.File(destPath).lengthSync() : 0;
+        final madeProgress = (bytesAfter - bytesBefore) >= progressThreshold;
+
+        if (madeProgress) {
+          consecutiveFailures = 0; // meaningful progress → reset the counter
         } else {
-          rethrow; // all attempts exhausted; caller surfaces the error
+          consecutiveFailures++;
         }
+
+        if (consecutiveFailures >= maxConsecutiveFailures) {
+          rethrow; // gave up: repeated failures with no progress
+        }
+
+        final delaySec =
+            delays[(consecutiveFailures - 1).clamp(0, delays.length - 1)];
+        setState(() => download.markReconnecting());
+        await Future.delayed(Duration(seconds: delaySec));
       }
     }
   }
