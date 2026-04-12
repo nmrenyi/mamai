@@ -37,6 +37,13 @@ flutter run -v
 
 **Note**: The app requires real Android hardware (not emulators) because LiteRT-LM needs actual hardware acceleration.
 
+## Release Tag Policy
+
+- Use `vX.Y.Z` for stable releases
+- Use `vX.Y.Z-alpha.N`, `vX.Y.Z-beta.N`, or `vX.Y.Z-rc.N` for staged releases
+- Tag from `main` only
+- Never move or reuse a published tag
+
 ## Architecture
 
 ### Flutter <-> Android Communication
@@ -73,7 +80,7 @@ The RAG pipeline (`RagPipeline.kt`) manages three main components:
    - Database: `embeddings.sqlite` (pre-computed document embeddings)
    - Retrieval: Top-3 documents via cosine similarity
 
-**Initialization**: Heavy initialization happens lazily and asynchronously. Models are loaded on first access and signal readiness via a rendezvous channel (`onLlmReady`).
+**Initialization**: Heavy initialization happens lazily and asynchronously. Models are loaded on first access and callers wait via `awaitLlmReady()`, which propagates init failures instead of silently unblocking.
 
 **Query flow**:
 1. User submits prompt in Flutter UI

@@ -114,6 +114,49 @@ flutter build apk        # Build release APK
 flutter run               # Run on connected device
 ```
 
+### Stage Releases
+
+Stage builds are published from Git tags as GitHub Releases.
+
+- New release tags must use one of these formats:
+  - `vX.Y.Z`
+  - `vX.Y.Z-alpha.N`
+  - `vX.Y.Z-beta.N`
+  - `vX.Y.Z-rc.N`
+- Tag only from `main`
+- Do not move or reuse a published tag
+- `alpha`, `beta`, and `rc` tags are published as GitHub prereleases
+- stable `vX.Y.Z` tags are published as normal GitHub Releases
+- the workflow attaches a signed APK, a `sha256` file, and a small JSON metadata file
+
+Suggested progression for this repo:
+
+- `alpha`: internal checkpoint
+- `beta`: wider tester build
+- `rc`: expected final unless a last bug appears
+- stable: the default download you want people to use
+
+Example tags:
+
+```bash
+git tag v0.4.0-alpha.1
+git push origin v0.4.0-alpha.1
+
+git tag v0.4.0
+git push origin v0.4.0
+```
+
+Historical local tags such as the Kaggle snapshots predate this policy and are treated as legacy exceptions, not examples to follow for new releases.
+
+Required GitHub secrets for signed releases:
+
+- `ANDROID_KEYSTORE_BASE64`
+- `ANDROID_KEYSTORE_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+- `ANDROID_KEY_PASSWORD`
+
+Local signed release builds can use [`app/android/key.properties.example`](app/android/key.properties.example) as the template for `app/android/key.properties`. If no release signing config is present, local and CI validation builds fall back to the debug keystore.
+
 ### Monitor Performance
 
 ```bash

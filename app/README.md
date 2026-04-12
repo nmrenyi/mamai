@@ -33,6 +33,11 @@ flutter run
 flutter build apk
 ```
 
+For signed local release builds, copy
+[`android/key.properties.example`](android/key.properties.example)
+to `app/android/key.properties` and fill in your keystore values. CI stage
+releases use the same fields via GitHub secrets.
+
 ### Cloud AI mode (optional)
 
 The app includes a Cloud AI toggle that uses the Gemini API. To enable it, pass your API key at build/run time:
