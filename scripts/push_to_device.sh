@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # push_to_device.sh — Verify the staged RAG bundle and push it to an Android device
 #
-# Reads rag-assets.lock.json and device_push/bundle/debug/rag_bundle_staged.json,
+# Reads config/rag_assets.lock.json and device_push/bundle/debug/rag_bundle_staged.json,
 # verifies the staged bundle matches the pinned lock file, checks adb/device
 # availability, removes stale PDFs on the device, and pushes the staged files.
 # After all pushes succeed, it writes rag_bundle_deployed.json on the device.
@@ -14,7 +14,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-LOCK_FILE="$REPO_ROOT/rag-assets.lock.json"
+LOCK_FILE="$REPO_ROOT/config/rag_assets.lock.json"
 DEVICE_PUSH="$REPO_ROOT/device_push"
 INSTALL_RECORD="$DEVICE_PUSH/bundle/debug/rag_bundle_staged.json"
 DEVICE_DIR="/sdcard/Android/data/com.example.app/files"
@@ -85,7 +85,7 @@ STAGED_LOCKED_SHA=$(python3 -c "import json; print(json.load(open('$INSTALL_RECO
 STAGED_ACTUAL_SHA=$(python3 -c "import json; print(json.load(open('$INSTALL_RECORD'))['manifest_sha256_actual'])")
 
 if [[ "$STAGED_LOCKED_VERSION" != "$LOCK_BUNDLE_VERSION" || "$STAGED_MANIFEST_VERSION" != "$LOCK_BUNDLE_VERSION" ]]; then
-    echo "ERROR: Staged bundle version does not match rag-assets.lock.json." >&2
+    echo "ERROR: Staged bundle version does not match config/rag_assets.lock.json." >&2
     echo "  staged (locked)   : $STAGED_LOCKED_VERSION" >&2
     echo "  staged (manifest) : $STAGED_MANIFEST_VERSION" >&2
     echo "  lock file         : $LOCK_BUNDLE_VERSION" >&2
@@ -94,7 +94,7 @@ if [[ "$STAGED_LOCKED_VERSION" != "$LOCK_BUNDLE_VERSION" || "$STAGED_MANIFEST_VE
 fi
 
 if [[ "$STAGED_LOCKED_SHA" != "$LOCK_MANIFEST_SHA" || "$STAGED_ACTUAL_SHA" != "$LOCK_MANIFEST_SHA" ]]; then
-    echo "ERROR: Staged manifest checksum does not match rag-assets.lock.json." >&2
+    echo "ERROR: Staged manifest checksum does not match config/rag_assets.lock.json." >&2
     echo "  staged (locked) : $STAGED_LOCKED_SHA" >&2
     echo "  staged (actual) : $STAGED_ACTUAL_SHA" >&2
     echo "  lock file       : $LOCK_MANIFEST_SHA" >&2
@@ -125,7 +125,7 @@ fi
 
 DOC_COUNT=$(find "$DOCS_DIR" -maxdepth 1 -type f -name "*.pdf" | wc -l | tr -d ' ')
 if [[ "$DOC_COUNT" != "$LOCK_SOURCE_COUNT" ]]; then
-    echo "ERROR: staged PDF count does not match rag-assets.lock.json." >&2
+    echo "ERROR: staged PDF count does not match config/rag_assets.lock.json." >&2
     echo "  staged : $DOC_COUNT" >&2
     echo "  locked : $LOCK_SOURCE_COUNT" >&2
     echo "Run: bash scripts/sync_rag_assets.sh" >&2

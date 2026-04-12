@@ -56,7 +56,10 @@ download_file() {
   fi
 
   echo "Downloading $filename ..."
-  curl -L --progress-bar -o "$dest.tmp" "$url"
+  if ! curl -fL --show-error --retry 3 --retry-all-errors --progress-bar -o "$dest.tmp" "$url"; then
+    rm -f "$dest.tmp"
+    return 1
+  fi
   mv "$dest.tmp" "$dest"
   echo "  -> $dest"
 }

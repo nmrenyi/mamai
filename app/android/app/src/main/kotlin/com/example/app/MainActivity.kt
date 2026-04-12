@@ -29,8 +29,17 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "ensureInit" -> {
                     lifecycleScope.launch {
-                        ragStream.waitForLlmInit()
-                        result.success(0)
+                        try {
+                            ragStream.waitForLlmInit()
+                            result.success(0)
+                        } catch (t: Throwable) {
+                            Log.e("mam-ai", "[ERROR] ensureInit failed", t)
+                            result.error(
+                                "LLM_INIT_FAILED",
+                                t.message ?: "On-device model initialization failed",
+                                t.stackTraceToString(),
+                            )
+                        }
                     }
                 }
                 "generateResponse" -> {
@@ -61,6 +70,9 @@ class MainActivity : FlutterActivity() {
                 }
                 "getDeployedRagBundleInfo" -> {
                     result.success(getDeployedRagBundleInfo())
+                }
+                "getPinnedRagBundleInfo" -> {
+                    result.success(getPinnedRagBundleInfo())
                 }
                 else -> {
                     result.notImplemented()
@@ -120,6 +132,36 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun getPinnedRagBundleInfo(): Map<String, Any>? =
+        try {
+            val json = assets.open("rag_assets.lock.json").bufferedReader().use { reader ->
+                JSONObject(reader.readText())
+            }
+            hashMapOf<String, Any>().apply {
+                json.optString("bundle_version").takeIf { it.isNotBlank() }?.let {
+                    put("bundleVersion", it)
+                }
+                json.optString("bundle_url").takeIf { it.isNotBlank() }?.let {
+                    put("bundleUrl", it)
+                }
+                json.optString("manifest_sha256").takeIf { it.isNotBlank() }?.let {
+                    put("manifestSha256", it)
+                }
+                json.optString("producer_commit").takeIf { it.isNotBlank() }?.let {
+                    put("producerCommit", it)
+                }
+                json.optInt("source_count").takeIf { it > 0 }?.let {
+                    put("sourceCount", it)
+                }
+                json.optInt("chunk_count").takeIf { it > 0 }?.let {
+                    put("chunkCount", it)
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("mam-ai", "[RAG] failed to read pinned bundle metadata", e)
+            null
+        }
+
     private fun openPdf(source: String, page: Int): Boolean {
         val baseFolder = application.getExternalFilesDir(null) ?: return false
         val normalizedSource = normalizeSourceId(source)
@@ -142,10 +184,8 @@ class MainActivity : FlutterActivity() {
             setDataAndType(uri, "application/pdf")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT)
-            // Send both indexing conventions — last putExtra wins for "page".
-            // Testing 1-indexed for MuPDF 1.27 (overrides the 0-indexed value).
-            putExtra("page", page - 1)        // Adobe Acrobat (0-indexed)
-            putExtra("page", page)            // MuPDF 1.27 test (1-indexed, overwrites above)
+            // Keep a single shared "page" extra and add viewer-specific variants.
+            putExtra("page", page)            // MuPDF / generic 1-indexed test
             putExtra("startPage", page)       // Yozo Office / OPPO reader (1-indexed)
             putExtra("startpage", page)       // lowercase variant
             putExtra("pageNum", page)         // Yozo alternate

@@ -15,22 +15,22 @@ import 'pdf_viewer_page.dart';
 
 /// A retrieved guideline chunk with source metadata.
 class RetrievedDoc {
-  final String text;   // chunk body
+  final String text; // chunk body
   final String source; // filename stem, e.g. "WHO_PositiveBirth_2018"
-  final int page;      // PDF page number (0 = unknown / legacy chunk)
+  final int page; // PDF page number (0 = unknown / legacy chunk)
 
-  const RetrievedDoc({
-    required this.text,
-    this.source = '',
-    this.page = 0,
-  });
+  const RetrievedDoc({required this.text, this.source = '', this.page = 0});
 
   bool get hasSource => source.isNotEmpty && page > 0;
 
   /// Human-readable label, e.g. "WHO Positive Birth 2018 · p.42"
   String get label {
     final name = source.replaceAll('_', ' ');
-    return hasSource ? '$name · p.$page' : name.isNotEmpty ? name : 'Guideline';
+    return hasSource
+        ? '$name · p.$page'
+        : name.isNotEmpty
+        ? name
+        : 'Guideline';
   }
 
   static RetrievedDoc fromMap(dynamic raw) {
@@ -125,12 +125,12 @@ class _SearchPageState extends State<SearchPage> {
   bool _backgroundGenerating = false;
   String? _backgroundConvId;
   String _backgroundConvTitle = '';
-  List<Map<String, String>> _backgroundMessages = [];
+  List<ChatMessage> _backgroundMessages = [];
 
   // IDs of conversations that finished generating while the user was elsewhere.
   final Set<String> _unreadConvIds = {};
 
-  static const _modelContextTokens = 32000; // Gemma 3n E4B context window
+  static const _modelContextTokens = 32000; // Gemma 4 E4B context window
   static const _charsPerToken = 4; // rough estimate for English text
   static const _reservedChars =
       16000; // system prompt (~1800) + 3 retrieved docs (~6000) + query + response headroom
@@ -171,6 +171,30 @@ class _SearchPageState extends State<SearchPage> {
       );
     }
     return (history, truncated);
+  }
+
+  Map<String, dynamic> _serializeMessage(ChatMessage message) => {
+    'role': message.role,
+    'text': message.text,
+    if (message.retrievedDocs.isNotEmpty)
+      'retrievedDocs': message.retrievedDocs
+          .map(
+            (doc) => {'text': doc.text, 'source': doc.source, 'page': doc.page},
+          )
+          .toList(),
+    if (message.wasCancelled) 'wasCancelled': true,
+  };
+
+  ChatMessage _deserializeMessage(Map<String, dynamic> raw) {
+    final docs = raw['retrievedDocs'];
+    return ChatMessage(
+      role: raw['role']?.toString() ?? 'assistant',
+      text: raw['text']?.toString() ?? '',
+      retrievedDocs: docs is List
+          ? docs.map<RetrievedDoc>(RetrievedDoc.fromMap).toList()
+          : const [],
+      wasCancelled: raw['wasCancelled'] == true,
+    );
   }
 
   /// Request the model to generate a response — calls into Android code
@@ -278,9 +302,9 @@ class _SearchPageState extends State<SearchPage> {
             }
           }
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.message}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: ${e.message}')));
       } catch (e) {
         // MissingPluginException on non-Android platforms — on-device mode
         // is not available. Keep the user message visible, show a SnackBar
@@ -322,11 +346,7 @@ class _SearchPageState extends State<SearchPage> {
                     _isGenerating = true;
                     _messages.add(ChatMessage(role: 'user', text: prompt));
                     _messages.add(
-                      ChatMessage(
-                        role: 'assistant',
-                        text: '',
-                        isLoading: true,
-                      ),
+                      ChatMessage(role: 'assistant', text: '', isLoading: true),
                     );
                     _textController.clear();
                   });
@@ -353,8 +373,10 @@ class _SearchPageState extends State<SearchPage> {
       final l10n = AppLocalizations.of(context);
       setState(() {
         _isGenerating = false;
-        if (_messages.isNotEmpty && _messages.last.role == 'assistant' &&
-            _messages.last.text.isEmpty && _messages.last.retrievedDocs.isEmpty) {
+        if (_messages.isNotEmpty &&
+            _messages.last.role == 'assistant' &&
+            _messages.last.text.isEmpty &&
+            _messages.last.retrievedDocs.isEmpty) {
           _messages.removeLast();
         }
       });
@@ -433,10 +455,7 @@ class _SearchPageState extends State<SearchPage> {
     }
     if (apiError != null && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(apiError),
-          duration: const Duration(seconds: 8),
-        ),
+        SnackBar(content: Text(apiError), duration: const Duration(seconds: 8)),
       );
     }
   }
@@ -521,10 +540,10 @@ class _SearchPageState extends State<SearchPage> {
         ? '${userMessages.first.text.substring(0, 60)}…'
         : userMessages.first.text;
 
-    // Save only completed messages (role + text). Skip loading placeholders.
+    // Save only completed messages. Skip loading placeholders.
     final saved = _messages
         .where((m) => m.text.isNotEmpty && !m.isLoading)
-        .map((m) => {'role': m.role, 'text': m.text})
+        .map(_serializeMessage)
         .toList();
 
     await _store.save(
@@ -555,15 +574,11 @@ class _SearchPageState extends State<SearchPage> {
         : firstUser.text;
     _backgroundMessages = _messages
         .where((m) => m.text.isNotEmpty && !m.isLoading)
-        .map((m) => <String, String>{'role': m.role, 'text': m.text})
-        .toList();
+        .toList(growable: true);
     // Ensure an assistant slot exists to receive further streaming tokens.
     if (_backgroundMessages.isEmpty ||
-        _backgroundMessages.last['role'] != 'assistant') {
-      _backgroundMessages.add(<String, String>{
-        'role': 'assistant',
-        'text': '',
-      });
+        _backgroundMessages.last.role != 'assistant') {
+      _backgroundMessages.add(const ChatMessage(role: 'assistant', text: ''));
     }
     _backgroundGenerating = true;
     _isGenerating = false; // hide stop button in the new conversation view
@@ -573,20 +588,22 @@ class _SearchPageState extends State<SearchPage> {
   Future<void> _saveAndClearBackground() async {
     final id = _backgroundConvId;
     final title = _backgroundConvTitle;
-    final messages = List<Map<String, String>>.from(_backgroundMessages);
+    final messages = List<ChatMessage>.from(_backgroundMessages);
     _backgroundGenerating = false;
     _backgroundConvId = null;
     _backgroundConvTitle = '';
     _backgroundMessages = [];
     if (id == null) return;
-    final completed = messages.where((m) => m['text']!.isNotEmpty).toList();
-    if (completed.every((m) => m['role'] != 'user')) return;
+    final completed = messages
+        .where((m) => m.text.isNotEmpty || m.retrievedDocs.isNotEmpty)
+        .toList();
+    if (completed.every((m) => m.role != 'user')) return;
     await _store.save(
       Conversation(
         id: id,
         title: title,
         timestamp: DateTime.now(),
-        messages: completed,
+        messages: completed.map(_serializeMessage).toList(),
       ),
     );
   }
@@ -605,7 +622,7 @@ class _SearchPageState extends State<SearchPage> {
     // If loading the conversation that is currently generating in background,
     // bring it back to the foreground so the response is visible again.
     if (_backgroundGenerating && _backgroundConvId == conversation.id) {
-      final bgMessages = List<Map<String, String>>.from(_backgroundMessages);
+      final bgMessages = List<ChatMessage>.from(_backgroundMessages);
       setState(() {
         _currentConversationId = conversation.id;
         _backgroundGenerating = false;
@@ -616,11 +633,7 @@ class _SearchPageState extends State<SearchPage> {
         _unreadConvIds.remove(conversation.id);
         _messages
           ..clear()
-          ..addAll(
-            bgMessages.map(
-              (m) => ChatMessage(role: m['role']!, text: m['text']!),
-            ),
-          );
+          ..addAll(bgMessages);
         // Re-attach the loading indicator to the last assistant message.
         if (_messages.isNotEmpty && _messages.last.role == 'assistant') {
           _messages[_messages.length - 1] = _messages.last.copyWith(
@@ -637,11 +650,7 @@ class _SearchPageState extends State<SearchPage> {
       _unreadConvIds.remove(conversation.id);
       _messages
         ..clear()
-        ..addAll(
-          conversation.messages.map(
-            (m) => ChatMessage(role: m['role']!, text: m['text']!),
-          ),
-        );
+        ..addAll(conversation.messages.map(_deserializeMessage));
     });
   }
 
@@ -718,9 +727,20 @@ class _SearchPageState extends State<SearchPage> {
       if (value.containsKey("response")) {
         final text = _stripModelTokens(value["response"] as String);
         if (_backgroundMessages.isNotEmpty &&
-            _backgroundMessages.last['role'] == 'assistant') {
+            _backgroundMessages.last.role == 'assistant') {
           _backgroundMessages[_backgroundMessages.length - 1] =
-              <String, String>{'role': 'assistant', 'text': text};
+              _backgroundMessages.last.copyWith(text: text, isLoading: false);
+        }
+      } else if (value.containsKey("results")) {
+        final docs = value["results"];
+        if (docs is! List || _backgroundMessages.isEmpty) return;
+        if (_backgroundMessages.last.role == 'assistant') {
+          _backgroundMessages[_backgroundMessages.length -
+              1] = _backgroundMessages.last.copyWith(
+            retrievedDocs: docs
+                .map<RetrievedDoc>(RetrievedDoc.fromMap)
+                .toList(),
+          );
         }
       }
       return;
@@ -840,10 +860,7 @@ class _SearchPageState extends State<SearchPage> {
                   ),
                   Text(
                     l10n.appBarSubtitle,
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 12,
-                    ),
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],
@@ -1155,7 +1172,8 @@ class SearchSuggestionChip extends StatelessWidget {
         break;
     }
 
-    final resolvedIcon = chipIcon ??
+    final resolvedIcon =
+        chipIcon ??
         (type == SuggestionType.history ? Icons.history : Icons.auto_awesome);
 
     return ChipTheme(
@@ -1263,41 +1281,42 @@ class _AssistantCardState extends State<_AssistantCard> {
                       bottom: message.wasCancelled ? 8 : 16,
                     ),
                     child: MarkdownBlock(
-                        data: _insertCitationLinks(message.text),
-                        config: MarkdownConfig(
-                          configs: [
-                            PConfig(textStyle: const TextStyle(fontSize: 18)),
-                            LinkConfig(
-                              style: const TextStyle(
-                                color: Color(0xffDE7356),
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                                decoration: TextDecoration.none,
-                              ),
-                              onTap: (url) {
-                                if (url.startsWith('cite://')) {
-                                  final idx = int.tryParse(url.substring(7));
-                                  if (idx != null && idx < message.retrievedDocs.length) {
-                                    final doc = message.retrievedDocs[idx];
-                                    if (doc.hasSource) {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) => PdfViewerPage(
-                                            source: doc.source,
-                                            page: doc.page > 0 ? doc.page : 1,
-                                            highlightText: doc.text,
-                                          ),
+                      data: _insertCitationLinks(message.text),
+                      config: MarkdownConfig(
+                        configs: [
+                          PConfig(textStyle: const TextStyle(fontSize: 18)),
+                          LinkConfig(
+                            style: const TextStyle(
+                              color: Color(0xffDE7356),
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              decoration: TextDecoration.none,
+                            ),
+                            onTap: (url) {
+                              if (url.startsWith('cite://')) {
+                                final idx = int.tryParse(url.substring(7));
+                                if (idx != null &&
+                                    idx < message.retrievedDocs.length) {
+                                  final doc = message.retrievedDocs[idx];
+                                  if (doc.hasSource) {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => PdfViewerPage(
+                                          source: doc.source,
+                                          page: doc.page > 0 ? doc.page : 1,
+                                          highlightText: doc.text,
                                         ),
-                                      );
-                                    }
+                                      ),
+                                    );
                                   }
                                 }
-                              },
-                            ),
-                          ],
-                        ),
+                              }
+                            },
+                          ),
+                        ],
                       ),
+                    ),
                   ),
                 if (message.wasCancelled)
                   Padding(
@@ -1509,9 +1528,7 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
                           width: 10,
                           height: 10,
                           decoration: BoxDecoration(
-                            color: isUnread
-                                ? Colors.blue
-                                : Colors.transparent,
+                            color: isUnread ? Colors.blue : Colors.transparent,
                             shape: BoxShape.circle,
                           ),
                         ),
@@ -1658,7 +1675,11 @@ class _RetrievalDisclosure extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => PdfViewerPage(source: doc.source, page: doc.page > 0 ? doc.page : 1, highlightText: doc.text),
+        builder: (_) => PdfViewerPage(
+          source: doc.source,
+          page: doc.page > 0 ? doc.page : 1,
+          highlightText: doc.text,
+        ),
       ),
     );
   }
@@ -1753,10 +1774,7 @@ class _RetrievalDisclosure extends StatelessWidget {
                   // Chunk text
                   Padding(
                     padding: const EdgeInsets.all(12),
-                    child: Text(
-                      doc.text,
-                      style: const TextStyle(fontSize: 13),
-                    ),
+                    child: Text(doc.text, style: const TextStyle(fontSize: 13)),
                   ),
                 ],
               ),

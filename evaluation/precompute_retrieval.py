@@ -37,7 +37,7 @@ DATASETS = {
 
 _REPO_ROOT = Path(__file__).parents[1]
 _APP_CONFIG = json.loads((_REPO_ROOT / "config" / "app_config.json").read_text())
-_RAG_LOCK_PATH = _REPO_ROOT / "rag-assets.lock.json"
+_RAG_LOCK_PATH = _REPO_ROOT / "config" / "rag_assets.lock.json"
 
 # Default to the current staged device_push layout. Cluster jobs can override these
 # explicitly with --db-path/--gecko-model/--tokenizer.
@@ -96,6 +96,7 @@ def main():
     db_path = Path(args.db_path)
     gecko_path = Path(args.gecko_model)
     tokenizer_path = Path(args.tokenizer)
+    manifest_path = Path(args.output_dir) / "manifest.json"
     run_manifest = {
         "schema_version": 1,
         "context_version": context_version,
@@ -125,6 +126,20 @@ def main():
         },
         "datasets": {},
     }
+    if manifest_path.exists():
+        existing_manifest = json.loads(manifest_path.read_text())
+        if existing_manifest.get("context_version") == context_version:
+            run_manifest["created_at_utc"] = existing_manifest.get(
+                "created_at_utc",
+                run_manifest["created_at_utc"],
+            )
+            existing_datasets = existing_manifest.get("datasets", {})
+            if isinstance(existing_datasets, dict):
+                run_manifest["datasets"] = existing_datasets
+            existing_requested = existing_manifest.get("retrieval_config", {}).get("datasets", [])
+            run_manifest["retrieval_config"]["datasets"] = sorted(
+                set(existing_requested) | set(dataset_names)
+            )
 
     # Load vector store and build index
     store = load_vector_store(args.db_path)
@@ -201,7 +216,6 @@ def main():
             for i, (chunk, sim) in enumerate(zip(r["chunks"], r["similarities"])):
                 print(f"  [{i+1}] sim={sim:.4f}: {chunk[:80]}...")
 
-    manifest_path = Path(args.output_dir) / "manifest.json"
     manifest_path.write_text(json.dumps(run_manifest, indent=2, ensure_ascii=False) + "\n")
     print(f"\nManifest saved: {manifest_path}")
 

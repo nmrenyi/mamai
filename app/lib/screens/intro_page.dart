@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:collection';
 import 'dart:io';
 import 'dart:io' as io;
@@ -7,12 +8,42 @@ import 'package:archive/archive.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, compute;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:app/l10n/app_localizations.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
 import 'search_page.dart';
+
+class RagBundleLock {
+  final String bundleVersion;
+  final String bundleUrl;
+  final String manifestSha256;
+  final String producerCommit;
+  final int sourceCount;
+  final int chunkCount;
+
+  const RagBundleLock({
+    required this.bundleVersion,
+    required this.bundleUrl,
+    required this.manifestSha256,
+    required this.producerCommit,
+    required this.sourceCount,
+    required this.chunkCount,
+  });
+
+  factory RagBundleLock.fromMap(Map<String, dynamic> raw) {
+    return RagBundleLock(
+      bundleVersion: raw['bundleVersion']?.toString() ?? '',
+      bundleUrl: raw['bundleUrl']?.toString() ?? '',
+      manifestSha256: raw['manifestSha256']?.toString() ?? '',
+      producerCommit: raw['producerCommit']?.toString() ?? '',
+      sourceCount: (raw['sourceCount'] as num?)?.toInt() ?? 0,
+      chunkCount: (raw['chunkCount'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
 
 /// The intro page handles licensing & model download.
 ///
@@ -34,10 +65,18 @@ class IntroPage extends StatefulWidget {
 }
 
 class _IntroPageState extends State<IntroPage> {
+  static const _platform = MethodChannel(
+    "io.github.mzsfighters.mam_ai/request_generation",
+  );
+
   // Evaluated once in initState before the first build(). Guards all
   // Android-only code (path_provider, platform channels) so the UI can be
   // developed and tested on web / macOS without a device.
   late final bool _runOnAndroid;
+  RagBundleLock? _pinnedBundle;
+  String? _bundleInfoError;
+  String? _llmInitError;
+  bool _llmInitStarted = false;
 
   @override
   void initState() {
@@ -47,6 +86,8 @@ class _IntroPageState extends State<IntroPage> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         Navigator.pushReplacementNamed(context, '/chat');
       });
+    } else {
+      _loadPinnedBundleInfo();
     }
   }
 
@@ -62,12 +103,6 @@ class _IntroPageState extends State<IntroPage> {
     "sentencepiece.model":
         "https://huggingface.co/litert-community/Gecko-110m-en/resolve/main/sentencepiece.model",
   };
-
-  // RAG bundle: embeddings.sqlite + 55 guideline PDFs, packaged as a tar.gz
-  // from the mamai-medical-guidelines GitHub release.
-  // Update this URL when bumping rag-assets.lock.json to a new bundle version.
-  static const String _ragBundleUrl =
-      "https://github.com/nmrenyi/mamai-medical-guidelines/releases/download/v1.0.0/rag-bundle-v1.0.0.tar.gz";
 
   // Key used in the downloads map to track bundle download progress.
   static const String _bundleKey = '__rag_bundle__';
@@ -91,18 +126,22 @@ class _IntroPageState extends State<IntroPage> {
         });
       },
     );
-    download.finished = true;
+    setState(() => download.finished = true);
   }
 
   /// Downloads the RAG bundle tar.gz and extracts embeddings.sqlite + PDFs.
   Future<void> downloadAndExtractBundle() async {
+    final bundle = _pinnedBundle;
+    if (bundle == null || bundle.bundleUrl.isEmpty) {
+      throw StateError('Pinned RAG bundle metadata is unavailable');
+    }
     final directory = await downloadDir();
     final tmpPath = '${directory.path}/rag-bundle.tar.gz.tmp';
     final download = DownloadInProgress(total: 1, current: 0, finished: false);
     setState(() => downloads[_bundleKey] = download);
 
     await Dio().download(
-      _ragBundleUrl,
+      bundle.bundleUrl,
       tmpPath,
       onReceiveProgress: (current, int total) {
         setState(() {
@@ -117,9 +156,55 @@ class _IntroPageState extends State<IntroPage> {
       'tmpPath': tmpPath,
       'destDir': directory.path,
       'markerPath': '${directory.path}/$_bundleMarker',
+      'expectedSourceCount': bundle.sourceCount.toString(),
     });
 
+    final deployRecord = File('${directory.path}/rag_bundle_deployed.json');
+    final deployRecordJson = const JsonEncoder.withIndent('  ').convert({
+      'schema_version': 1,
+      'bundle_version': bundle.bundleVersion,
+      'deployed_at_utc': DateTime.now().toUtc().toIso8601String(),
+      'producer_commit': bundle.producerCommit,
+      'manifest_sha256': bundle.manifestSha256,
+      'chunk_count': bundle.chunkCount,
+      'source_count': bundle.sourceCount,
+      'install_source': 'intro_download',
+    });
+    await deployRecord.writeAsString('$deployRecordJson\n');
+
     setState(() => download.finished = true);
+  }
+
+  Future<void> _loadPinnedBundleInfo() async {
+    if (mounted) {
+      setState(() => _bundleInfoError = null);
+    }
+    try {
+      final raw = await _platform.invokeMapMethod<String, dynamic>(
+        "getPinnedRagBundleInfo",
+      );
+      if (raw == null) {
+        throw StateError('Pinned RAG bundle metadata is missing');
+      }
+      final bundle = RagBundleLock.fromMap(raw);
+      if (!mounted) return;
+      setState(() {
+        _pinnedBundle = bundle;
+        _bundleInfoError = null;
+      });
+    } on PlatformException catch (e) {
+      debugPrint('Failed to load pinned RAG bundle metadata: $e');
+      if (!mounted) return;
+      setState(() {
+        _bundleInfoError = 'Could not load app bundle metadata.';
+      });
+    } catch (e) {
+      debugPrint('Failed to load pinned RAG bundle metadata: $e');
+      if (!mounted) return;
+      setState(() {
+        _bundleInfoError = 'Could not load app bundle metadata.';
+      });
+    }
   }
 
   // ======= Download related properties ============
@@ -153,23 +238,38 @@ class _IntroPageState extends State<IntroPage> {
   }
 
   bool get downloadsDone {
-    if (downloads.isEmpty && _downloadDir != null) {
-      final modelsReady = _modelFiles.every(
-          (f) => io.File('${_downloadDir!.path}/$f').existsSync());
+    if (downloads.isEmpty && _downloadDir != null && _pinnedBundle != null) {
+      final modelsReady = _modelFiles.every((f) {
+        final file = io.File('${_downloadDir!.path}/$f');
+        return file.existsSync() && file.lengthSync() > 0;
+      });
       final bundleReady = io.File(
-          '${_downloadDir!.path}/$_bundleMarker').existsSync();
+        '${_downloadDir!.path}/$_bundleMarker',
+      ).existsSync();
+      final embeddingsFile = io.File('${_downloadDir!.path}/embeddings.sqlite');
+      final pdfCount = io.Directory(_downloadDir!.path)
+          .listSync()
+          .whereType<io.File>()
+          .where((f) => f.path.toLowerCase().endsWith('.pdf'))
+          .length;
       if (modelsReady && bundleReady) {
+        if (!embeddingsFile.existsSync() || embeddingsFile.lengthSync() == 0) {
+          return false;
+        }
+        if (pdfCount != _pinnedBundle!.sourceCount) {
+          return false;
+        }
         // Sanity-check: Gemma 4 E4B is 3.65 GB — reject truncated downloads.
         final gemmaSize = io.File(
-            '${_downloadDir!.path}/gemma-4-E4B-it.litertlm').lengthSync();
+          '${_downloadDir!.path}/gemma-4-E4B-it.litertlm',
+        ).lengthSync();
         debugPrint('Gemma model size: $gemmaSize bytes');
         return gemmaSize > 3000000000;
       }
       return false;
     }
 
-    return downloads.isNotEmpty &&
-        downloads.values.every((d) => d.finished);
+    return downloads.isNotEmpty && downloads.values.every((d) => d.finished);
   }
 
   bool get downloadsStarted => downloads.isNotEmpty;
@@ -199,7 +299,8 @@ class _IntroPageState extends State<IntroPage> {
     // Our background colour
     const Color orange = Color(0xffDE7356);
 
-    if (_downloadDir == null) {
+    if (_downloadDir == null ||
+        (_pinnedBundle == null && _bundleInfoError == null)) {
       // Download dir loading - show loading spinner
       // Start background fetching of the download dir - we can't get it
       // synchronously as the Dart API is a Future
@@ -216,17 +317,87 @@ class _IntroPageState extends State<IntroPage> {
           ),
         ],
       );
+    } else if (_bundleInfoError != null) {
+      nextButton = Column(
+        children: [
+          Text(_bundleInfoError!, textAlign: TextAlign.center),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: _loadPinnedBundleInfo,
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.all(16),
+              backgroundColor: orange,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(5.0),
+              ),
+            ),
+            child: const Text(
+              'Retry',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      );
     } else if (downloadsDone) {
       // Download complete - initialise LLM
-      if (!llmInitialized) {
+      if (_llmInitError != null) {
+        nextButton = Column(
+          children: [
+            Text(
+              'Could not initialize the on-device model.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _llmInitError!,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey[600], fontSize: 12),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => setState(() => _llmInitError = null),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.all(16),
+                backgroundColor: orange,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(5.0),
+                ),
+              ),
+              child: const Text(
+                'Retry',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        );
+      } else if (!llmInitialized) {
         // LLM not yet initialised - loading spinner
-        WidgetsBinding.instance.addPostFrameCallback((_) async {
-          await SearchPage.waitForLlmInit();
-
-          setState(() {
-            llmInitialized = true;
+        if (!_llmInitStarted) {
+          _llmInitStarted = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) async {
+            try {
+              await SearchPage.waitForLlmInit();
+              if (!mounted) return;
+              setState(() {
+                llmInitialized = true;
+                _llmInitStarted = false;
+                _llmInitError = null;
+              });
+            } catch (e) {
+              if (!mounted) return;
+              setState(() {
+                _llmInitStarted = false;
+                _llmInitError = e.toString();
+              });
+            }
           });
-        });
+        }
 
         nextButton = Column(
           children: [
@@ -370,11 +541,11 @@ class _IntroPageState extends State<IntroPage> {
                                       onPressed: () async {
                                         final newLocale =
                                             locale.languageCode == 'en'
-                                                ? const Locale('sw')
-                                                : const Locale('en');
+                                            ? const Locale('sw')
+                                            : const Locale('en');
                                         appLocale.value = newLocale;
-                                        final prefs = await SharedPreferences
-                                            .getInstance();
+                                        final prefs =
+                                            await SharedPreferences.getInstance();
                                         await prefs.setString(
                                           'locale',
                                           newLocale.languageCode,
@@ -423,9 +594,13 @@ Future<void> _extractBundleFiles(Map<String, String> args) async {
   final tmpPath = args['tmpPath']!;
   final destDir = args['destDir']!;
   final markerPath = args['markerPath']!;
+  final expectedSourceCount =
+      int.tryParse(args['expectedSourceCount'] ?? '') ?? 0;
 
   final bytes = io.File(tmpPath).readAsBytesSync();
   final archive = TarDecoder().decodeBytes(GZipDecoder().decodeBytes(bytes));
+  var pdfCount = 0;
+  var foundEmbeddings = false;
 
   for (final file in archive.files) {
     if (!file.isFile) continue;
@@ -434,8 +609,10 @@ Future<void> _extractBundleFiles(Map<String, String> args) async {
     String? destPath;
     if (name.contains('runtime/') && name.endsWith('embeddings.sqlite')) {
       destPath = '$destDir/embeddings.sqlite';
+      foundEmbeddings = true;
     } else if (name.contains('/docs/') && name.endsWith('.pdf')) {
       destPath = '$destDir/${name.split('/').last}';
+      pdfCount += 1;
     }
 
     if (destPath != null) {
@@ -444,13 +621,18 @@ Future<void> _extractBundleFiles(Map<String, String> args) async {
   }
 
   io.File(tmpPath).deleteSync();
+  if (!foundEmbeddings) {
+    throw StateError('RAG bundle did not contain embeddings.sqlite');
+  }
+  if (expectedSourceCount > 0 && pdfCount != expectedSourceCount) {
+    throw StateError(
+      'RAG bundle PDF count mismatch: expected $expectedSourceCount, got $pdfCount',
+    );
+  }
   io.File(markerPath).writeAsStringSync('ok');
 }
 
-Future<bool?> promptLicense(
-  BuildContext context,
-  AppLocalizations l10n,
-) {
+Future<bool?> promptLicense(BuildContext context, AppLocalizations l10n) {
   bool openedGemmaTos = false;
   bool openedGemmaUsagePolicy = false;
 

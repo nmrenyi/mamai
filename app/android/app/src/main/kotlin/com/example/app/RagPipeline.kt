@@ -18,7 +18,7 @@ import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.SamplerConfig
-import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.guava.await
@@ -84,10 +84,8 @@ class RagPipeline(application: Application) {
     @Volatile
     var llmReady = false
 
-    // Buffered channel for the LLM being ready - allows coroutine to wait for the llm to be ready
-    // Capacity 1 ensures trySend succeeds even if no receiver is waiting yet
-    // https://stackoverflow.com/a/55421973
-    val onLlmReady = Channel<Unit>(1)
+    // Shared init result so any number of callers can await the same success/failure.
+    private val llmInit = CompletableDeferred<Result<Unit>>()
 
     private val initStartTime = System.currentTimeMillis()
 
@@ -114,14 +112,22 @@ class RagPipeline(application: Application) {
                 // Log.i("mam-ai", "Chunks loaded!")
 
                 llmReady = true
-                onLlmReady.trySend(Unit)
+                llmInit.complete(Result.success(Unit))
             } catch (t: Throwable) {
                 Log.e("mam-ai", "[ERROR] LLM initialization failed after ${System.currentTimeMillis() - initStartTime}ms", t)
                 Log.e("mam-ai", "[ERROR] LLM will not be available. App may crash on query attempts.")
-                // Signal anyway to unblock waiting coroutines
-                onLlmReady.trySend(Unit)
+                llmInit.complete(
+                    Result.failure(
+                        IllegalStateException("LLM initialization failed. Check logcat for details.", t)
+                    )
+                )
             }
         }
+    }
+
+    suspend fun awaitLlmReady() {
+        llmInit.await().getOrThrow()
+        check(llmReady) { "LLM init completed without setting llmReady=true" }
     }
 
     // Memorise the given file (from inside the app context)
@@ -192,14 +198,7 @@ class RagPipeline(application: Application) {
         generationListener: (partial: String, done: Boolean) -> Unit,
     ): String =
         coroutineScope {
-            // Wait for llm to be ready via rendezvous channel
-            if (!llmReady) {
-                onLlmReady.receive()
-                // Check again after receiving - if still not ready, initialization failed
-                if (!llmReady) {
-                    throw IllegalStateException("LLM initialization failed. Cannot process queries. Check logcat for details.")
-                }
-            }
+            awaitLlmReady()
 
             Log.w("mam-ai", "[QUERY] prompt: \"${prompt.take(80)}...\", history turns: ${history.size}, retrieval: $useRetrieval, language: $language")
             val qStart = System.currentTimeMillis()

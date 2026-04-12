@@ -9,8 +9,8 @@ class Conversation {
   final String title;
   final DateTime timestamp;
 
-  /// Saved messages — role + text only. No retrievedDocs, no loading state.
-  final List<Map<String, String>> messages;
+  /// Saved messages. Backward-compatible with legacy role+text-only records.
+  final List<Map<String, dynamic>> messages;
 
   const Conversation({
     required this.id,
@@ -32,7 +32,7 @@ class Conversation {
       title: json['title'] as String,
       timestamp: DateTime.fromMillisecondsSinceEpoch(json['timestamp'] as int),
       messages: (json['messages'] as List)
-          .map((m) => Map<String, String>.from(m as Map))
+          .map((m) => Map<String, dynamic>.from(m as Map))
           .toList(),
     );
   }

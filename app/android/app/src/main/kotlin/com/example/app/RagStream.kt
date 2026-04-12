@@ -37,10 +37,7 @@ class RagStream(application: Application, val lifecycleScope: LifecycleCoroutine
 
     // Wait for the LLM to initialise
     suspend fun waitForLlmInit() {
-        // Wait for llm to be ready via rendezvous channel
-        if (!ragPipeline.llmReady) {
-            ragPipeline.onLlmReady.receive()
-        }
+        ragPipeline.awaitLlmReady()
     }
 
     fun requestLlmPreinit() {

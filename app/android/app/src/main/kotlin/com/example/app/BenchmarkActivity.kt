@@ -118,13 +118,11 @@ class BenchmarkActivity : Activity() {
         logStatus("Step 1/4: Gecko + SQLite done (${syncInitMs}ms)")
 
         // Step 2: Wait for LLM model load (async, started by RagPipeline constructor)
-        logStatus("Step 2/4: Loading Gemma 3n LLM model...")
+        logStatus("Step 2/4: Loading Gemma 4 LLM model...")
         Log.w(BENCH_TAG, "[BENCHMARK] Waiting for LLM model load...")
         val llmWaitStart = System.currentTimeMillis()
         withContext(executor.asCoroutineDispatcher()) {
-            if (!pipeline.llmReady) {
-                pipeline.onLlmReady.receive()
-            }
+            pipeline.awaitLlmReady()
         }
         val llmInitMs = System.currentTimeMillis() - llmWaitStart
         Log.w(BENCH_TAG, "[BENCHMARK] LLM model loaded: ${llmInitMs}ms (total init: ${System.currentTimeMillis() - initStart}ms)")

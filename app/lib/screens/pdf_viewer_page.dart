@@ -102,10 +102,10 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
         .replaceAll('\ufb04', 'ffl') // ﬄ ligature
         // Symbols that PDFium renders differently: replace with space so they
         // become word boundaries rather than appearing in the query
-        .replaceAll('\u2192', ' ')  // → arrow
-        .replaceAll('\u2190', ' ')  // ← arrow
-        .replaceAll('\u2022', ' ')  // • bullet
-        .replaceAll('\u25cf', ' ')  // ● bullet variant
+        .replaceAll('\u2192', ' ') // → arrow
+        .replaceAll('\u2190', ' ') // ← arrow
+        .replaceAll('\u2022', ' ') // • bullet
+        .replaceAll('\u25cf', ' ') // ● bullet variant
         .replaceAll('\u25e6', ' '); // ◦ bullet variant
 
     // Keep words of 2+ chars (filters single-char bullet noise like 'n')
@@ -126,10 +126,16 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
     return phrase.map(RegExp.escape).join(r'[\s\S]{0,15}?');
   }
 
+  String _normalizeSourceId(String source) => source
+      .replaceAll(RegExp(r'[^A-Za-z0-9\-.]'), '_')
+      .replaceAll(RegExp(r'_+'), '_')
+      .replaceAll(RegExp(r'^_+|_+$'), '');
+
   Future<String> _resolvePath() async {
     final dir = await getExternalStorageDirectory();
     if (dir == null) throw StateError('No external storage directory');
-    return '${dir.path}/${widget.source}.pdf';
+    final normalizedSource = _normalizeSourceId(widget.source);
+    return '${dir.path}/$normalizedSource.pdf';
   }
 
   @override

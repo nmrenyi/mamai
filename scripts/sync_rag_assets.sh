@@ -2,7 +2,7 @@
 # sync_rag_assets.sh — Fetch the pinned RAG bundle into a local cache and
 # stage the active version into device_push/
 #
-# Reads rag-assets.lock.json from the repo root, downloads the bundle,
+# Reads config/rag_assets.lock.json, downloads the bundle,
 # caches it under _scratch/rag_bundle_cache/<version>/, verifies checksums,
 # and installs:
 #   device_push/bundle/embeddings.sqlite
@@ -20,7 +20,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-LOCK_FILE="$REPO_ROOT/rag-assets.lock.json"
+LOCK_FILE="$REPO_ROOT/config/rag_assets.lock.json"
 DEVICE_PUSH="$REPO_ROOT/device_push"
 CACHE_ROOT="$REPO_ROOT/_scratch/rag_bundle_cache"
 USE_ARIA2C=0
@@ -114,7 +114,9 @@ verify_bundle() {
     if [[ -f "$CHECKSUMS_FILE" ]]; then
         echo "Verifying artifact checksums ..."
         local fail=0
-        while IFS='  ' read -r expected_sha rel_path; do
+        while read -r expected_sha rel_path; do
+            [[ -z "${expected_sha:-}" || -z "${rel_path:-}" ]] && continue
+            rel_path="${rel_path#\*}"
             local abs_path="$BUNDLE_DIR/$rel_path"
             local actual_sha
             if [[ ! -f "$abs_path" ]]; then
@@ -177,7 +179,7 @@ download_bundle_to_cache() {
         gh release download "$gh_tag" --repo "$gh_repo" --pattern "$gh_file" --dir "$TMP_DIR"
         mv "$TMP_DIR/$gh_file" "$tarball"
     else
-        curl -L --progress-bar -o "$tarball" "$BUNDLE_URL"
+        curl -fL --show-error --retry 3 --retry-all-errors --progress-bar -o "$tarball" "$BUNDLE_URL"
     fi
 
     echo "Extracting ..."
@@ -195,7 +197,7 @@ download_bundle_to_cache() {
 
 if [[ "$BUNDLE_URL" == *"TODO"* ]]; then
     echo "ERROR: bundle_url in $LOCK_FILE is still a placeholder." >&2
-    echo "       Publish a GitHub release and update rag-assets.lock.json first." >&2
+    echo "       Publish a GitHub release and update config/rag_assets.lock.json first." >&2
     exit 1
 fi
 
