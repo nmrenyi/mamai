@@ -185,8 +185,96 @@ class AppLocalizationsSw extends AppLocalizations {
   String get introDownloadModels => 'Pakua mifano';
 
   @override
-  String introDownloadingModels(String percent) {
-    return 'Inapakua mifano ($percent%)';
+  String get introDownloadIncludesTitle => 'Usanidi huu utapakua';
+
+  @override
+  String get introDownloadSpeedLabel => 'Kasi';
+
+  @override
+  String introDownloadFinishesIn(String time) {
+    return 'inakamilika baada ya $time';
+  }
+
+  @override
+  String get introDownloadStatusQueued => 'Imepangwa';
+
+  @override
+  String get introDownloadStatusStarting => 'Inaanza';
+
+  @override
+  String get introDownloadStatusReady => 'Tayari';
+
+  @override
+  String get introDownloadStatusFinalizing => 'Inafungua kifurushi';
+
+  @override
+  String get introDownloadStatusDecompressing => 'Inafungua data';
+
+  @override
+  String get introDownloadStatusScanning => 'Inasoma faili';
+
+  @override
+  String get introDownloadStatusExtracting => 'Inaandika faili';
+
+  @override
+  String get introDownloadStatusVerifying => 'Inathibitisha';
+
+  @override
+  String introDownloadBundleDecompressing(String current, String total) {
+    return 'Inafungua kumbukumbu ya kifurushi: $current kati ya $total.';
+  }
+
+  @override
+  String get introDownloadBundleScanning =>
+      'Inasoma yaliyomo kwenye kifurushi ili programu iandae faili za bila mtandao.';
+
+  @override
+  String introDownloadBundleExtracting(String current, String total) {
+    return 'Inaandika hifadhidata ya ulinganishi na PDF za miongozo: $current kati ya $total.';
+  }
+
+  @override
+  String introDownloadBundleVerifying(int count) {
+    return 'Inakagua kuwa hifadhidata ya ulinganishi na PDF $count za miongozo ziko tayari.';
+  }
+
+  @override
+  String introDownloadBundleParallel(int count) {
+    return 'Kifurushi cha maarifa tayari kimepakuliwa. Programu sasa inafungua hifadhidata ya ulinganishi na PDF $count za miongozo huku faili za modeli zilizobaki zikiendelea kupakuliwa.';
+  }
+
+  @override
+  String introDownloadBundleOnly(int count) {
+    return 'Vipakuzi vyote vimekamilika. Programu sasa inafungua hifadhidata ya ulinganishi na PDF $count za miongozo, kisha inathibitisha data za bila mtandao.';
+  }
+
+  @override
+  String get introAssetGemmaTitle => 'Mfano wa Gemma 4 kwenye kifaa';
+
+  @override
+  String get introAssetGemmaSubtitle =>
+      'Mfano mkuu wa lugha kwa majibu ya mazungumzo.';
+
+  @override
+  String get introAssetGeckoTitle => 'Mfano wa Gecko wa ulinganishi';
+
+  @override
+  String get introAssetGeckoSubtitle =>
+      'Hutumika kupata sehemu za mwongozo zinazofaa zaidi.';
+
+  @override
+  String get introAssetTokenizerTitle => 'Tokenizer ya SentencePiece';
+
+  @override
+  String get introAssetTokenizerSubtitle =>
+      'Tokenizer inayohitajika na mfano wa ulinganishi.';
+
+  @override
+  String get introAssetBundleTitle => 'Kifurushi cha maarifa';
+
+  @override
+  String introAssetBundleSubtitle(int count) {
+    return 'Hifadhidata ya ulinganishi pamoja na PDF $count za miongozo.';
   }
 
   @override

@@ -187,8 +187,96 @@ class AppLocalizationsEn extends AppLocalizations {
   String get introDownloadModels => 'Download models';
 
   @override
-  String introDownloadingModels(String percent) {
-    return 'Downloading models ($percent%)';
+  String get introDownloadIncludesTitle => 'This setup will download';
+
+  @override
+  String get introDownloadSpeedLabel => 'Speed';
+
+  @override
+  String introDownloadFinishesIn(String time) {
+    return 'finishing in $time';
+  }
+
+  @override
+  String get introDownloadStatusQueued => 'Queued';
+
+  @override
+  String get introDownloadStatusStarting => 'Starting';
+
+  @override
+  String get introDownloadStatusReady => 'Ready';
+
+  @override
+  String get introDownloadStatusFinalizing => 'Unpacking bundle';
+
+  @override
+  String get introDownloadStatusDecompressing => 'Decompressing';
+
+  @override
+  String get introDownloadStatusScanning => 'Reading files';
+
+  @override
+  String get introDownloadStatusExtracting => 'Writing files';
+
+  @override
+  String get introDownloadStatusVerifying => 'Verifying';
+
+  @override
+  String introDownloadBundleDecompressing(String current, String total) {
+    return 'Decompressing the bundle archive: $current of $total.';
+  }
+
+  @override
+  String get introDownloadBundleScanning =>
+      'Reading the bundle contents so the app can prepare the offline files.';
+
+  @override
+  String introDownloadBundleExtracting(String current, String total) {
+    return 'Writing the embeddings database and guideline PDFs: $current of $total.';
+  }
+
+  @override
+  String introDownloadBundleVerifying(int count) {
+    return 'Checking that the embeddings database and $count guideline PDFs are ready.';
+  }
+
+  @override
+  String introDownloadBundleParallel(int count) {
+    return 'The knowledge bundle is already downloaded. The app is now unpacking the embeddings database and $count guideline PDFs while the remaining model files continue downloading.';
+  }
+
+  @override
+  String introDownloadBundleOnly(int count) {
+    return 'All downloads are finished. The app is now unpacking the embeddings database and $count guideline PDFs, then verifying the offline data.';
+  }
+
+  @override
+  String get introAssetGemmaTitle => 'Gemma 4 on-device model';
+
+  @override
+  String get introAssetGemmaSubtitle =>
+      'Main language model for chat responses.';
+
+  @override
+  String get introAssetGeckoTitle => 'Gecko embedding model';
+
+  @override
+  String get introAssetGeckoSubtitle =>
+      'Used to find the most relevant guideline passages.';
+
+  @override
+  String get introAssetTokenizerTitle => 'SentencePiece tokenizer';
+
+  @override
+  String get introAssetTokenizerSubtitle =>
+      'Tokenizer required by the embedding model.';
+
+  @override
+  String get introAssetBundleTitle => 'Knowledge bundle';
+
+  @override
+  String introAssetBundleSubtitle(int count) {
+    return 'Embeddings database plus $count guideline PDFs.';
   }
 
   @override

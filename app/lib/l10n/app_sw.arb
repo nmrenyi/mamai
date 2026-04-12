@@ -85,10 +85,66 @@
   "introLLMLoading": "LLM inawashwa (inaweza kuchukua muda mara ya kwanza)...",
   "introStartChat": "Anza mazungumzo",
   "introDownloadModels": "Pakua mifano",
-  "introDownloadingModels": "Inapakua mifano ({percent}%)",
-  "@introDownloadingModels": {
+  "introDownloadIncludesTitle": "Usanidi huu utapakua",
+  "introDownloadSpeedLabel": "Kasi",
+  "introDownloadFinishesIn": "inakamilika baada ya {time}",
+  "@introDownloadFinishesIn": {
     "placeholders": {
-      "percent": { "type": "String" }
+      "time": { "type": "String" }
+    }
+  },
+  "introDownloadStatusQueued": "Imepangwa",
+  "introDownloadStatusStarting": "Inaanza",
+  "introDownloadStatusReady": "Tayari",
+  "introDownloadStatusFinalizing": "Inafungua kifurushi",
+  "introDownloadStatusDecompressing": "Inafungua data",
+  "introDownloadStatusScanning": "Inasoma faili",
+  "introDownloadStatusExtracting": "Inaandika faili",
+  "introDownloadStatusVerifying": "Inathibitisha",
+  "introDownloadBundleDecompressing": "Inafungua kumbukumbu ya kifurushi: {current} kati ya {total}.",
+  "@introDownloadBundleDecompressing": {
+    "placeholders": {
+      "current": { "type": "String" },
+      "total": { "type": "String" }
+    }
+  },
+  "introDownloadBundleScanning": "Inasoma yaliyomo kwenye kifurushi ili programu iandae faili za bila mtandao.",
+  "introDownloadBundleExtracting": "Inaandika hifadhidata ya ulinganishi na PDF za miongozo: {current} kati ya {total}.",
+  "@introDownloadBundleExtracting": {
+    "placeholders": {
+      "current": { "type": "String" },
+      "total": { "type": "String" }
+    }
+  },
+  "introDownloadBundleVerifying": "Inakagua kuwa hifadhidata ya ulinganishi na PDF {count} za miongozo ziko tayari.",
+  "@introDownloadBundleVerifying": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "introDownloadBundleParallel": "Kifurushi cha maarifa tayari kimepakuliwa. Programu sasa inafungua hifadhidata ya ulinganishi na PDF {count} za miongozo huku faili za modeli zilizobaki zikiendelea kupakuliwa.",
+  "@introDownloadBundleParallel": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "introDownloadBundleOnly": "Vipakuzi vyote vimekamilika. Programu sasa inafungua hifadhidata ya ulinganishi na PDF {count} za miongozo, kisha inathibitisha data za bila mtandao.",
+  "@introDownloadBundleOnly": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "introAssetGemmaTitle": "Mfano wa Gemma 4 kwenye kifaa",
+  "introAssetGemmaSubtitle": "Mfano mkuu wa lugha kwa majibu ya mazungumzo.",
+  "introAssetGeckoTitle": "Mfano wa Gecko wa ulinganishi",
+  "introAssetGeckoSubtitle": "Hutumika kupata sehemu za mwongozo zinazofaa zaidi.",
+  "introAssetTokenizerTitle": "Tokenizer ya SentencePiece",
+  "introAssetTokenizerSubtitle": "Tokenizer inayohitajika na mfano wa ulinganishi.",
+  "introAssetBundleTitle": "Kifurushi cha maarifa",
+  "introAssetBundleSubtitle": "Hifadhidata ya ulinganishi pamoja na PDF {count} za miongozo.",
+  "@introAssetBundleSubtitle": {
+    "placeholders": {
+      "count": { "type": "int" }
     }
   },
   "introWelcome": "Karibu MAM-AI",

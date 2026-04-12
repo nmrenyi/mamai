@@ -85,10 +85,66 @@
   "introLLMLoading": "LLM loading (may take a while the first time)...",
   "introStartChat": "Start chat",
   "introDownloadModels": "Download models",
-  "introDownloadingModels": "Downloading models ({percent}%)",
-  "@introDownloadingModels": {
+  "introDownloadIncludesTitle": "This setup will download",
+  "introDownloadSpeedLabel": "Speed",
+  "introDownloadFinishesIn": "finishing in {time}",
+  "@introDownloadFinishesIn": {
     "placeholders": {
-      "percent": { "type": "String" }
+      "time": { "type": "String" }
+    }
+  },
+  "introDownloadStatusQueued": "Queued",
+  "introDownloadStatusStarting": "Starting",
+  "introDownloadStatusReady": "Ready",
+  "introDownloadStatusFinalizing": "Unpacking bundle",
+  "introDownloadStatusDecompressing": "Decompressing",
+  "introDownloadStatusScanning": "Reading files",
+  "introDownloadStatusExtracting": "Writing files",
+  "introDownloadStatusVerifying": "Verifying",
+  "introDownloadBundleDecompressing": "Decompressing the bundle archive: {current} of {total}.",
+  "@introDownloadBundleDecompressing": {
+    "placeholders": {
+      "current": { "type": "String" },
+      "total": { "type": "String" }
+    }
+  },
+  "introDownloadBundleScanning": "Reading the bundle contents so the app can prepare the offline files.",
+  "introDownloadBundleExtracting": "Writing the embeddings database and guideline PDFs: {current} of {total}.",
+  "@introDownloadBundleExtracting": {
+    "placeholders": {
+      "current": { "type": "String" },
+      "total": { "type": "String" }
+    }
+  },
+  "introDownloadBundleVerifying": "Checking that the embeddings database and {count} guideline PDFs are ready.",
+  "@introDownloadBundleVerifying": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "introDownloadBundleParallel": "The knowledge bundle is already downloaded. The app is now unpacking the embeddings database and {count} guideline PDFs while the remaining model files continue downloading.",
+  "@introDownloadBundleParallel": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "introDownloadBundleOnly": "All downloads are finished. The app is now unpacking the embeddings database and {count} guideline PDFs, then verifying the offline data.",
+  "@introDownloadBundleOnly": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "introAssetGemmaTitle": "Gemma 4 on-device model",
+  "introAssetGemmaSubtitle": "Main language model for chat responses.",
+  "introAssetGeckoTitle": "Gecko embedding model",
+  "introAssetGeckoSubtitle": "Used to find the most relevant guideline passages.",
+  "introAssetTokenizerTitle": "SentencePiece tokenizer",
+  "introAssetTokenizerSubtitle": "Tokenizer required by the embedding model.",
+  "introAssetBundleTitle": "Knowledge bundle",
+  "introAssetBundleSubtitle": "Embeddings database plus {count} guideline PDFs.",
+  "@introAssetBundleSubtitle": {
+    "placeholders": {
+      "count": { "type": "int" }
     }
   },
   "introWelcome": "Welcome to MAM-AI",

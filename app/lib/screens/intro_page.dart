@@ -1,12 +1,15 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:collection';
 import 'dart:io';
 import 'dart:io' as io;
+import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'package:app/locale_notifier.dart';
 import 'package:archive/archive.dart';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show kIsWeb, compute;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:app/l10n/app_localizations.dart';
@@ -15,6 +18,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
 import 'search_page.dart';
+
+const _bundleStageDecompressing = 'decompressing';
+const _bundleStageScanning = 'scanning';
+const _bundleStageExtracting = 'extracting';
+const _bundleStageVerifying = 'verifying';
 
 class RagBundleLock {
   final String bundleVersion;
@@ -53,7 +61,7 @@ class RagBundleLock {
 ///     - Show download button
 ///     - [User clicks download] Show license dialog
 ///     - [User clicks accept] Start download
-///     - Show progress bar
+///     - Show per-file progress
 ///     - [Download finishes]
 /// - Show start chat button
 /// - User moves onto the ChatPage screen
@@ -121,8 +129,7 @@ class _IntroPageState extends State<IntroPage> {
       '${directory.path}/$filename',
       onReceiveProgress: (current, int total) {
         setState(() {
-          download.current = current;
-          download.total = total;
+          download.updateProgress(current, total);
         });
       },
     );
@@ -145,19 +152,25 @@ class _IntroPageState extends State<IntroPage> {
       tmpPath,
       onReceiveProgress: (current, int total) {
         setState(() {
-          download.current = current;
-          download.total = total;
+          download.updateProgress(current, total);
         });
       },
     );
-
-    // Decompress and extract in a background isolate to avoid blocking the UI.
-    await compute(_extractBundleFiles, {
-      'tmpPath': tmpPath,
-      'destDir': directory.path,
-      'markerPath': '${directory.path}/$_bundleMarker',
-      'expectedSourceCount': bundle.sourceCount.toString(),
+    setState(() {
+      download.setFinalizingProgress(
+        _bundleStageDecompressing,
+        nextCurrent: 0,
+        nextTotal: download.total > 0 ? download.total : 1,
+      );
     });
+
+    await _extractBundleFilesWithProgress(
+      tmpPath: tmpPath,
+      destDir: directory.path,
+      markerPath: '${directory.path}/$_bundleMarker',
+      expectedSourceCount: bundle.sourceCount,
+      download: download,
+    );
 
     final deployRecord = File('${directory.path}/rag_bundle_deployed.json');
     final deployRecordJson = const JsonEncoder.withIndent('  ').convert({
@@ -172,7 +185,88 @@ class _IntroPageState extends State<IntroPage> {
     });
     await deployRecord.writeAsString('$deployRecordJson\n');
 
-    setState(() => download.finished = true);
+    setState(() {
+      download.finished = true;
+      download.finalizing = false;
+      download.stage = null;
+      download.displayedEta = null;
+      download.displayedSpeedBytesPerSecond = 0;
+    });
+  }
+
+  Future<void> _extractBundleFilesWithProgress({
+    required String tmpPath,
+    required String destDir,
+    required String markerPath,
+    required int expectedSourceCount,
+    required DownloadInProgress download,
+  }) async {
+    final receivePort = ReceivePort();
+    final exitPort = ReceivePort();
+    final completion = Completer<void>();
+    StreamSubscription? progressSubscription;
+    StreamSubscription? exitSubscription;
+
+    final isolate =
+        await Isolate.spawn<Map<String, Object>>(_extractBundleFilesIsolate, {
+          'sendPort': receivePort.sendPort,
+          'tmpPath': tmpPath,
+          'destDir': destDir,
+          'markerPath': markerPath,
+          'expectedSourceCount': expectedSourceCount,
+        }, onExit: exitPort.sendPort);
+
+    try {
+      progressSubscription = receivePort.listen((message) {
+        if (message is! Map) {
+          return;
+        }
+        final type = message['type']?.toString();
+        if (type == 'progress') {
+          if (!mounted) {
+            return;
+          }
+          final stage = message['stage']?.toString() ?? _bundleStageExtracting;
+          final current = (message['current'] as num?)?.toInt() ?? 0;
+          final total = (message['total'] as num?)?.toInt() ?? 1;
+          setState(() {
+            download.setFinalizingProgress(
+              stage,
+              nextCurrent: current,
+              nextTotal: total,
+            );
+          });
+          return;
+        }
+        if (type == 'done' && !completion.isCompleted) {
+          completion.complete();
+          return;
+        }
+        if (type == 'error' && !completion.isCompleted) {
+          completion.completeError(
+            StateError(
+              message['error']?.toString() ?? 'Bundle extraction failed',
+            ),
+          );
+        }
+      });
+
+      exitSubscription = exitPort.listen((_) {
+        if (!completion.isCompleted) {
+          completion.completeError(
+            StateError('Bundle extraction stopped before finishing'),
+          );
+        }
+      });
+
+      await completion.future;
+    } finally {
+      await progressSubscription?.cancel();
+      await exitSubscription?.cancel();
+      receivePort.close();
+      exitPort.close();
+      isolate.kill(priority: Isolate.immediate);
+    }
   }
 
   Future<void> _loadPinnedBundleInfo() async {
@@ -205,19 +299,6 @@ class _IntroPageState extends State<IntroPage> {
         _bundleInfoError = 'Could not load app bundle metadata.';
       });
     }
-  }
-
-  // ======= Download related properties ============
-
-  /// Total download progress
-  double get progress {
-    double total = downloads.values
-        .map((d) => d.total)
-        .fold(0, (a, b) => a + b);
-    double current = downloads.values
-        .map((d) => d.current)
-        .fold(0, (a, b) => a + b);
-    return current / total;
   }
 
   /// Download dir, which is null before the future loading it has been resolved
@@ -283,6 +364,286 @@ class _IntroPageState extends State<IntroPage> {
     "sentencepiece.model",
     "Gecko_1024_quant.tflite",
   ];
+
+  List<_StartupDownloadItem> _startupDownloads(AppLocalizations l10n) => [
+    _StartupDownloadItem(
+      key: "gemma-4-E4B-it.litertlm",
+      title: l10n.introAssetGemmaTitle,
+      subtitle: l10n.introAssetGemmaSubtitle,
+      sizeLabel: "3.65 GB",
+    ),
+    _StartupDownloadItem(
+      key: "Gecko_1024_quant.tflite",
+      title: l10n.introAssetGeckoTitle,
+      subtitle: l10n.introAssetGeckoSubtitle,
+      sizeLabel: "146 MB",
+    ),
+    _StartupDownloadItem(
+      key: "sentencepiece.model",
+      title: l10n.introAssetTokenizerTitle,
+      subtitle: l10n.introAssetTokenizerSubtitle,
+      sizeLabel: "794 KB",
+    ),
+    _StartupDownloadItem(
+      key: _bundleKey,
+      title: l10n.introAssetBundleTitle,
+      subtitle: l10n.introAssetBundleSubtitle(_pinnedBundle?.sourceCount ?? 0),
+    ),
+  ];
+
+  String _formatBytes(num bytes) {
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    var value = bytes.toDouble();
+    var unitIndex = 0;
+    while (value >= 1024 && unitIndex < units.length - 1) {
+      value /= 1024;
+      unitIndex += 1;
+    }
+    final decimals = value >= 100 || unitIndex == 0
+        ? 0
+        : value >= 10
+        ? 1
+        : 2;
+    return '${value.toStringAsFixed(decimals)} ${units[unitIndex]}';
+  }
+
+  String _formatSpeed(double speedBytesPerSecond) =>
+      '${_formatBytes(speedBytesPerSecond)}/s';
+
+  String _formatEta(Duration remaining) {
+    if (remaining.inHours > 0) {
+      final minutes = remaining.inMinutes.remainder(60);
+      return minutes > 0
+          ? '${remaining.inHours}h ${minutes}m'
+          : '${remaining.inHours}h';
+    }
+    if (remaining.inMinutes > 0) {
+      final seconds = remaining.inSeconds.remainder(60);
+      return seconds > 0
+          ? '${remaining.inMinutes}m ${seconds}s'
+          : '${remaining.inMinutes}m';
+    }
+    return '${remaining.inSeconds}s';
+  }
+
+  String _downloadStatus(AppLocalizations l10n, DownloadInProgress? download) {
+    if (download == null) {
+      return l10n.introDownloadStatusQueued;
+    }
+    if (download.finished) {
+      return l10n.introDownloadStatusReady;
+    }
+    if (download.finalizing) {
+      switch (download.stage) {
+        case _bundleStageDecompressing:
+          return l10n.introDownloadStatusDecompressing;
+        case _bundleStageScanning:
+          return l10n.introDownloadStatusScanning;
+        case _bundleStageVerifying:
+          return l10n.introDownloadStatusVerifying;
+        case _bundleStageExtracting:
+        default:
+          return l10n.introDownloadStatusExtracting;
+      }
+    }
+    if (download.total > 0 && download.current > 0) {
+      final percent = ((download.current / download.total) * 100)
+          .clamp(0, 100)
+          .toStringAsFixed(0);
+      return '$percent%';
+    }
+    return l10n.introDownloadStatusStarting;
+  }
+
+  String? _downloadDetails(
+    AppLocalizations l10n,
+    String itemKey,
+    DownloadInProgress? download,
+  ) {
+    if (download == null || download.finished) {
+      return null;
+    }
+
+    if (download.finalizing) {
+      if (itemKey != _bundleKey) {
+        return null;
+      }
+      switch (download.stage) {
+        case _bundleStageDecompressing:
+          return l10n.introDownloadBundleDecompressing(
+            _formatBytes(download.current),
+            _formatBytes(download.total),
+          );
+        case _bundleStageScanning:
+          return l10n.introDownloadBundleScanning;
+        case _bundleStageVerifying:
+          return l10n.introDownloadBundleVerifying(
+            _pinnedBundle?.sourceCount ?? 0,
+          );
+        case _bundleStageExtracting:
+        default:
+          return l10n.introDownloadBundleExtracting(
+            _formatBytes(download.current),
+            _formatBytes(download.total),
+          );
+      }
+    }
+
+    final parts = <String>[
+      '${_formatBytes(download.current)} / ${_formatBytes(download.total)}',
+    ];
+    if (download.displayedSpeedBytesPerSecond > 0) {
+      parts.add(_formatSpeed(download.displayedSpeedBytesPerSecond));
+    }
+    if (download.displayedEta != null) {
+      parts.add(
+        l10n.introDownloadFinishesIn(_formatEta(download.displayedEta!)),
+      );
+    }
+    return parts.join(' • ');
+  }
+
+  Widget _buildDownloadChecklist(AppLocalizations l10n) {
+    final items = _startupDownloads(l10n);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: const Color(0xFFE8D1CB)),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x12000000),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            l10n.introDownloadIncludesTitle,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: Color(0xff5A382F),
+            ),
+          ),
+          const SizedBox(height: 12),
+          for (final item in items)
+            Builder(
+              builder: (context) {
+                final download = downloads[item.key];
+                final itemProgress = download == null || download.total <= 0
+                    ? 0.0
+                    : download.current / download.total;
+                final details = _downloadDetails(l10n, item.key, download);
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  item.title,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  item.subtitle,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                    height: 1.3,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              if (item.sizeLabel != null)
+                                Text(
+                                  item.sizeLabel!,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              const SizedBox(height: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: download?.finished == true
+                                      ? const Color(0xFFDDF3E5)
+                                      : download?.finalizing == true
+                                      ? const Color(0xFFFFEACC)
+                                      : const Color(0xFFF4EFED),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  _downloadStatus(l10n, download),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: download?.finished == true
+                                        ? const Color(0xFF1C6B3A)
+                                        : download?.finalizing == true
+                                        ? const Color(0xFF8B5A00)
+                                        : const Color(0xff6B5851),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      if (download != null && !download.finished) ...[
+                        const SizedBox(height: 8),
+                        LinearProgressIndicator(
+                          value: itemProgress.clamp(0.0, 1.0),
+                          color: const Color(0xffDE7356),
+                          backgroundColor: const Color(0xFFF3E2DC),
+                        ),
+                        if (details != null) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            details,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey[600],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ],
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -435,41 +796,40 @@ class _IntroPageState extends State<IntroPage> {
       }
     } else if (!downloadsStarted) {
       // Download not yet started - prompt license
-      nextButton = ElevatedButton(
-        onPressed: () async {
-          var accepted = await promptLicense(context, l10n);
-          if (accepted ?? false) {
-            for (final filename in _modelFiles) {
-              downloadFile(filename);
-            }
-            downloadAndExtractBundle();
-          }
-        },
-        style: ElevatedButton.styleFrom(
-          padding: const EdgeInsets.all(20),
-          backgroundColor: orange,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(5.0),
-          ),
-          elevation: 2,
-        ),
-        child: Text(
-          l10n.introDownloadModels,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      );
-    } else {
-      double prog = progress;
       nextButton = Column(
         children: [
-          Text(l10n.introDownloadingModels((prog * 100).toStringAsFixed(2))),
-          SizedBox(height: 20),
-          LinearProgressIndicator(value: progress, color: orange),
+          _buildDownloadChecklist(l10n),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: () async {
+              var accepted = await promptLicense(context, l10n);
+              if (accepted ?? false) {
+                for (final filename in _modelFiles) {
+                  downloadFile(filename);
+                }
+                downloadAndExtractBundle();
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.all(20),
+              backgroundColor: orange,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(5.0),
+              ),
+              elevation: 2,
+            ),
+            child: Text(
+              l10n.introDownloadModels,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
         ],
       );
+    } else {
+      nextButton = _buildDownloadChecklist(l10n);
     }
 
     // Build initial UI
@@ -587,138 +947,277 @@ class _IntroPageState extends State<IntroPage> {
   }
 }
 
-// Top-level function so it can run in a separate isolate via compute().
-// Decompresses the RAG bundle tar.gz, writes embeddings.sqlite and all
-// guideline PDFs to destDir, deletes the temp file, then writes a marker.
-Future<void> _extractBundleFiles(Map<String, String> args) async {
-  final tmpPath = args['tmpPath']!;
-  final destDir = args['destDir']!;
-  final markerPath = args['markerPath']!;
+Future<void> _extractBundleFilesIsolate(Map<String, Object> args) async {
+  final sendPort = args['sendPort']! as SendPort;
+  final tmpPath = args['tmpPath']! as String;
+  final destDir = args['destDir']! as String;
+  final markerPath = args['markerPath']! as String;
   final expectedSourceCount =
-      int.tryParse(args['expectedSourceCount'] ?? '') ?? 0;
+      (args['expectedSourceCount'] as num?)?.toInt() ?? 0;
 
-  final bytes = io.File(tmpPath).readAsBytesSync();
-  final archive = TarDecoder().decodeBytes(GZipDecoder().decodeBytes(bytes));
-  var pdfCount = 0;
-  var foundEmbeddings = false;
+  try {
+    final compressedFile = io.File(tmpPath);
+    final compressedSize = await compressedFile.length();
+    final tarBytes = BytesBuilder(copy: false);
+    var compressedRead = 0;
+    var lastReportAt = DateTime.fromMillisecondsSinceEpoch(0);
 
-  for (final file in archive.files) {
-    if (!file.isFile) continue;
-    final name = file.name;
-
-    String? destPath;
-    if (name.contains('runtime/') && name.endsWith('embeddings.sqlite')) {
-      destPath = '$destDir/embeddings.sqlite';
-      foundEmbeddings = true;
-    } else if (name.contains('/docs/') && name.endsWith('.pdf')) {
-      destPath = '$destDir/${name.split('/').last}';
-      pdfCount += 1;
-    }
-
-    if (destPath != null) {
-      io.File(destPath).writeAsBytesSync(file.content as List<int>);
-    }
-  }
-
-  io.File(tmpPath).deleteSync();
-  if (!foundEmbeddings) {
-    throw StateError('RAG bundle did not contain embeddings.sqlite');
-  }
-  if (expectedSourceCount > 0 && pdfCount != expectedSourceCount) {
-    throw StateError(
-      'RAG bundle PDF count mismatch: expected $expectedSourceCount, got $pdfCount',
+    final compressedStream = compressedFile.openRead().transform(
+      StreamTransformer<List<int>, List<int>>.fromHandlers(
+        handleData: (chunk, sink) {
+          compressedRead += chunk.length;
+          _sendBundleExtractProgress(
+            sendPort,
+            stage: _bundleStageDecompressing,
+            current: compressedRead,
+            total: compressedSize,
+            lastReportAt: lastReportAt,
+            updateLastReportAt: (value) => lastReportAt = value,
+          );
+          sink.add(chunk);
+        },
+      ),
     );
+
+    await for (final chunk in compressedStream.transform(io.gzip.decoder)) {
+      tarBytes.add(chunk);
+    }
+    _forceBundleExtractProgress(
+      sendPort,
+      stage: _bundleStageDecompressing,
+      current: compressedSize,
+      total: compressedSize,
+    );
+
+    final tarInput = InputMemoryStream(tarBytes.takeBytes());
+    final tarTotal = tarInput.buffer?.length ?? 1;
+    _forceBundleExtractProgress(
+      sendPort,
+      stage: _bundleStageScanning,
+      current: 0,
+      total: tarTotal,
+    );
+    final archive = TarDecoder().decodeStream(
+      tarInput,
+      callback: (_) {
+        _sendBundleExtractProgress(
+          sendPort,
+          stage: _bundleStageScanning,
+          current: tarInput.position,
+          total: tarTotal,
+          lastReportAt: lastReportAt,
+          updateLastReportAt: (value) => lastReportAt = value,
+        );
+      },
+    );
+    _forceBundleExtractProgress(
+      sendPort,
+      stage: _bundleStageScanning,
+      current: tarTotal,
+      total: tarTotal,
+    );
+
+    final outputs = <_BundleOutputEntry>[];
+    var totalExtractBytes = 0;
+    for (final file in archive.files) {
+      if (!file.isFile) {
+        continue;
+      }
+      final destPath = _bundleDestPath(destDir, file.name);
+      if (destPath == null) {
+        continue;
+      }
+      totalExtractBytes += file.size;
+      outputs.add(_BundleOutputEntry(file: file, destPath: destPath));
+    }
+    if (totalExtractBytes <= 0) {
+      totalExtractBytes = 1;
+    }
+
+    _forceBundleExtractProgress(
+      sendPort,
+      stage: _bundleStageExtracting,
+      current: 0,
+      total: totalExtractBytes,
+    );
+
+    var extractedBytes = 0;
+    var pdfCount = 0;
+    var foundEmbeddings = false;
+    for (final output in outputs) {
+      final file = output.file;
+      final sink = OutputFileStream(output.destPath);
+      try {
+        file.writeContent(sink);
+      } finally {
+        sink.closeSync();
+        file.closeSync();
+      }
+
+      if (output.destPath.endsWith('embeddings.sqlite')) {
+        foundEmbeddings = true;
+      } else if (output.destPath.toLowerCase().endsWith('.pdf')) {
+        pdfCount += 1;
+      }
+
+      extractedBytes += file.size;
+      _sendBundleExtractProgress(
+        sendPort,
+        stage: _bundleStageExtracting,
+        current: extractedBytes,
+        total: totalExtractBytes,
+        lastReportAt: lastReportAt,
+        updateLastReportAt: (value) => lastReportAt = value,
+      );
+    }
+    _forceBundleExtractProgress(
+      sendPort,
+      stage: _bundleStageExtracting,
+      current: totalExtractBytes,
+      total: totalExtractBytes,
+    );
+
+    _forceBundleExtractProgress(
+      sendPort,
+      stage: _bundleStageVerifying,
+      current: 0,
+      total: 1,
+    );
+    compressedFile.deleteSync();
+    if (!foundEmbeddings) {
+      throw StateError('RAG bundle did not contain embeddings.sqlite');
+    }
+    if (expectedSourceCount > 0 && pdfCount != expectedSourceCount) {
+      throw StateError(
+        'RAG bundle PDF count mismatch: expected $expectedSourceCount, got $pdfCount',
+      );
+    }
+    io.File(markerPath).writeAsStringSync('ok');
+    _forceBundleExtractProgress(
+      sendPort,
+      stage: _bundleStageVerifying,
+      current: 1,
+      total: 1,
+    );
+    sendPort.send({'type': 'done'});
+  } catch (e, st) {
+    sendPort.send({'type': 'error', 'error': '$e\n$st'});
   }
-  io.File(markerPath).writeAsStringSync('ok');
+}
+
+String? _bundleDestPath(String destDir, String sourceName) {
+  if (sourceName.contains('runtime/') &&
+      sourceName.endsWith('embeddings.sqlite')) {
+    return '$destDir/embeddings.sqlite';
+  }
+  if (sourceName.contains('/docs/') && sourceName.endsWith('.pdf')) {
+    return '$destDir/${sourceName.split('/').last}';
+  }
+  return null;
+}
+
+void _sendBundleExtractProgress(
+  SendPort sendPort, {
+  required String stage,
+  required int current,
+  required int total,
+  required DateTime lastReportAt,
+  required void Function(DateTime value) updateLastReportAt,
+}) {
+  final now = DateTime.now();
+  if (now.difference(lastReportAt).inMilliseconds < 250 && current < total) {
+    return;
+  }
+  updateLastReportAt(now);
+  _forceBundleExtractProgress(
+    sendPort,
+    stage: stage,
+    current: current,
+    total: total,
+  );
+}
+
+void _forceBundleExtractProgress(
+  SendPort sendPort, {
+  required String stage,
+  required int current,
+  required int total,
+}) {
+  sendPort.send({
+    'type': 'progress',
+    'stage': stage,
+    'current': current < 0 ? 0 : current,
+    'total': total <= 0 ? 1 : total,
+  });
 }
 
 Future<bool?> promptLicense(BuildContext context, AppLocalizations l10n) {
-  bool openedGemmaTos = false;
-  bool openedGemmaUsagePolicy = false;
-
   return showDialog<bool>(
     context: context,
     barrierDismissible: false,
     builder: (BuildContext context) {
-      return StatefulBuilder(
-        builder: (context, setState) {
-          return AlertDialog(
-            title: Text(l10n.licenseTitle),
-            content: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: 500),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(l10n.licenseIntro),
-                  SizedBox(height: 30),
-                  Text(l10n.licenseTermsText),
-                  SizedBox(height: 15),
-                  InkWell(
-                    child: Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: Text(
-                        "ai.google.dev/gemma/terms",
-                        style: TextStyle(
-                          color: Colors.blue,
-                          decoration: TextDecoration.underline,
-                        ),
-                      ),
+      return AlertDialog(
+        title: Text(l10n.licenseTitle),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 500),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(l10n.licenseIntro),
+              const SizedBox(height: 30),
+              Text(l10n.licenseTermsText),
+              const SizedBox(height: 15),
+              InkWell(
+                child: const Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: Text(
+                    "ai.google.dev/gemma/terms",
+                    style: TextStyle(
+                      color: Colors.blue,
+                      decoration: TextDecoration.underline,
                     ),
-                    onTap: () {
-                      setState(() {
-                        openedGemmaTos = true;
-                      });
-                      launchUrlString("https://ai.google.dev/gemma/terms");
-                    },
                   ),
-                  InkWell(
-                    child: Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: Text(
-                        l10n.licenseUsagePolicyLink,
-                        style: TextStyle(
-                          color: Colors.blue,
-                          decoration: TextDecoration.underline,
-                        ),
-                      ),
+                ),
+                onTap: () {
+                  launchUrlString("https://ai.google.dev/gemma/terms");
+                },
+              ),
+              InkWell(
+                child: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Text(
+                    l10n.licenseUsagePolicyLink,
+                    style: const TextStyle(
+                      color: Colors.blue,
+                      decoration: TextDecoration.underline,
                     ),
-                    onTap: () {
-                      setState(() {
-                        openedGemmaUsagePolicy = true;
-                      });
-
-                      launchUrlString(
-                        "https://ai.google.dev/gemma/prohibited_use_policy",
-                      );
-                    },
                   ),
-                ],
-              ),
-            ),
-            actions: <Widget>[
-              TextButton(
-                style: TextButton.styleFrom(
-                  textStyle: Theme.of(context).textTheme.labelLarge,
                 ),
-                onPressed: (openedGemmaUsagePolicy && openedGemmaTos)
-                    ? () => Navigator.of(context).pop(true)
-                    : null,
-                child: Text(l10n.licenseAccept),
-              ),
-              TextButton(
-                style: TextButton.styleFrom(
-                  textStyle: Theme.of(context).textTheme.labelLarge,
-                ),
-                child: Text(l10n.licenseDeny),
-                onPressed: () {
-                  openedGemmaTos = false;
-                  openedGemmaUsagePolicy = false;
-                  Navigator.of(context).pop(false);
+                onTap: () {
+                  launchUrlString(
+                    "https://ai.google.dev/gemma/prohibited_use_policy",
+                  );
                 },
               ),
             ],
-          );
-        },
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            style: TextButton.styleFrom(
+              textStyle: Theme.of(context).textTheme.labelLarge,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(l10n.licenseAccept),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(
+              textStyle: Theme.of(context).textTheme.labelLarge,
+            ),
+            child: Text(l10n.licenseDeny),
+            onPressed: () => Navigator.of(context).pop(false),
+          ),
+        ],
       );
     },
   );
@@ -728,10 +1227,100 @@ class DownloadInProgress {
   int total;
   int current;
   bool finished;
+  bool finalizing;
+  String? stage;
+  final DateTime startedAt;
+  DateTime? _lastProgressAt;
+  DateTime? _lastDisplayUpdateAt;
+  int _lastProgressBytes;
+  double speedBytesPerSecond;
+  double displayedSpeedBytesPerSecond;
+  Duration? displayedEta;
 
   DownloadInProgress({
     required this.total,
     required this.current,
     required this.finished,
+    this.finalizing = false,
+    this.stage,
+    DateTime? startedAt,
+    this.speedBytesPerSecond = 0,
+    this.displayedSpeedBytesPerSecond = 0,
+    this.displayedEta,
+  }) : startedAt = startedAt ?? DateTime.now(),
+       _lastProgressBytes = current;
+
+  void updateProgress(int nextCurrent, int nextTotal) {
+    final now = DateTime.now();
+    final safeTotal = nextTotal > 0 ? nextTotal : total;
+    final safeCurrent = nextCurrent < 0 ? 0 : nextCurrent;
+
+    if (_lastProgressAt != null) {
+      final elapsedMs = now.difference(_lastProgressAt!).inMilliseconds;
+      final deltaBytes = safeCurrent - _lastProgressBytes;
+      if (elapsedMs > 0 && deltaBytes >= 0) {
+        final instantSpeed = (deltaBytes * 1000) / elapsedMs;
+        speedBytesPerSecond = speedBytesPerSecond == 0
+            ? instantSpeed
+            : (speedBytesPerSecond * 0.75) + (instantSpeed * 0.25);
+      }
+    }
+
+    total = safeTotal;
+    current = safeCurrent > safeTotal ? safeTotal : safeCurrent;
+    _lastProgressAt = now;
+    _lastProgressBytes = current;
+
+    final shouldRefreshDisplay =
+        _lastDisplayUpdateAt == null ||
+        now.difference(_lastDisplayUpdateAt!).inMilliseconds >= 1000 ||
+        current >= total;
+    if (shouldRefreshDisplay) {
+      displayedSpeedBytesPerSecond = speedBytesPerSecond;
+      if (displayedSpeedBytesPerSecond > 0 && total > 0 && current < total) {
+        final remainingSeconds =
+            ((total - current) / displayedSpeedBytesPerSecond).ceil();
+        displayedEta = Duration(
+          seconds: remainingSeconds <= 0 ? 1 : remainingSeconds,
+        );
+      } else {
+        displayedEta = null;
+      }
+      _lastDisplayUpdateAt = now;
+    }
+  }
+
+  void setFinalizingProgress(
+    String nextStage, {
+    required int nextCurrent,
+    required int nextTotal,
+  }) {
+    finalizing = true;
+    stage = nextStage;
+    current = nextCurrent < 0 ? 0 : nextCurrent;
+    total = nextTotal <= 0 ? 1 : nextTotal;
+    displayedEta = null;
+    displayedSpeedBytesPerSecond = 0;
+  }
+}
+
+class _BundleOutputEntry {
+  final ArchiveFile file;
+  final String destPath;
+
+  const _BundleOutputEntry({required this.file, required this.destPath});
+}
+
+class _StartupDownloadItem {
+  final String key;
+  final String title;
+  final String subtitle;
+  final String? sizeLabel;
+
+  const _StartupDownloadItem({
+    required this.key,
+    required this.title,
+    required this.subtitle,
+    this.sizeLabel,
   });
 }

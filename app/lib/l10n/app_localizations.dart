@@ -404,11 +404,155 @@ abstract class AppLocalizations {
   /// **'Download models'**
   String get introDownloadModels;
 
-  /// No description provided for @introDownloadingModels.
+  /// No description provided for @introDownloadIncludesTitle.
   ///
   /// In en, this message translates to:
-  /// **'Downloading models ({percent}%)'**
-  String introDownloadingModels(String percent);
+  /// **'This setup will download'**
+  String get introDownloadIncludesTitle;
+
+  /// No description provided for @introDownloadSpeedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Speed'**
+  String get introDownloadSpeedLabel;
+
+  /// No description provided for @introDownloadFinishesIn.
+  ///
+  /// In en, this message translates to:
+  /// **'finishing in {time}'**
+  String introDownloadFinishesIn(String time);
+
+  /// No description provided for @introDownloadStatusQueued.
+  ///
+  /// In en, this message translates to:
+  /// **'Queued'**
+  String get introDownloadStatusQueued;
+
+  /// No description provided for @introDownloadStatusStarting.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting'**
+  String get introDownloadStatusStarting;
+
+  /// No description provided for @introDownloadStatusReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Ready'**
+  String get introDownloadStatusReady;
+
+  /// No description provided for @introDownloadStatusFinalizing.
+  ///
+  /// In en, this message translates to:
+  /// **'Unpacking bundle'**
+  String get introDownloadStatusFinalizing;
+
+  /// No description provided for @introDownloadStatusDecompressing.
+  ///
+  /// In en, this message translates to:
+  /// **'Decompressing'**
+  String get introDownloadStatusDecompressing;
+
+  /// No description provided for @introDownloadStatusScanning.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading files'**
+  String get introDownloadStatusScanning;
+
+  /// No description provided for @introDownloadStatusExtracting.
+  ///
+  /// In en, this message translates to:
+  /// **'Writing files'**
+  String get introDownloadStatusExtracting;
+
+  /// No description provided for @introDownloadStatusVerifying.
+  ///
+  /// In en, this message translates to:
+  /// **'Verifying'**
+  String get introDownloadStatusVerifying;
+
+  /// No description provided for @introDownloadBundleDecompressing.
+  ///
+  /// In en, this message translates to:
+  /// **'Decompressing the bundle archive: {current} of {total}.'**
+  String introDownloadBundleDecompressing(String current, String total);
+
+  /// No description provided for @introDownloadBundleScanning.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading the bundle contents so the app can prepare the offline files.'**
+  String get introDownloadBundleScanning;
+
+  /// No description provided for @introDownloadBundleExtracting.
+  ///
+  /// In en, this message translates to:
+  /// **'Writing the embeddings database and guideline PDFs: {current} of {total}.'**
+  String introDownloadBundleExtracting(String current, String total);
+
+  /// No description provided for @introDownloadBundleVerifying.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking that the embeddings database and {count} guideline PDFs are ready.'**
+  String introDownloadBundleVerifying(int count);
+
+  /// No description provided for @introDownloadBundleParallel.
+  ///
+  /// In en, this message translates to:
+  /// **'The knowledge bundle is already downloaded. The app is now unpacking the embeddings database and {count} guideline PDFs while the remaining model files continue downloading.'**
+  String introDownloadBundleParallel(int count);
+
+  /// No description provided for @introDownloadBundleOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'All downloads are finished. The app is now unpacking the embeddings database and {count} guideline PDFs, then verifying the offline data.'**
+  String introDownloadBundleOnly(int count);
+
+  /// No description provided for @introAssetGemmaTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Gemma 4 on-device model'**
+  String get introAssetGemmaTitle;
+
+  /// No description provided for @introAssetGemmaSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Main language model for chat responses.'**
+  String get introAssetGemmaSubtitle;
+
+  /// No description provided for @introAssetGeckoTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Gecko embedding model'**
+  String get introAssetGeckoTitle;
+
+  /// No description provided for @introAssetGeckoSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Used to find the most relevant guideline passages.'**
+  String get introAssetGeckoSubtitle;
+
+  /// No description provided for @introAssetTokenizerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'SentencePiece tokenizer'**
+  String get introAssetTokenizerTitle;
+
+  /// No description provided for @introAssetTokenizerSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Tokenizer required by the embedding model.'**
+  String get introAssetTokenizerSubtitle;
+
+  /// No description provided for @introAssetBundleTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Knowledge bundle'**
+  String get introAssetBundleTitle;
+
+  /// No description provided for @introAssetBundleSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Embeddings database plus {count} guideline PDFs.'**
+  String introAssetBundleSubtitle(int count);
 
   /// No description provided for @introWelcome.
   ///
