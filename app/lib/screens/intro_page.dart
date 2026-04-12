@@ -133,7 +133,7 @@ class _IntroPageState extends State<IntroPage> {
     final existingSize =
         io.File(destPath).existsSync() ? io.File(destPath).lengthSync() : 0;
     final download = DownloadInProgress(
-      total: existingSize > 0 ? existingSize : 1,
+      total: 0,
       current: existingSize,
       finished: false,
       sessionStartBytes: existingSize,
@@ -375,7 +375,7 @@ class _IntroPageState extends State<IntroPage> {
     final tmpExisting =
         io.File(tmpPath).existsSync() ? io.File(tmpPath).lengthSync() : 0;
     final download = DownloadInProgress(
-      total: tmpExisting > 0 ? tmpExisting : 1,
+      total: 0,
       current: tmpExisting,
       finished: false,
       sessionStartBytes: tmpExisting,
