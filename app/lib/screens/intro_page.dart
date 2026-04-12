@@ -129,7 +129,7 @@ class _IntroPageState extends State<IntroPage> {
     setState(() => downloads[filename] = download);
 
     try {
-      await _downloadWithResume(
+      await _downloadWithRetry(
         url: _modelFileUrls[filename]!,
         destPath: destPath,
         download: download,
@@ -212,12 +212,42 @@ class _IntroPageState extends State<IntroPage> {
 
   String _downloadErrorMessage(Object e) {
     if (e is TimeoutException) {
-      return 'Download stalled (no data for 30 s). Tap Retry.';
+      return 'Download stalled after several retries. Tap Retry to try again.';
     }
     if (e is DioException) {
-      return 'Download failed: ${e.message ?? e.type.name}';
+      return 'Download failed after several retries: ${e.message ?? e.type.name}';
     }
-    return 'Download failed: ${e.toString().split('\n').first}';
+    return 'Download failed after several retries: ${e.toString().split('\n').first}';
+  }
+
+  /// Wraps [_downloadWithResume] with automatic exponential-backoff retries.
+  ///
+  /// On each transient failure the download silently waits and tries again
+  /// (2 s → 4 s → 8 s → 16 s → 30 s) before giving up and surfacing an error.
+  /// The in-progress badge shows "Reconnecting" during the wait so the user
+  /// sees activity without being asked to do anything.
+  Future<void> _downloadWithRetry({
+    required String url,
+    required String destPath,
+    required DownloadInProgress download,
+    int maxAttempts = 5,
+  }) async {
+    const delays = [2, 4, 8, 16, 30];
+    for (int attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        await _downloadWithResume(url: url, destPath: destPath, download: download);
+        return; // success
+      } catch (e) {
+        if (attempt < maxAttempts - 1) {
+          final delaySec = delays[attempt.clamp(0, delays.length - 1)];
+          setState(() => download.markReconnecting());
+          await Future.delayed(Duration(seconds: delaySec));
+          // loop continues → _downloadWithResume will resume from disk offset
+        } else {
+          rethrow; // all attempts exhausted; caller surfaces the error
+        }
+      }
+    }
   }
 
   /// Downloads the RAG bundle tar.gz and extracts embeddings.sqlite + PDFs.
@@ -239,7 +269,7 @@ class _IntroPageState extends State<IntroPage> {
     setState(() => downloads[_bundleKey] = download);
 
     try {
-      await _downloadWithResume(
+      await _downloadWithRetry(
         url: bundle.bundleUrl,
         destPath: tmpPath,
         download: download,
@@ -532,6 +562,9 @@ class _IntroPageState extends State<IntroPage> {
     if (download.errorMessage != null) {
       return 'Failed';
     }
+    if (download.reconnecting) {
+      return 'Reconnecting';
+    }
     if (download.finished) {
       return l10n.introDownloadStatusReady;
     }
@@ -698,7 +731,8 @@ class _IntroPageState extends State<IntroPage> {
                                       ? const Color(0xFFFFE0E0)
                                       : download?.finished == true
                                       ? const Color(0xFFDDF3E5)
-                                      : download?.finalizing == true
+                                      : (download?.finalizing == true ||
+                                              download?.reconnecting == true)
                                       ? const Color(0xFFFFEACC)
                                       : const Color(0xFFF4EFED),
                                   borderRadius: BorderRadius.circular(999),
@@ -712,7 +746,8 @@ class _IntroPageState extends State<IntroPage> {
                                         ? const Color(0xFFB00020)
                                         : download?.finished == true
                                         ? const Color(0xFF1C6B3A)
-                                        : download?.finalizing == true
+                                        : (download?.finalizing == true ||
+                                                download?.reconnecting == true)
                                         ? const Color(0xFF8B5A00)
                                         : const Color(0xff6B5851),
                                   ),
@@ -1374,9 +1409,10 @@ class DownloadInProgress {
   int current;
   bool finished;
   bool finalizing;
+  bool reconnecting;
   String? stage;
   String? errorMessage;
-  final DateTime startedAt;
+  DateTime startedAt;
   DateTime? _lastDisplayUpdateAt;
   // Bytes already on disk at the start of this session (for resumed downloads).
   // Speed is measured only over bytes received in the current session so it
@@ -1391,6 +1427,7 @@ class DownloadInProgress {
     required this.current,
     required this.finished,
     this.finalizing = false,
+    this.reconnecting = false,
     this.stage,
     this.errorMessage,
     DateTime? startedAt,
@@ -1402,12 +1439,18 @@ class DownloadInProgress {
        _sessionStartBytes = sessionStartBytes;
 
   /// Called once we know the server accepted our Range request and how many
-  /// bytes are already on disk. Adjusts the progress baseline so the UI
-  /// shows partial progress immediately and speed reflects only new bytes.
+  /// bytes are already on disk. Resets the speed clock so each attempt
+  /// measures its own throughput, and adjusts the progress baseline so the
+  /// UI shows partial progress immediately.
   void resumeFrom(int alreadyOnDisk, int fullFileSize) {
     _sessionStartBytes = alreadyOnDisk;
     current = alreadyOnDisk;
     if (fullFileSize > 0) total = fullFileSize;
+    startedAt = DateTime.now();
+    reconnecting = false;
+    speedBytesPerSecond = 0;
+    displayedSpeedBytesPerSecond = 0;
+    displayedEta = null;
   }
 
   void updateProgress(int nextCurrent, int nextTotal) {
@@ -1446,7 +1489,14 @@ class DownloadInProgress {
     }
   }
 
+  void markReconnecting() {
+    reconnecting = true;
+    displayedEta = null;
+    displayedSpeedBytesPerSecond = 0;
+  }
+
   void markError(String message) {
+    reconnecting = false;
     errorMessage = message;
     displayedEta = null;
     displayedSpeedBytesPerSecond = 0;
