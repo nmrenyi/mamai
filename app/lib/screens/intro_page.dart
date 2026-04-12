@@ -119,16 +119,35 @@ class _IntroPageState extends State<IntroPage> {
     final download = DownloadInProgress(total: 1, current: 0, finished: false);
     setState(() => downloads[filename] = download);
 
-    await Dio().download(
-      _modelFileUrls[filename]!,
-      '${directory.path}/$filename',
-      onReceiveProgress: (current, int total) {
-        setState(() {
-          download.updateProgress(current, total);
-        });
-      },
-    );
-    setState(() => download.finished = true);
+    try {
+      await Dio(
+        BaseOptions(receiveTimeout: const Duration(seconds: 30)),
+      ).download(
+        _modelFileUrls[filename]!,
+        '${directory.path}/$filename',
+        onReceiveProgress: (current, int total) {
+          setState(() {
+            download.updateProgress(current, total);
+          });
+        },
+      );
+      setState(() => download.finished = true);
+    } catch (e) {
+      final msg = e is DioException && e.type == DioExceptionType.receiveTimeout
+          ? 'Download stalled (no data for 30 s). Tap Retry.'
+          : 'Download failed: ${e.toString().split('\n').first}';
+      setState(() => download.markError(msg));
+    }
+  }
+
+  /// Restarts the download for a given key (model file or bundle).
+  void _retryDownload(String key) {
+    downloads.remove(key);
+    if (key == _bundleKey) {
+      downloadAndExtractBundle();
+    } else {
+      downloadFile(key);
+    }
   }
 
   /// Downloads the RAG bundle tar.gz and extracts embeddings.sqlite + PDFs.
@@ -142,15 +161,25 @@ class _IntroPageState extends State<IntroPage> {
     final download = DownloadInProgress(total: 1, current: 0, finished: false);
     setState(() => downloads[_bundleKey] = download);
 
-    await Dio().download(
-      bundle.bundleUrl,
-      tmpPath,
-      onReceiveProgress: (current, int total) {
-        setState(() {
-          download.updateProgress(current, total);
-        });
-      },
-    );
+    try {
+      await Dio(
+        BaseOptions(receiveTimeout: const Duration(seconds: 30)),
+      ).download(
+        bundle.bundleUrl,
+        tmpPath,
+        onReceiveProgress: (current, int total) {
+          setState(() {
+            download.updateProgress(current, total);
+          });
+        },
+      );
+    } catch (e) {
+      final msg = e is DioException && e.type == DioExceptionType.receiveTimeout
+          ? 'Download stalled (no data for 30 s). Tap Retry.'
+          : 'Download failed: ${e.toString().split('\n').first}';
+      setState(() => download.markError(msg));
+      return;
+    }
     setState(() {
       download.setFinalizingProgress(
         _bundleStageDecompressing,
@@ -159,13 +188,20 @@ class _IntroPageState extends State<IntroPage> {
       );
     });
 
-    await _extractBundleFilesWithProgress(
-      tmpPath: tmpPath,
-      destDir: directory.path,
-      markerPath: '${directory.path}/$_bundleMarker',
-      expectedSourceCount: bundle.sourceCount,
-      download: download,
-    );
+    try {
+      await _extractBundleFilesWithProgress(
+        tmpPath: tmpPath,
+        destDir: directory.path,
+        markerPath: '${directory.path}/$_bundleMarker',
+        expectedSourceCount: bundle.sourceCount,
+        download: download,
+      );
+    } catch (e) {
+      setState(() => download.markError(
+        'Bundle extraction failed: ${e.toString().split('\n').first}',
+      ));
+      return;
+    }
 
     final deployRecord = File('${directory.path}/rag_bundle_deployed.json');
     final deployRecordJson = const JsonEncoder.withIndent('  ').convert({
@@ -425,6 +461,9 @@ class _IntroPageState extends State<IntroPage> {
     if (download == null) {
       return l10n.introDownloadStatusQueued;
     }
+    if (download.errorMessage != null) {
+      return 'Failed';
+    }
     if (download.finished) {
       return l10n.introDownloadStatusReady;
     }
@@ -587,7 +626,9 @@ class _IntroPageState extends State<IntroPage> {
                                   vertical: 4,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: download?.finished == true
+                                  color: download?.errorMessage != null
+                                      ? const Color(0xFFFFE0E0)
+                                      : download?.finished == true
                                       ? const Color(0xFFDDF3E5)
                                       : download?.finalizing == true
                                       ? const Color(0xFFFFEACC)
@@ -599,7 +640,9 @@ class _IntroPageState extends State<IntroPage> {
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w700,
-                                    color: download?.finished == true
+                                    color: download?.errorMessage != null
+                                        ? const Color(0xFFB00020)
+                                        : download?.finished == true
                                         ? const Color(0xFF1C6B3A)
                                         : download?.finalizing == true
                                         ? const Color(0xFF8B5A00)
@@ -613,21 +656,45 @@ class _IntroPageState extends State<IntroPage> {
                       ),
                       if (download != null && !download.finished) ...[
                         const SizedBox(height: 8),
-                        LinearProgressIndicator(
-                          value: itemProgress.clamp(0.0, 1.0),
-                          color: const Color(0xffDE7356),
-                          backgroundColor: const Color(0xFFF3E2DC),
-                        ),
-                        if (details != null) ...[
-                          const SizedBox(height: 6),
+                        if (download.errorMessage != null) ...[
                           Text(
-                            details,
-                            style: TextStyle(
+                            download.errorMessage!,
+                            style: const TextStyle(
                               fontSize: 11,
-                              color: Colors.grey[600],
+                              color: Color(0xFFB00020),
                               fontWeight: FontWeight.w500,
                             ),
                           ),
+                          const SizedBox(height: 6),
+                          GestureDetector(
+                            onTap: () => _retryDownload(item.key),
+                            child: const Text(
+                              'Retry',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Color(0xffDE7356),
+                                fontWeight: FontWeight.w700,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                          ),
+                        ] else ...[
+                          LinearProgressIndicator(
+                            value: itemProgress.clamp(0.0, 1.0),
+                            color: const Color(0xffDE7356),
+                            backgroundColor: const Color(0xFFF3E2DC),
+                          ),
+                          if (details != null) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              details,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey[600],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
                         ],
                       ],
                     ],
@@ -1240,10 +1307,9 @@ class DownloadInProgress {
   bool finished;
   bool finalizing;
   String? stage;
+  String? errorMessage;
   final DateTime startedAt;
-  DateTime? _lastProgressAt;
   DateTime? _lastDisplayUpdateAt;
-  int _lastProgressBytes;
   double speedBytesPerSecond;
   double displayedSpeedBytesPerSecond;
   Duration? displayedEta;
@@ -1254,33 +1320,28 @@ class DownloadInProgress {
     required this.finished,
     this.finalizing = false,
     this.stage,
+    this.errorMessage,
     DateTime? startedAt,
     this.speedBytesPerSecond = 0,
     this.displayedSpeedBytesPerSecond = 0,
     this.displayedEta,
-  }) : startedAt = startedAt ?? DateTime.now(),
-       _lastProgressBytes = current;
+  }) : startedAt = startedAt ?? DateTime.now();
 
   void updateProgress(int nextCurrent, int nextTotal) {
     final now = DateTime.now();
     final safeTotal = nextTotal > 0 ? nextTotal : total;
     final safeCurrent = nextCurrent < 0 ? 0 : nextCurrent;
 
-    if (_lastProgressAt != null) {
-      final elapsedMs = now.difference(_lastProgressAt!).inMilliseconds;
-      final deltaBytes = safeCurrent - _lastProgressBytes;
-      if (elapsedMs > 0 && deltaBytes >= 0) {
-        final instantSpeed = (deltaBytes * 1000) / elapsedMs;
-        speedBytesPerSecond = speedBytesPerSecond == 0
-            ? instantSpeed
-            : (speedBytesPerSecond * 0.75) + (instantSpeed * 0.25);
-      }
-    }
-
     total = safeTotal;
     current = safeCurrent > safeTotal ? safeTotal : safeCurrent;
-    _lastProgressAt = now;
-    _lastProgressBytes = current;
+
+    // Speed = total bytes received / total elapsed seconds since download began.
+    // This is always accurate from the first sample and never lags behind the
+    // byte counter the way an EWMA starting from 0 would.
+    final elapsedSeconds = now.difference(startedAt).inMilliseconds / 1000.0;
+    if (elapsedSeconds > 0) {
+      speedBytesPerSecond = current / elapsedSeconds;
+    }
 
     final shouldRefreshDisplay =
         _lastDisplayUpdateAt == null ||
@@ -1299,6 +1360,12 @@ class DownloadInProgress {
       }
       _lastDisplayUpdateAt = now;
     }
+  }
+
+  void markError(String message) {
+    errorMessage = message;
+    displayedEta = null;
+    displayedSpeedBytesPerSecond = 0;
   }
 
   void setFinalizingProgress(
