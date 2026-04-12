@@ -292,27 +292,6 @@ class AppLocalizationsSw extends AppLocalizations {
   String get introPartnership => 'Kwa ushirikiano na';
 
   @override
-  String get licenseTitle => 'Leseni ya Mfano wa Gemma';
-
-  @override
-  String get licenseIntro =>
-      'Programu hii inatumia mfano wa Gemma 4 kwenye kifaa chako. Kabla ya kupakua, lazima usoma na kukubali Masharti ya Matumizi ya Gemma ya Google na Sera ya Matumizi Yaliyokatazwa.';
-
-  @override
-  String get licenseTermsText =>
-      'Mfano wa Gemma hutolewa chini ya Masharti ya Matumizi ya Google yanayopatikana katika';
-
-  @override
-  String get licenseUsagePolicyLink =>
-      'Sera ya matumizi yaliyokatazwa ya Gemma';
-
-  @override
-  String get licenseAccept => 'Kubali';
-
-  @override
-  String get licenseDeny => 'Kataa';
-
-  @override
   String get switchToSwahili => 'Kiswahili';
 
   @override

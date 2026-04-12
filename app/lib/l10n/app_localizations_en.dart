@@ -294,26 +294,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get introPartnership => 'In partnership with';
 
   @override
-  String get licenseTitle => 'Gemma Model License';
-
-  @override
-  String get licenseIntro =>
-      'This app runs the Gemma 4 model on your device. Before downloading, you must read and accept Google\'s Gemma Terms of Use and Prohibited Use Policy.';
-
-  @override
-  String get licenseTermsText =>
-      'The Gemma model is provided under Google\'s Terms of Use at';
-
-  @override
-  String get licenseUsagePolicyLink => 'Gemma prohibited use policy';
-
-  @override
-  String get licenseAccept => 'Accept';
-
-  @override
-  String get licenseDeny => 'Deny';
-
-  @override
   String get switchToSwahili => 'Kiswahili';
 
   @override
