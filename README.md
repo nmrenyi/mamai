@@ -86,8 +86,10 @@ mamai/
 │   ├── scoring.py                   # LLM-as-judge scoring
 │   └── benchmark_latency.py         # On-device latency analysis
 ├── device_push/            # Staging area for adb push to device
-│   ├── docs/                        # Source PDF guidelines (gitignored)
-│   └── models/                      # Gecko TFLite, embeddings, tokenizer (gitignored)
+│   ├── bundle/                      # Staged RAG assets for device sync
+│   │   ├── docs/                    # Source PDF guidelines (gitignored)
+│   │   └── embeddings.sqlite        # SQLite embeddings store (gitignored)
+│   └── models/                      # Gecko TFLite, tokenizer, optional LLMs (gitignored)
 └── CLAUDE.md               # Developer instructions for Claude Code
 ```
 

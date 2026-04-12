@@ -165,6 +165,7 @@ class MainActivity : FlutterActivity() {
     private fun openPdf(source: String, page: Int): Boolean {
         val baseFolder = application.getExternalFilesDir(null) ?: return false
         val normalizedSource = normalizeSourceId(source)
+        val safePage = page.coerceAtLeast(1)
         val pdfFile = File(baseFolder, "$normalizedSource.pdf")
 
         if (!pdfFile.exists()) {
@@ -178,18 +179,18 @@ class MainActivity : FlutterActivity() {
             pdfFile,
         )
 
-        Log.d("mam-ai", "[PDF] opening $normalizedSource.pdf (source=$source) at page $page")
+        Log.d("mam-ai", "[PDF] opening $normalizedSource.pdf (source=$source) at page $safePage")
 
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "application/pdf")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT)
             // Keep a single shared "page" extra and add viewer-specific variants.
-            putExtra("page", page)            // MuPDF / generic 1-indexed test
-            putExtra("startPage", page)       // Yozo Office / OPPO reader (1-indexed)
-            putExtra("startpage", page)       // lowercase variant
-            putExtra("pageNum", page)         // Yozo alternate
-            putExtra("PDF_PAGE_NUMBER", page) // Samsung (1-indexed)
+            putExtra("page", safePage)            // MuPDF / generic 1-indexed test
+            putExtra("startPage", safePage)       // Yozo Office / OPPO reader (1-indexed)
+            putExtra("startpage", safePage)       // lowercase variant
+            putExtra("pageNum", safePage)         // Yozo alternate
+            putExtra("PDF_PAGE_NUMBER", safePage) // Samsung (1-indexed)
         }
 
         return try {
