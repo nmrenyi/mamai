@@ -4,10 +4,7 @@ import 'dart:collection';
 import 'dart:io';
 import 'dart:io' as io;
 import 'dart:isolate';
-import 'dart:typed_data';
-
 import 'package:app/locale_notifier.dart';
-import 'package:archive/archive.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -956,32 +953,36 @@ Future<void> _extractBundleFilesIsolate(Map<String, Object> args) async {
       (args['expectedSourceCount'] as num?)?.toInt() ?? 0;
 
   try {
+    // ── Phase 1: Decompress gzip → temp tar file ─────────────────────────
+    // Stream decompression to disk rather than accumulating in memory.
+    final tmpTarPath = '$tmpPath.tar';
     final compressedFile = io.File(tmpPath);
     final compressedSize = await compressedFile.length();
-    final tarBytes = BytesBuilder(copy: false);
     var compressedRead = 0;
     var lastReportAt = DateTime.fromMillisecondsSinceEpoch(0);
 
-    final compressedStream = compressedFile.openRead().transform(
-      StreamTransformer<List<int>, List<int>>.fromHandlers(
-        handleData: (chunk, sink) {
-          compressedRead += chunk.length;
-          _sendBundleExtractProgress(
-            sendPort,
-            stage: _bundleStageDecompressing,
-            current: compressedRead,
-            total: compressedSize,
-            lastReportAt: lastReportAt,
-            updateLastReportAt: (value) => lastReportAt = value,
-          );
-          sink.add(chunk);
-        },
-      ),
-    );
+    final tarSink = io.File(tmpTarPath).openWrite();
+    await compressedFile
+        .openRead()
+        .transform(
+          StreamTransformer<List<int>, List<int>>.fromHandlers(
+            handleData: (chunk, sink) {
+              compressedRead += chunk.length;
+              _sendBundleExtractProgress(
+                sendPort,
+                stage: _bundleStageDecompressing,
+                current: compressedRead,
+                total: compressedSize,
+                lastReportAt: lastReportAt,
+                updateLastReportAt: (value) => lastReportAt = value,
+              );
+              sink.add(chunk);
+            },
+          ),
+        )
+        .transform(io.gzip.decoder)
+        .pipe(tarSink);
 
-    await for (final chunk in compressedStream.transform(io.gzip.decoder)) {
-      tarBytes.add(chunk);
-    }
     _forceBundleExtractProgress(
       sendPort,
       stage: _bundleStageDecompressing,
@@ -989,101 +990,136 @@ Future<void> _extractBundleFilesIsolate(Map<String, Object> args) async {
       total: compressedSize,
     );
 
-    final tarInput = InputMemoryStream(tarBytes.takeBytes());
-    final tarTotal = tarInput.buffer?.length ?? 1;
+    compressedFile.deleteSync(); // free space before extracting
+
+    // ── Phase 2: Stream tar entries → write files directly ────────────────
+    // Parse the tar file entry-by-entry using a manual 512-byte block parser.
+    // Each wanted file is written directly to its destination without loading
+    // the full archive into memory.
+    final tarFile = io.File(tmpTarPath);
+    final tarSize = tarFile.lengthSync();
+
     _forceBundleExtractProgress(
       sendPort,
-      stage: _bundleStageScanning,
+      stage: _bundleStageExtracting,
       current: 0,
-      total: tarTotal,
+      total: tarSize,
     );
-    final archive = TarDecoder().decodeStream(
-      tarInput,
-      callback: (_) {
+
+    var tarBytesProcessed = 0;
+    var pdfCount = 0;
+    var foundEmbeddings = false;
+    lastReportAt = DateTime.fromMillisecondsSinceEpoch(0);
+
+    final raf = tarFile.openSync();
+    try {
+      const blockSize = 512;
+      final headerBuf = Uint8List(blockSize);
+      var consecutiveZeroBlocks = 0;
+      String? gnuLongName;
+
+      while (true) {
+        final bytesRead = raf.readIntoSync(headerBuf);
+        if (bytesRead < blockSize) break;
+        tarBytesProcessed += blockSize;
+
+        // Two consecutive all-zero blocks mark end-of-archive.
+        var isZeroBlock = true;
+        for (var i = 0; i < blockSize; i++) {
+          if (headerBuf[i] != 0) {
+            isZeroBlock = false;
+            break;
+          }
+        }
+        if (isZeroBlock) {
+          consecutiveZeroBlocks++;
+          if (consecutiveZeroBlocks >= 2) break;
+          continue;
+        }
+        consecutiveZeroBlocks = 0;
+
+        // Parse POSIX ustar header fields.
+        String name = _readTarString(headerBuf, 0, 100);
+        final prefix = _readTarString(headerBuf, 345, 155);
+        if (prefix.isNotEmpty) name = '$prefix/$name';
+
+        final sizeField = _readTarString(headerBuf, 124, 12).trim();
+        final typeFlag = headerBuf[156];
+        final size = sizeField.isEmpty ? 0 : int.parse(sizeField, radix: 8);
+        final contentBlocks = (size + blockSize - 1) ~/ blockSize;
+
+        // GNU long-name extension: content is the real name for the next entry.
+        if (typeFlag == 76 /* 'L' */) {
+          final nameBuf = Uint8List(contentBlocks * blockSize);
+          raf.readIntoSync(nameBuf);
+          tarBytesProcessed += contentBlocks * blockSize;
+          gnuLongName = _readTarString(nameBuf, 0, size);
+          continue;
+        }
+
+        final effectiveName = gnuLongName ?? name;
+        gnuLongName = null;
+
+        // Only regular files (type '0' or legacy NUL) are extracted.
+        final isRegularFile = typeFlag == 48 /* '0' */ || typeFlag == 0;
+        final destPath =
+            isRegularFile ? _bundleDestPath(destDir, effectiveName) : null;
+
+        if (destPath != null && size > 0) {
+          final outSink = io.File(destPath).openWrite();
+          var remaining = size;
+          final dataBuf = Uint8List(blockSize);
+          for (var i = 0; i < contentBlocks; i++) {
+            raf.readIntoSync(dataBuf);
+            tarBytesProcessed += blockSize;
+            final toWrite = remaining < blockSize ? remaining : blockSize;
+            outSink.add(dataBuf.sublist(0, toWrite));
+            remaining -= toWrite;
+          }
+          await outSink.flush();
+          await outSink.close();
+
+          if (destPath.endsWith('embeddings.sqlite')) {
+            foundEmbeddings = true;
+          } else if (destPath.toLowerCase().endsWith('.pdf')) {
+            pdfCount++;
+          }
+        } else {
+          // Skip unwanted content blocks.
+          raf.setPositionSync(raf.positionSync() + contentBlocks * blockSize);
+          tarBytesProcessed += contentBlocks * blockSize;
+        }
+
         _sendBundleExtractProgress(
           sendPort,
-          stage: _bundleStageScanning,
-          current: tarInput.position,
-          total: tarTotal,
+          stage: _bundleStageExtracting,
+          current: tarBytesProcessed,
+          total: tarSize,
           lastReportAt: lastReportAt,
           updateLastReportAt: (value) => lastReportAt = value,
         );
-      },
-    );
-    _forceBundleExtractProgress(
-      sendPort,
-      stage: _bundleStageScanning,
-      current: tarTotal,
-      total: tarTotal,
-    );
-
-    final outputs = <_BundleOutputEntry>[];
-    var totalExtractBytes = 0;
-    for (final file in archive.files) {
-      if (!file.isFile) {
-        continue;
       }
-      final destPath = _bundleDestPath(destDir, file.name);
-      if (destPath == null) {
-        continue;
-      }
-      totalExtractBytes += file.size;
-      outputs.add(_BundleOutputEntry(file: file, destPath: destPath));
-    }
-    if (totalExtractBytes <= 0) {
-      totalExtractBytes = 1;
+    } finally {
+      raf.closeSync();
     }
 
     _forceBundleExtractProgress(
       sendPort,
       stage: _bundleStageExtracting,
-      current: 0,
-      total: totalExtractBytes,
+      current: tarSize,
+      total: tarSize,
     );
 
-    var extractedBytes = 0;
-    var pdfCount = 0;
-    var foundEmbeddings = false;
-    for (final output in outputs) {
-      final file = output.file;
-      final sink = OutputFileStream(output.destPath);
-      try {
-        file.writeContent(sink);
-      } finally {
-        sink.closeSync();
-        file.closeSync();
-      }
-
-      if (output.destPath.endsWith('embeddings.sqlite')) {
-        foundEmbeddings = true;
-      } else if (output.destPath.toLowerCase().endsWith('.pdf')) {
-        pdfCount += 1;
-      }
-
-      extractedBytes += file.size;
-      _sendBundleExtractProgress(
-        sendPort,
-        stage: _bundleStageExtracting,
-        current: extractedBytes,
-        total: totalExtractBytes,
-        lastReportAt: lastReportAt,
-        updateLastReportAt: (value) => lastReportAt = value,
-      );
-    }
-    _forceBundleExtractProgress(
-      sendPort,
-      stage: _bundleStageExtracting,
-      current: totalExtractBytes,
-      total: totalExtractBytes,
-    );
-
+    // ── Phase 3: Verify ──────────────────────────────────────────────────
     _forceBundleExtractProgress(
       sendPort,
       stage: _bundleStageVerifying,
       current: 0,
       total: 1,
     );
-    compressedFile.deleteSync();
+
+    tarFile.deleteSync();
+
     if (!foundEmbeddings) {
       throw StateError('RAG bundle did not contain embeddings.sqlite');
     }
@@ -1114,6 +1150,16 @@ String? _bundleDestPath(String destDir, String sourceName) {
     return '$destDir/${sourceName.split('/').last}';
   }
   return null;
+}
+
+/// Reads a null-terminated ASCII/UTF-8 string from [buf] at [offset]..[offset+length].
+String _readTarString(Uint8List buf, int offset, int length) {
+  var end = offset;
+  final limit = offset + length;
+  while (end < limit && buf[end] != 0) {
+    end++;
+  }
+  return utf8.decode(buf.sublist(offset, end), allowMalformed: true);
 }
 
 void _sendBundleExtractProgress(
@@ -1304,12 +1350,6 @@ class DownloadInProgress {
   }
 }
 
-class _BundleOutputEntry {
-  final ArchiveFile file;
-  final String destPath;
-
-  const _BundleOutputEntry({required this.file, required this.destPath});
-}
 
 class _StartupDownloadItem {
   final String key;
