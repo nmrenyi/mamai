@@ -252,7 +252,11 @@ class _IntroPageState extends State<IntroPage> {
 
     // Resolve any redirect (e.g. GitHub → Azure CDN) before streaming so that
     // the Range header is sent directly to the final server.
+    // If resolution fails the original URL is returned; in that case we keep
+    // followRedirects: true so the stream still works (the Range header may be
+    // dropped cross-origin, but at least the download doesn't fail outright).
     final resolvedUrl = await _resolveRedirectUrl(url);
+    final redirectResolved = resolvedUrl != url;
 
     final dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 15)));
     late final Response<ResponseBody> response;
@@ -262,7 +266,10 @@ class _IntroPageState extends State<IntroPage> {
         options: Options(
           responseType: ResponseType.stream,
           headers: existingSize > 0 ? {'Range': 'bytes=$existingSize-'} : {},
-          followRedirects: false,
+          // Only disable redirect following when we confirmed the CDN URL —
+          // if resolution fell back to the original URL, keep following so
+          // the 302 from GitHub is not treated as a hard error.
+          followRedirects: !redirectResolved,
         ),
       );
     } on DioException catch (e) {
@@ -750,6 +757,7 @@ class _IntroPageState extends State<IntroPage> {
           return l10n.introDownloadBundleExtracting(
             _formatBytes(download.current),
             _formatBytes(download.total),
+            _pinnedBundle?.sourceCount ?? 0,
           );
       }
     }
