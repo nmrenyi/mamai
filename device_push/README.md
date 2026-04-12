@@ -12,20 +12,19 @@ device_push/
 │   ├── embeddings.sqlite
 │   ├── docs/   # 55 source PDFs, normalized filenames
 │   └── debug/  # provenance stamp + chunks_for_rag.txt
-├── models/     # static ML model files, manually placed (gitignored)
+├── models/     # static ML model files, populated by sync_models.sh (gitignored)
 │   ├── Gecko_1024_quant.tflite
 │   ├── sentencepiece.model
 │   ├── gemma-4-E4B-it.litertlm
 │   ├── gemma-3n-E4B-it-int4.litertlm
 │   └── gemma-3n-E4B-it-int4.task
-└── models/     # static ML model files, manually placed (gitignored)
 ```
 
 `bundle/` is entirely owned by `sync_rag_assets.sh` — it is atomically rebuilt on every sync run, including its `debug/` provenance stamp. `models/` is never touched by the sync script. To wipe everything the sync produced: `rm -rf device_push/bundle/`.
 
 ## Contents
 
-### Static ML models (populate manually)
+### Static ML models (populate via script or manual copy)
 | File | Format | Notes |
 |------|--------|-------|
 | `models/gemma-4-E4B-it.litertlm` | LiteRT-LM | Current deployed model |
@@ -47,11 +46,11 @@ same normalization rule before resolving the path.
 
 ## Setup — RAG assets
 
-The pinned bundle version is recorded in `rag-assets.lock.json` at the repo root.
+The pinned bundle version is recorded in `config/rag_assets.lock.json`.
 Run the sync script to fetch and install the pinned GitHub release:
 
 ```bash
-# Update rag-assets.lock.json first if you want a newer bundle:
+# Update config/rag_assets.lock.json first if you want a newer bundle:
 bash scripts/sync_rag_assets.sh
 
 # Optional: use aria2c for faster download/progress output
@@ -67,9 +66,11 @@ transfer. To wipe the staged bundle entirely: `rm -rf device_push/bundle/`.
 ## Setup — LLM models (first time)
 
 ```bash
-# Hard-link LLM models from root models/ dir (no extra disk space)
-ln models/gemma-4-E4B-it.litertlm device_push/models/
-ln models/gemma-3n-E4B-it-int4.litertlm device_push/models/
+# Download the public model artifacts into device_push/models/
+bash scripts/sync_models.sh
+
+# Optional: only fetch Gecko + tokenizer
+bash scripts/sync_models.sh --gecko-only
 ```
 
 ## Push to device
@@ -86,7 +87,7 @@ bash scripts/push_to_device.sh --serial <device-id>
 ```
 
 `push_to_device.sh` verifies that the staged bundle in `device_push/` matches
-`rag-assets.lock.json` before pushing. If the staging area is stale or partial,
+`config/rag_assets.lock.json` before pushing. If the staging area is stale or partial,
 it fails and tells you to rerun `sync_rag_assets.sh`. After a full successful
 push, it writes `rag_bundle_deployed.json` on the Android device as the device's
 deployment receipt.

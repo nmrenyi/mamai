@@ -14,7 +14,7 @@
 
 ---
 
-MAM-AI is an Android application that provides medical information search for maternal and neonatal healthcare workers. It runs entirely on-device using **Gemma 3n** via Google AI Edge MediaPipe — no internet connection is needed after the initial model download. Users type clinical questions in natural language and receive guideline-grounded answers powered by on-device RAG (Retrieval-Augmented Generation).
+MAM-AI is an Android application that provides medical information search for maternal and neonatal healthcare workers. It runs entirely on-device using **Gemma 4 E4B** via Google AI Edge LiteRT-LM — no internet connection is needed after the initial model download. Users type clinical questions in natural language and receive guideline-grounded answers powered by on-device RAG (Retrieval-Augmented Generation).
 
 ## Key Features
 
@@ -23,7 +23,7 @@ MAM-AI is an Android application that provides medical information search for ma
 - **Streaming responses** — answers appear token-by-token as they are generated
 - **Conversation history** — multi-turn conversations with persistent storage
 - **Medical safety focus** — prompt template emphasizes accuracy, simple language for second-language speakers, and emergency escalation
-- **Gemma 3n E4B** — 4.1 GB int4-quantized model, ~90s median query time on a Pixel 7
+- **Gemma 4 E4B** — 3.65 GB int4-quantized LiteRT-LM model deployed on-device
 
 ## Architecture
 
@@ -40,8 +40,8 @@ MAM-AI is an Android application that provides medical information search for ma
 │  ┌────────────────────────────────────────────┐ │
 │  │ RagPipeline.kt                             │ │
 │  │  ┌──────────┐ ┌──────────┐ ┌────────────┐ │ │
-│  │  │ Gemma 3n │ │  Gecko   │ │  SQLite    │ │ │
-│  │  │ MediaPipe│ │ Embedder │ │ VectorStore│ │ │
+│  │  │ Gemma 4  │ │  Gecko   │ │  SQLite    │ │ │
+│  │  │ LiteRT-LM│ │ Embedder │ │ VectorStore│ │ │
 │  │  └──────────┘ └──────────┘ └────────────┘ │ │
 │  └────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────┘
@@ -52,12 +52,12 @@ MAM-AI is an Android application that provides medical information search for ma
 2. Query is sent to Android via platform MethodChannel
 3. Gecko embeds the query → SQLite cosine similarity retrieves top-3 guideline chunks
 4. Retrieved context + query + conversation history are assembled into a Gemma IT prompt
-5. MediaPipe LLM generates a streaming response, sent back via EventChannel
+5. LiteRT-LM generates a streaming response, sent back via EventChannel
 6. Flutter renders the response as markdown in real time
 
 ## Install
 
-Download the APK from the [GitHub Releases](../../releases) tab and install it on a real Android device. Emulators may not work — MediaPipe requires actual hardware acceleration.
+Download the APK from the [GitHub Releases](../../releases) tab and install it on a real Android device. Emulators are not a supported target for the on-device LiteRT-LM stack.
 
 On first launch, the app downloads ~4.5 GB of model files (LLM, embeddings model, tokenizer, vector database). After that, it works fully offline.
 
@@ -124,7 +124,7 @@ Chunking and embedding are managed in the companion
 [mamai-medical-guidelines](https://github.com/nmrenyi/mamai-medical-guidelines) repo,
 which publishes versioned bundles containing `embeddings.sqlite` and the 55 source PDFs.
 
-To update the RAG assets in this repo, bump `rag-assets.lock.json` and run:
+To update the RAG assets in this repo, bump `config/rag_assets.lock.json` and run:
 
 ```bash
 # Sync the pinned GitHub release into the local cache + device_push/
@@ -147,7 +147,7 @@ bash scripts/push_to_device.sh --models
 and rebuilds the single active staged view in `device_push/`. By default it
 prefers `gh release download` for GitHub asset correctness; `--aria2c` is an
 explicit speed/progress override. The checked push script verifies that the
-staged bundle still matches `rag-assets.lock.json` before copying files to the
+staged bundle still matches `config/rag_assets.lock.json` before copying files to the
 device, then writes `rag_bundle_deployed.json` on the device only after a full
 successful push. See `device_push/README.md` for details.
 
@@ -155,7 +155,7 @@ successful push. See `device_push/README.md` for details.
 1. Curate PDFs → extract to markdown → chunk → embed (Gecko TFLite on cluster)
 2. `python scripts/package_bundle.py --version vX.Y.Z`
 3. Publish bundle as a GitHub release
-4. Update `rag-assets.lock.json` here with the new version + manifest checksum
+4. Update `config/rag_assets.lock.json` here with the new version + manifest checksum
 
 ## Model Files
 
@@ -168,7 +168,7 @@ Downloaded on first launch and stored on-device. All files are fetched directly 
 | `sentencepiece.model` | Gecko tokenizer (794 KB) | [litert-community/Gecko-110m-en](https://huggingface.co/litert-community/Gecko-110m-en) |
 | `embeddings.sqlite` | Pre-computed embeddings for guideline chunks | [mamai-medical-guidelines releases](https://github.com/nmrenyi/mamai-medical-guidelines/releases) |
 
-> **Note:** Gemma requires license acceptance before use. The app presents the license dialog before downloading. Download URLs are defined in `_fileUrls` in `app/lib/screens/intro_page.dart` — update `embeddings.sqlite` URL there when bumping `rag-assets.lock.json` to a new RAG bundle version.
+> **Note:** Gemma requires license acceptance before use. The app presents the license dialog before downloading. The pinned RAG bundle URL/version now live in `config/rag_assets.lock.json`, which is shared by the app and the staging scripts.
 
 ## Evaluation
 
@@ -224,4 +224,4 @@ python main_training.py
 
 ## License
 
-This project is licensed under [CC BY 4.0](LICENSE).
+This project is licensed under [Apache 2.0](LICENSE).

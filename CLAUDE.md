@@ -96,7 +96,7 @@ Models are downloaded on first launch from HuggingFace and stored in `applicatio
 - `sentencepiece.model`: Tokenizer — `litert-community/Gecko-110m-en`
 - `embeddings.sqlite`: Pre-computed document embeddings — mamai-medical-guidelines GitHub release
 
-Download URLs are defined in `_fileUrls` in `app/lib/screens/intro_page.dart`.
+Model download URLs are defined in `_modelFileUrls` in `app/lib/screens/intro_page.dart`. The pinned RAG bundle URL/version live in `config/rag_assets.lock.json`.
 
 ### Document Ingestion (RAG preprocessing)
 
@@ -105,7 +105,7 @@ This repo only consumes the published output via a versioned bundle.
 
 **To update RAG assets** (new guidelines or re-chunking):
 1. Run the producer pipeline in `mamai-medical-guidelines` and publish a new bundle
-2. Bump `rag-assets.lock.json` in this repo with the new version + manifest checksum
+2. Bump `config/rag_assets.lock.json` in this repo with the new version + manifest checksum
 3. Run `bash scripts/sync_rag_assets.sh` to install the bundle into `device_push/`
 4. Push to device (see `device_push/README.md`)
 
@@ -188,4 +188,4 @@ No automated tests are currently present in the repository. To test the app:
 
 ## Remote Resources
 
-All model files are downloaded from public HuggingFace repos on first launch — no auth required. Download URLs are defined in `_fileUrls` in `app/lib/screens/intro_page.dart`. To update URLs (e.g. new RAG bundle version), edit that map directly.
+All model files are downloaded from public HuggingFace repos on first launch — no auth required. Update model URLs in `_modelFileUrls` in `app/lib/screens/intro_page.dart`. Update the pinned RAG bundle release in `config/rag_assets.lock.json`.

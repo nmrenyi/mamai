@@ -11,9 +11,9 @@ A clinical decision-support tool for nurse-midwives in Zanzibar. Provides fully 
 | Android version | 7.0 (API 24) |
 | Architecture | arm64-v8a (64-bit) |
 
-> **Why API 24?** The MediaPipe LLM inference library used for on-device Gemma 3n requires Android 7.0+.
+> **Why API 24?** The LiteRT-LM Android runtime used for on-device Gemma 4 requires Android 7.0+.
 
-> **Real device required.** The MediaPipe inference library needs hardware acceleration and does not run on emulators.
+> **Real device required.** The on-device LiteRT-LM stack is intended for physical Android hardware, not emulators.
 
 ### Development machine
 
@@ -41,7 +41,7 @@ The app includes a Cloud AI toggle that uses the Gemini API. To enable it, pass 
 flutter run --dart-define=GEMINI_API_KEY=your_key_here
 ```
 
-Without a key, on-device mode (Gemma 3n) is the default and works fully offline.
+Without a key, on-device mode (Gemma 4 E4B) is the default and works fully offline.
 
 ## Languages
 

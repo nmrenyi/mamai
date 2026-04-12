@@ -34,7 +34,7 @@ MCQ_SYSTEM_PROMPT: str = (_PROMPTS_DIR / "mcq_system.txt").read_text(encoding="u
 # Open-ended eval uses the real app prompt — scores now reflect deployed behavior.
 OPEN_SYSTEM_PROMPT = APP_SYSTEM_PROMPT
 
-# --- Runtime parameters (single source of truth: evaluation/prompts/runtime_config.json) ---
+# --- Runtime parameters (single source of truth: config/runtime_config.json) ---
 TEMPERATURE: float = _runtime["generation"]["temperature"]
 TOP_P: float = _runtime["generation"]["top_p"]
 TOP_K: int = _runtime["generation"]["top_k"]

@@ -1,5 +1,5 @@
 """
-Scoring utilities for MCQ accuracy and LLM-as-judge (Gemini).
+Scoring utilities for MCQ accuracy and the configured LLM judge.
 """
 
 import json
