@@ -80,6 +80,7 @@ class _IntroPageState extends State<IntroPage> {
   String? _bundleInfoError;
   String? _llmInitError;
   bool _llmInitStarted = false;
+  Timer? _notificationTimer;
 
   @override
   void initState() {
@@ -92,6 +93,17 @@ class _IntroPageState extends State<IntroPage> {
     } else {
       _loadPinnedBundleInfo();
     }
+  }
+
+  @override
+  void dispose() {
+    _notificationTimer?.cancel();
+    // Best-effort: stop the service if the page is destroyed mid-download
+    // (e.g. Flutter hot-restart during development).
+    if (_runOnAndroid) {
+      _platform.invokeMethod('stopDownloadService').ignore();
+    }
+    super.dispose();
   }
 
   Map<String, DownloadInProgress> downloads = HashMap();
@@ -143,11 +155,61 @@ class _IntroPageState extends State<IntroPage> {
   /// Restarts the download for a given key (model file or bundle).
   void _retryDownload(String key) {
     downloads.remove(key);
+    _startDownloadService(); // re-protect the process for this retry
     if (key == _bundleKey) {
       downloadAndExtractBundle();
     } else {
       downloadFile(key);
     }
+  }
+
+  // ── Download ForegroundService helpers ───────────────────────────────────
+
+  void _startDownloadService() {
+    _platform.invokeMethod('startDownloadService').ignore();
+    // Refresh the notification every 2 seconds with the aggregate progress.
+    _notificationTimer?.cancel();
+    _notificationTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      _tickNotification();
+    });
+  }
+
+  void _tickNotification() {
+    if (downloads.isEmpty) return;
+
+    final allSettled = downloads.values.every(
+      (d) => d.finished || d.errorMessage != null,
+    );
+    if (allSettled) {
+      _notificationTimer?.cancel();
+      _notificationTimer = null;
+      _platform.invokeMethod('stopDownloadService').ignore();
+      return;
+    }
+
+    // Aggregate bytes across all active (non-finished) downloads.
+    var totalCurrent = 0;
+    var totalMax = 0;
+    for (final d in downloads.values) {
+      if (d.finished || d.errorMessage != null) continue;
+      totalCurrent += d.current;
+      if (d.total > 1) totalMax += d.total;
+    }
+
+    final message = totalMax > 0
+        ? 'Downloading models (${_formatBytes(totalCurrent)} / ${_formatBytes(totalMax)})'
+        : 'Downloading models…';
+
+    // Scale to 0-1000 for notification progress bar resolution.
+    final progress = (totalMax > 0)
+        ? ((totalCurrent / totalMax) * 1000).round().clamp(0, 1000)
+        : -1;
+
+    _platform.invokeMethod('updateDownloadNotification', {
+      'message': message,
+      'progress': progress,
+      'max': 1000,
+    }).ignore();
   }
 
   /// Downloads [url] to [destPath], resuming from any existing partial file.
@@ -1000,6 +1062,7 @@ class _IntroPageState extends State<IntroPage> {
             onPressed: () async {
               var accepted = await promptLicense(context, l10n);
               if (accepted ?? false) {
+                _startDownloadService();
                 for (final filename in _modelFiles) {
                   downloadFile(filename);
                 }

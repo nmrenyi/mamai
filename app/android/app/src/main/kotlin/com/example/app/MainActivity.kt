@@ -1,7 +1,11 @@
 package com.example.app
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.util.Log
+import androidx.core.app.ActivityCompat
 import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -73,6 +77,37 @@ class MainActivity : FlutterActivity() {
                 }
                 "getPinnedRagBundleInfo" -> {
                     result.success(getPinnedRagBundleInfo())
+                }
+                "startDownloadService" -> {
+                    // Request POST_NOTIFICATIONS permission on Android 13+ so the
+                    // download notification is visible.  The service starts regardless
+                    // of whether the user grants the permission — the ForegroundService
+                    // still protects the process from being killed.
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                        checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                            != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        ActivityCompat.requestPermissions(
+                            this,
+                            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                            /* requestCode = */ 100,
+                        )
+                    }
+                    DownloadForegroundService.start(applicationContext)
+                    result.success(null)
+                }
+                "updateDownloadNotification" -> {
+                    @Suppress("UNCHECKED_CAST")
+                    val args = call.arguments<Map<String, Any>>()!!
+                    val message  = args["message"]  as? String ?: "Downloading…"
+                    val progress = (args["progress"] as? Number)?.toInt() ?: -1
+                    val max      = (args["max"]      as? Number)?.toInt() ?: 0
+                    DownloadForegroundService.update(applicationContext, message, progress, max)
+                    result.success(null)
+                }
+                "stopDownloadService" -> {
+                    DownloadForegroundService.stop(applicationContext)
+                    result.success(null)
                 }
                 else -> {
                     result.notImplemented()
