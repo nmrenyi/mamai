@@ -212,6 +212,29 @@ class _IntroPageState extends State<IntroPage> {
     }).ignore();
   }
 
+  /// Follows any redirects for [url] and returns the final resolved URL.
+  ///
+  /// GitHub release assets redirect to a short-lived signed Azure CDN URL.
+  /// Streaming with [ResponseType.stream] is unreliable through cross-origin
+  /// redirects in Dart's HttpClient (Range header can be silently dropped).
+  /// Resolving up-front lets the actual streaming request go straight to the
+  /// CDN with no redirect, ensuring the Range header is always honoured.
+  Future<String> _resolveRedirectUrl(String url) async {
+    try {
+      final dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 15)));
+      final resp = await dio.head<dynamic>(
+        url,
+        options: Options(
+          followRedirects: true,
+          validateStatus: (s) => s != null && s < 500,
+        ),
+      );
+      return resp.realUri.toString();
+    } catch (_) {
+      return url; // fallback: stream from original URL and let Dio try
+    }
+  }
+
   /// Downloads [url] to [destPath], resuming from any existing partial file.
   ///
   /// Sends `Range: bytes=<size>-` if a partial file exists.  If the server
@@ -227,15 +250,30 @@ class _IntroPageState extends State<IntroPage> {
     final existingSize =
         destFile.existsSync() ? destFile.lengthSync() : 0;
 
+    // Resolve any redirect (e.g. GitHub → Azure CDN) before streaming so that
+    // the Range header is sent directly to the final server.
+    final resolvedUrl = await _resolveRedirectUrl(url);
+
     final dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 15)));
-    final response = await dio.get<ResponseBody>(
-      url,
-      options: Options(
-        responseType: ResponseType.stream,
-        headers: existingSize > 0 ? {'Range': 'bytes=$existingSize-'} : {},
-        followRedirects: true,
-      ),
-    );
+    late final Response<ResponseBody> response;
+    try {
+      response = await dio.get<ResponseBody>(
+        resolvedUrl,
+        options: Options(
+          responseType: ResponseType.stream,
+          headers: existingSize > 0 ? {'Range': 'bytes=$existingSize-'} : {},
+          followRedirects: false,
+        ),
+      );
+    } on DioException catch (e) {
+      if (e.response?.statusCode == HttpStatus.requestedRangeNotSatisfiable) {
+        // 416: our Range start is past the server's EOF — the file on disk is
+        // already complete.  Treat as a successful (no-op) download.
+        setState(() => download.resumeFrom(existingSize, existingSize));
+        return;
+      }
+      rethrow;
+    }
 
     // 206 = server honoured our Range header; 200 = it ignored it.
     final resuming = response.statusCode == HttpStatus.partialContent;
