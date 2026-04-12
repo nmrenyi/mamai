@@ -5,8 +5,6 @@
 
   "tooltipConversationHistory": "Conversation history",
   "tooltipNewConversation": "New conversation",
-  "tooltipCloudAI": "Cloud AI (tap to switch to on-device)",
-  "tooltipOnDevice": "On-device (tap to switch to cloud)",
   "tooltipSearchEnabled": "Search enabled",
   "tooltipSearchDisabled": "Search disabled",
   "searchOn": "Search ON",
@@ -107,18 +105,5 @@
   "switchToSwahili": "Kiswahili",
   "switchToEnglish": "English",
 
-  "errorOnDeviceUnavailable": "On-device mode is not available here. Switch to Cloud AI to send messages.",
-  "switchToCloudAIAction": "Use Cloud AI",
-
-  "errorNoApiKey": "No API key configured. Rebuild with --dart-define=GEMINI_API_KEY=your_key to use Cloud AI.",
-  "errorApiKeyInvalid": "API key is invalid or unauthorised (HTTP {code}). Check your GEMINI_API_KEY.",
-  "@errorApiKeyInvalid": {
-    "placeholders": { "code": { "type": "int" } }
-  },
-  "errorRateLimited": "Too many requests — please wait a moment and try again.",
-  "errorNoInternet": "Cannot reach Cloud AI. Check your internet connection.",
-  "errorCloudUnavailable": "Cloud AI returned an error (HTTP {code}). Please try again.",
-  "@errorCloudUnavailable": {
-    "placeholders": { "code": { "type": "int" } }
-  }
+  "errorOnDeviceUnavailable": "On-device mode is not available on this platform."
 }

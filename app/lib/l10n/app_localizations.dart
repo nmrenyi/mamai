@@ -116,18 +116,6 @@ abstract class AppLocalizations {
   /// **'New conversation'**
   String get tooltipNewConversation;
 
-  /// No description provided for @tooltipCloudAI.
-  ///
-  /// In en, this message translates to:
-  /// **'Cloud AI (tap to switch to on-device)'**
-  String get tooltipCloudAI;
-
-  /// No description provided for @tooltipOnDevice.
-  ///
-  /// In en, this message translates to:
-  /// **'On-device (tap to switch to cloud)'**
-  String get tooltipOnDevice;
-
   /// No description provided for @tooltipSearchEnabled.
   ///
   /// In en, this message translates to:
@@ -491,44 +479,8 @@ abstract class AppLocalizations {
   /// No description provided for @errorOnDeviceUnavailable.
   ///
   /// In en, this message translates to:
-  /// **'On-device mode is not available here. Switch to Cloud AI to send messages.'**
+  /// **'On-device mode is not available on this platform.'**
   String get errorOnDeviceUnavailable;
-
-  /// No description provided for @switchToCloudAIAction.
-  ///
-  /// In en, this message translates to:
-  /// **'Use Cloud AI'**
-  String get switchToCloudAIAction;
-
-  /// No description provided for @errorNoApiKey.
-  ///
-  /// In en, this message translates to:
-  /// **'No API key configured. Rebuild with --dart-define=GEMINI_API_KEY=your_key to use Cloud AI.'**
-  String get errorNoApiKey;
-
-  /// No description provided for @errorApiKeyInvalid.
-  ///
-  /// In en, this message translates to:
-  /// **'API key is invalid or unauthorised (HTTP {code}). Check your GEMINI_API_KEY.'**
-  String errorApiKeyInvalid(int code);
-
-  /// No description provided for @errorRateLimited.
-  ///
-  /// In en, this message translates to:
-  /// **'Too many requests — please wait a moment and try again.'**
-  String get errorRateLimited;
-
-  /// No description provided for @errorNoInternet.
-  ///
-  /// In en, this message translates to:
-  /// **'Cannot reach Cloud AI. Check your internet connection.'**
-  String get errorNoInternet;
-
-  /// No description provided for @errorCloudUnavailable.
-  ///
-  /// In en, this message translates to:
-  /// **'Cloud AI returned an error (HTTP {code}). Please try again.'**
-  String errorCloudUnavailable(int code);
 }
 
 class _AppLocalizationsDelegate

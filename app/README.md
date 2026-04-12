@@ -38,16 +38,6 @@ For signed local release builds, copy
 to `app/android/key.properties` and fill in your keystore values. CI stage
 releases use the same fields via GitHub secrets.
 
-### Cloud AI mode (optional)
-
-The app includes a Cloud AI toggle that uses the Gemini API. To enable it, pass your API key at build/run time:
-
-```bash
-flutter run --dart-define=GEMINI_API_KEY=your_key_here
-```
-
-Without a key, on-device mode (Gemma 4 E4B) is the default and works fully offline.
-
 ## Languages
 
 The app supports English and Swahili. The language toggle is available in the top-right corner of the main screen. Swahili translations are placeholder-quality and pending review by a qualified Swahili-speaking medical professional (see GitHub issue #29).

@@ -18,12 +18,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tooltipNewConversation => 'New conversation';
 
   @override
-  String get tooltipCloudAI => 'Cloud AI (tap to switch to on-device)';
-
-  @override
-  String get tooltipOnDevice => 'On-device (tap to switch to cloud)';
-
-  @override
   String get tooltipSearchEnabled => 'Search enabled';
 
   @override
@@ -235,30 +229,5 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get errorOnDeviceUnavailable =>
-      'On-device mode is not available here. Switch to Cloud AI to send messages.';
-
-  @override
-  String get switchToCloudAIAction => 'Use Cloud AI';
-
-  @override
-  String get errorNoApiKey =>
-      'No API key configured. Rebuild with --dart-define=GEMINI_API_KEY=your_key to use Cloud AI.';
-
-  @override
-  String errorApiKeyInvalid(int code) {
-    return 'API key is invalid or unauthorised (HTTP $code). Check your GEMINI_API_KEY.';
-  }
-
-  @override
-  String get errorRateLimited =>
-      'Too many requests — please wait a moment and try again.';
-
-  @override
-  String get errorNoInternet =>
-      'Cannot reach Cloud AI. Check your internet connection.';
-
-  @override
-  String errorCloudUnavailable(int code) {
-    return 'Cloud AI returned an error (HTTP $code). Please try again.';
-  }
+      'On-device mode is not available on this platform.';
 }

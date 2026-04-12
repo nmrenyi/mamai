@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:app/locale_notifier.dart';
-import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,7 +8,6 @@ import 'package:app/l10n/app_localizations.dart';
 import 'package:markdown_widget/markdown_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../conversation_store.dart';
-import '../gemini_service.dart';
 import 'about_page.dart';
 import 'pdf_viewer_page.dart';
 
@@ -111,8 +109,6 @@ class _SearchPageState extends State<SearchPage> {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   bool _useRetrieval = true;
-  bool _useCloudLLM = false;
-  GeminiService? _geminiService;
   bool _isGenerating = false;
   final ConversationStore _store = ConversationStore();
   String? _currentConversationId;
@@ -272,103 +268,38 @@ class _SearchPageState extends State<SearchPage> {
         ),
       );
     }
-    if (_useCloudLLM) {
-      await _generateWithGemini(prompt, history);
-    } else {
-      try {
-        await platform.invokeMethod<int>("generateResponse", {
-          "prompt": prompt,
-          "history": history,
-          "useRetrieval": _useRetrieval,
-          "language": appLocale.value.languageCode,
-        });
-      } on PlatformException catch (e) {
-        debugPrint('Platform error while generating response: $e');
-        if (!mounted) return;
-        setState(() {
-          _isGenerating = false;
-          if (_messages.isNotEmpty && _messages.last.role == 'assistant') {
-            final last = _messages.last;
-            if (last.text.isEmpty && last.retrievedDocs.isEmpty) {
+    try {
+      await platform.invokeMethod<int>("generateResponse", {
+        "prompt": prompt,
+        "history": history,
+        "useRetrieval": _useRetrieval,
+        "language": appLocale.value.languageCode,
+      });
+    } on PlatformException catch (e) {
+      debugPrint('Platform error while generating response: $e');
+      if (!mounted) return;
+      setState(() {
+        _isGenerating = false;
+        if (_messages.isNotEmpty && _messages.last.role == 'assistant') {
+          final last = _messages.last;
+          if (last.text.isEmpty && last.retrievedDocs.isEmpty) {
+            _messages.removeLast();
+            if (_messages.isNotEmpty && _messages.last.role == 'user') {
               _messages.removeLast();
-              if (_messages.isNotEmpty && _messages.last.role == 'user') {
-                _messages.removeLast();
-              }
-            } else {
-              _messages[_messages.length - 1] = last.copyWith(
-                isLoading: false,
-                wasCancelled: true,
-              );
             }
+          } else {
+            _messages[_messages.length - 1] = last.copyWith(
+              isLoading: false,
+              wasCancelled: true,
+            );
           }
-        });
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: ${e.message}')));
-      } catch (e) {
-        // MissingPluginException on non-Android platforms — on-device mode
-        // is not available. Keep the user message visible, show a SnackBar
-        // with a one-tap action to switch to Cloud AI.
-        debugPrint('Channel unavailable: $e');
-        if (!mounted) return;
-        final l10n = AppLocalizations.of(context);
-        setState(() {
-          _isGenerating = false;
-          // Remove assistant placeholder then user message — both were just
-          // added in _sendMessage. Restore prompt to the input field so the
-          // user can re-send or edit after dismissing the dialog.
-          if (_messages.isNotEmpty &&
-              _messages.last.role == 'assistant' &&
-              _messages.last.text.isEmpty &&
-              _messages.last.retrievedDocs.isEmpty) {
-            _messages.removeLast();
-          }
-          if (_messages.isNotEmpty && _messages.last.role == 'user') {
-            _messages.removeLast();
-          }
-          _textController.text = prompt;
-        });
-        showDialog<void>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            content: Text(l10n.errorOnDeviceUnavailable),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(),
-                child: Text(l10n.dialogCancel),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.of(ctx).pop();
-                  if (!mounted) return;
-                  setState(() {
-                    _useCloudLLM = true;
-                    _isGenerating = true;
-                    _messages.add(ChatMessage(role: 'user', text: prompt));
-                    _messages.add(
-                      ChatMessage(role: 'assistant', text: '', isLoading: true),
-                    );
-                    _textController.clear();
-                  });
-                  _scrollToBottom();
-                  _generateWithGemini(prompt, history);
-                },
-                child: Text(l10n.switchToCloudAIAction),
-              ),
-            ],
-          ),
-        );
-      }
-    }
-  }
-
-  /// Generate a response via the Gemini cloud API, streaming tokens into the UI.
-  Future<void> _generateWithGemini(
-    String prompt,
-    List<Map<String, String>> history,
-  ) async {
-    // Guard: API key missing — show a clear error instead of a cryptic 403.
-    if (GeminiService.apiKey.isEmpty) {
+        }
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: ${e.message}')));
+    } on MissingPluginException catch (e) {
+      debugPrint('Channel unavailable: $e');
       if (!mounted) return;
       final l10n = AppLocalizations.of(context);
       setState(() {
@@ -379,95 +310,50 @@ class _SearchPageState extends State<SearchPage> {
             _messages.last.retrievedDocs.isEmpty) {
           _messages.removeLast();
         }
+        if (_messages.isNotEmpty && _messages.last.role == 'user') {
+          _messages.removeLast();
+        }
+        _textController.text = prompt;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(l10n.errorNoApiKey),
-          duration: const Duration(seconds: 8),
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          content: Text(l10n.errorOnDeviceUnavailable),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(l10n.dialogCancel),
+            ),
+          ],
         ),
       );
-      return;
-    }
-    _geminiService = GeminiService();
-    var completed = false;
-    String? apiError;
-    try {
-      await for (final text in _geminiService!.generateStream(
-        prompt: prompt,
-        history: history,
-        languageCode: appLocale.value.languageCode,
-      )) {
-        if (!mounted) return;
-        setState(() {
-          final lastIdx = _messages.length - 1;
-          if (lastIdx >= 0 && _messages[lastIdx].role == 'assistant') {
-            _messages[lastIdx] = _messages[lastIdx].copyWith(
-              text: text,
+    } catch (e) {
+      debugPrint('Unexpected generation error: $e');
+      if (!mounted) return;
+      setState(() {
+        _isGenerating = false;
+        if (_messages.isNotEmpty && _messages.last.role == 'assistant') {
+          final last = _messages.last;
+          if (last.text.isEmpty && last.retrievedDocs.isEmpty) {
+            _messages.removeLast();
+            if (_messages.isNotEmpty && _messages.last.role == 'user') {
+              _messages.removeLast();
+            }
+          } else {
+            _messages[_messages.length - 1] = last.copyWith(
               isLoading: false,
+              wasCancelled: true,
             );
           }
-        });
-        _scrollToBottom();
-      }
-      completed = true;
-    } on DioException catch (e) {
-      if (CancelToken.isCancel(e)) {
-        completed = true; // cancellation is intentional — not an error
-      } else {
-        debugPrint('Gemini API error: $e');
-        if (!mounted) return;
-        final l10n = AppLocalizations.of(context);
-        final status = e.response?.statusCode;
-        if (status == 401 || status == 403) {
-          apiError = l10n.errorApiKeyInvalid(status!);
-        } else if (status == 429) {
-          apiError = l10n.errorRateLimited;
-        } else if (e.type == DioExceptionType.connectionError ||
-            e.type == DioExceptionType.unknown) {
-          apiError = l10n.errorNoInternet;
-        } else {
-          apiError = l10n.errorCloudUnavailable(status ?? 0);
         }
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isGenerating = false;
-          if (!completed &&
-              _messages.isNotEmpty &&
-              _messages.last.role == 'assistant') {
-            final last = _messages.last;
-            if (last.text.isEmpty && last.retrievedDocs.isEmpty) {
-              _messages.removeLast();
-              if (_messages.isNotEmpty && _messages.last.role == 'user') {
-                _messages.removeLast();
-              }
-            } else {
-              _messages[_messages.length - 1] = last.copyWith(
-                isLoading: false,
-                wasCancelled: true,
-              );
-            }
-          }
-        });
-        await _saveCurrentConversation();
-      }
-    }
-    if (apiError != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(apiError), duration: const Duration(seconds: 8)),
-      );
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
   Future<void> _cancelGeneration() async {
-    if (_useCloudLLM) {
-      // Cloud path: cancel the Dio request. Message cleanup is handled by
-      // _generateWithGemini's finally block once the stream throws.
-      _geminiService?.cancel();
-      return;
-    }
-    // On-device path
     try {
       await platform.invokeMethod("cancelGeneration");
     } on PlatformException catch (e) {
@@ -1009,32 +895,8 @@ class _SearchPageState extends State<SearchPage> {
               ),
             ),
             const SizedBox(width: 4),
-            // Cloud / on-device toggle
-            Tooltip(
-              message: _useCloudLLM
-                  ? l10n.tooltipCloudAI
-                  : l10n.tooltipOnDevice,
-              child: IconButton(
-                icon: Icon(
-                  _useCloudLLM ? Icons.cloud : Icons.smartphone,
-                  color: _useCloudLLM ? Colors.blue[700] : Colors.grey[500],
-                ),
-                onPressed: () {
-                  setState(() => _useCloudLLM = !_useCloudLLM);
-                  // _useCloudLLM is already the NEW value after setState
-                  if (_useCloudLLM && GeminiService.apiKey.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(l10n.errorNoApiKey),
-                        duration: const Duration(seconds: 8),
-                      ),
-                    );
-                  }
-                },
-              ),
-            ),
-            // Search toggle — only relevant for on-device mode on Android
-            if (!_useCloudLLM && !kIsWeb && Platform.isAndroid) ...[
+            // Search toggle — only relevant on Android on-device mode.
+            if (!kIsWeb && Platform.isAndroid) ...[
               const SizedBox(width: 4),
               GestureDetector(
                 onTap: () => setState(() => _useRetrieval = !_useRetrieval),
