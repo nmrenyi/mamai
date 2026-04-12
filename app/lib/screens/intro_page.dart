@@ -208,6 +208,18 @@ class _IntroPageState extends State<IntroPage> {
     } finally {
       await sink.close();
     }
+
+    // Integrity check: verify the file is complete if the server declared a size.
+    // A mismatch means the stream ended before all bytes arrived (truncated
+    // download). Throwing here lets _downloadWithRetry resume automatically.
+    if (fullSize > 0) {
+      final actualSize = destFile.lengthSync();
+      if (actualSize != fullSize) {
+        throw StateError(
+          'Incomplete download: received $actualSize of $fullSize bytes.',
+        );
+      }
+    }
   }
 
   String _downloadErrorMessage(Object e) {
