@@ -211,13 +211,14 @@ class _IntroPageState extends State<IntroPage> {
   }
 
   String _downloadErrorMessage(Object e) {
+    const hint = 'Please connect to a stable internet connection, then tap Retry.';
     if (e is TimeoutException) {
-      return 'Download stalled after several retries. Tap Retry to try again.';
+      return 'Connection lost after several retries. $hint';
     }
     if (e is DioException) {
-      return 'Download failed after several retries: ${e.message ?? e.type.name}';
+      return 'Download failed after several retries. $hint';
     }
-    return 'Download failed after several retries: ${e.toString().split('\n').first}';
+    return 'Download failed after several retries. $hint';
   }
 
   /// Wraps [_downloadWithResume] with automatic exponential-backoff retries.
