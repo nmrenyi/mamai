@@ -1,82 +1,66 @@
 """
 Prompt templates for medical QA evaluation.
 
-Two prompt styles:
-- MCQ_SYSTEM_PROMPT: focused exam-answering prompt for multiple-choice questions
-- OPEN_SYSTEM_PROMPT: focused clinical QA prompt for open-ended questions
-- APP_SYSTEM_PROMPT: the on-device RAG app prompt (from RagPipeline.kt), kept for reference
+Protocol: app_parity_v1
+  The open-ended system prompt is the same text as the deployed Android app
+  (config/prompts/system_en.txt), so open-ended eval scores reflect actual
+  app behavior. MCQ uses a separate adapter prompt from
+  config/prompts/mcq_system.txt because the app prompt is not designed to
+  output a single letter — see GitHub issue #39.
+
+Single source of truth for all config: config/ at repo root.
 """
 
 import hashlib
+import json
+from pathlib import Path
 
-# --- Task-specific evaluation prompts ---
+_CONFIG_DIR  = Path(__file__).parents[1] / "config"
+_PROMPTS_DIR = _CONFIG_DIR / "prompts"
+_runtime  = json.loads((_CONFIG_DIR / "runtime_config.json").read_text())
+_evalcfg  = json.loads((_CONFIG_DIR / "eval_config.json").read_text())
 
-MCQ_SYSTEM_PROMPT = (
-    "You are a medical expert taking a clinical exam. "
-    "Answer each multiple-choice question by selecting the single best answer. "
-    "Reply with ONLY the letter of the correct option (e.g., 'B'). "
-    "Do not add explanations or disclaimers."
-)
+# --- App system prompt (single source of truth: config/prompts/system_en.txt) ---
 
-OPEN_SYSTEM_PROMPT = (
-    "You are a knowledgeable medical professional. "
-    "Answer the following clinical question thoroughly and accurately. "
-    "Be specific, use medical terminology where appropriate, and provide actionable guidance. "
-    "Structure your answer clearly with bullet points or numbered steps when relevant."
-)
+APP_SYSTEM_PROMPT: str = (_PROMPTS_DIR / "system_en.txt").read_text(encoding="utf-8").rstrip("\n")
+APP_SYSTEM_PROMPT_SW: str = (_PROMPTS_DIR / "system_sw.txt").read_text(encoding="utf-8").rstrip("\n")
 
-# --- On-device app prompt (RagPipeline.kt:293-317), kept for reference ---
+# --- MCQ adapter prompt ---
+# NOT the app prompt. Required because the app prompt produces clinical prose,
+# which breaks single-letter extraction. MCQ scores are a knowledge proxy,
+# not a deployment-fidelity measure. See GitHub issue #39.
+MCQ_SYSTEM_PROMPT: str = (_PROMPTS_DIR / "mcq_system.txt").read_text(encoding="utf-8").rstrip("\n")
 
-APP_SYSTEM_PROMPT = (
-    "You are a medical assistant supporting nurses and midwives in Zanzibar. "
-    "You help with neonatal care, maternal health, obstetrics, and related clinical topics.\n"
-    "Only answer questions related to healthcare, medicine, and clinical practice. "
-    "For unrelated topics, politely decline and redirect to medical questions.\n"
-    "\n"
-    "CONVERSATION: You may have access to previous messages in this conversation "
-    "\u2014 use them to maintain context and avoid repeating information already covered.\n"
-    "\n"
-    "LANGUAGE & TONE: Use simple, short sentences. Avoid idioms and complex words. "
-    "Answer in the language that the user is speaking. Be supportive, professional, and calm.\n"
-    "\n"
-    "FORMAT: Use markdown. Use bullet points for lists. Use **bold** for important terms. "
-    "Use numbered steps for procedures. Keep responses concise \u2014 under 200 words "
-    "unless a procedure genuinely requires more detail.\n"
-    "\n"
-    "USING CONTEXT: If retrieved context is provided, use it to answer. "
-    "If the context is not relevant to the question, say so and answer from "
-    "established medical knowledge instead.\n"
-    "\n"
-    "EMERGENCIES \u2014 if any of these are present, immediately tell the user to call "
-    "a doctor or emergency service and state why:\n"
-    "- Heavy bleeding (postpartum haemorrhage, antepartum haemorrhage)\n"
-    "- Convulsions or loss of consciousness (eclampsia)\n"
-    "- Cord prolapse or abnormal fetal presentation\n"
-    "- Shoulder dystocia\n"
-    "- Severe difficulty breathing (mother or newborn)\n"
-    "- Fever in a newborn or signs of neonatal sepsis\n"
-    "- Signs of maternal sepsis (fever, rapid pulse, confusion in the mother)\n"
-    "- Severe abdominal pain\n"
-    "\n"
-    "MEDICATIONS: Do not recommend specific drug doses unless the retrieved context "
-    "explicitly states them. If asked about dosing, advise the user to consult a "
-    "senior clinician or the local formulary.\n"
-    "\n"
-    "UNCERTAINTY: If you are not sure, admit it clearly "
-    '(e.g., \u201cI\u2019m not sure. Please ask a doctor or senior nurse.\u201d). '
-    "Do not guess. Prioritize patient safety above all else."
-)
+# Open-ended eval uses the real app prompt — scores now reflect deployed behavior.
+OPEN_SYSTEM_PROMPT = APP_SYSTEM_PROMPT
 
-# On-device generation parameters (RagPipeline.kt:37-39)
-TEMPERATURE = 1.0
-TOP_P = 0.95
-TOP_K = 64
-N_CTX = 4096  # the whole conversation is not going to exceed 4096, less context window could save memory
+# --- Runtime parameters (single source of truth: config/runtime_config.json) ---
+TEMPERATURE: float = _runtime["generation"]["temperature"]
+TOP_P: float = _runtime["generation"]["top_p"]
+TOP_K: int = _runtime["generation"]["top_k"]
+RETRIEVAL_TOP_K: int = _runtime["retrieval"]["top_k"]
+RETRIEVAL_THRESHOLD: float = _runtime["retrieval"]["similarity_threshold"]
+CONTEXT_LABEL: str = _runtime["context_injection"]["context_label_en"]
+QUESTION_LABEL: str = _runtime["context_injection"]["question_label_en"]
+
+# eval-only: LiteRT-LM manages context window internally, no app equivalent
+N_CTX: int = _evalcfg["n_ctx"]
+
+# --- Protocol versioning ---
+
+PROTOCOL_VERSION = "app_parity_v1"
+
+def _spec_sha256() -> str:
+    """SHA-256 of the canonical English system prompt file (config/prompts/system_en.txt)."""
+    return hashlib.sha256((_PROMPTS_DIR / "system_en.txt").read_bytes()).hexdigest()
+
+SPEC_SHA256: str = _spec_sha256()
+
 
 def _prompt_hash(*prompts: str) -> str:
     """Short hash of prompt content — changes automatically when prompts are edited."""
     h = hashlib.sha256("".join(prompts).encode()).hexdigest()[:8]
-    return f"v2-{h}"
+    return f"v3-{h}"
 
 PROMPT_VERSION = _prompt_hash(MCQ_SYSTEM_PROMPT, OPEN_SYSTEM_PROMPT)
 
@@ -124,19 +108,19 @@ def build_rag_mcq_messages(question: str, options: str, context: str) -> dict:
     return {
         "system": MCQ_SYSTEM_PROMPT,
         "user": (
-            f"RELEVANT CONTEXT FROM MEDICAL GUIDELINES:\n{context}\n\n"
-            f"Question: {question}\nOptions:\n{options}"
+            f"{CONTEXT_LABEL}\n{context}\n\n"
+            f"{QUESTION_LABEL} {question}\nOptions:\n{options}"
         ),
     }
 
 
 def build_rag_open_messages(question: str, context: str) -> dict:
-    """Open-ended prompt with RAG context."""
+    """Open-ended prompt with RAG context. Uses app system prompt (app_parity_v1)."""
     return {
         "system": OPEN_SYSTEM_PROMPT,
         "user": (
-            f"RELEVANT CONTEXT FROM MEDICAL GUIDELINES:\n{context}\n\n"
-            f"Question: {question}"
+            f"{CONTEXT_LABEL}\n{context}\n\n"
+            f"{QUESTION_LABEL} {question}"
         ),
     }
 

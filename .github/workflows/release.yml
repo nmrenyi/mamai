@@ -1,0 +1,226 @@
+name: Release APK
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing tag to rebuild and publish"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Resolve release ref
+        id: ref
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            echo "git_ref=refs/tags/${{ inputs.release_tag }}" >> "$GITHUB_OUTPUT"
+            echo "tag=${{ inputs.release_tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "git_ref=${GITHUB_REF}" >> "$GITHUB_OUTPUT"
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate release tag policy
+        id: tag
+        env:
+          TAG_NAME: ${{ steps.ref.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ "$TAG_NAME" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            CHANNEL="stable"
+            IS_PRERELEASE=false
+          elif [[ "$TAG_NAME" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)-(alpha|beta|rc)\.([0-9]+)$ ]]; then
+            CHANNEL="${BASH_REMATCH[4]}"
+            IS_PRERELEASE=true
+          else
+            echo "Invalid release tag: $TAG_NAME" >&2
+            echo "Allowed formats:" >&2
+            echo "  vX.Y.Z" >&2
+            echo "  vX.Y.Z-alpha.N" >&2
+            echo "  vX.Y.Z-beta.N" >&2
+            echo "  vX.Y.Z-rc.N" >&2
+            exit 1
+          fi
+
+          {
+            echo "channel=${CHANNEL}"
+            echo "is_prerelease=${IS_PRERELEASE}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.ref.outputs.git_ref }}
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: "17"
+          check-latest: true
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Get Flutter dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Decode Android signing key
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [[ -z "${ANDROID_KEYSTORE_BASE64}" ]]; then
+            echo "Missing GitHub secret ANDROID_KEYSTORE_BASE64" >&2
+            exit 1
+          fi
+          echo "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > "$RUNNER_TEMP/release.keystore"
+
+      - name: Derive release metadata
+        id: meta
+        env:
+          TAG_NAME: ${{ steps.ref.outputs.tag }}
+          RUN_NUMBER: ${{ github.run_number }}
+          RELEASE_CHANNEL: ${{ steps.tag.outputs.channel }}
+          IS_PRERELEASE: ${{ steps.tag.outputs.is_prerelease }}
+        run: |
+          GIT_SHA="$(git rev-parse HEAD)"
+          VERSION_NAME="${TAG_NAME#v}"
+          VERSION_CODE="${RUN_NUMBER}"
+          SHORT_SHA="${GIT_SHA::7}"
+          BUNDLE_VERSION="$(python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('config/rag_assets.lock.json').read_text())
+          print(data['bundle_version'])
+          PY
+          )"
+          MANIFEST_SHA="$(python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('config/rag_assets.lock.json').read_text())
+          print(data['manifest_sha256'])
+          PY
+          )"
+          APK_BASENAME="mamai-${TAG_NAME}-${SHORT_SHA}-rag-${BUNDLE_VERSION}"
+          {
+            echo "version_name=${VERSION_NAME}"
+            echo "version_code=${VERSION_CODE}"
+            echo "short_sha=${SHORT_SHA}"
+            echo "bundle_version=${BUNDLE_VERSION}"
+            echo "manifest_sha=${MANIFEST_SHA}"
+            echo "apk_basename=${APK_BASENAME}"
+            echo "release_channel=${RELEASE_CHANNEL}"
+            echo "is_prerelease=${IS_PRERELEASE}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build signed release APK
+        working-directory: app
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/release.keystore
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          flutter build apk --release \
+            --build-name "${{ steps.meta.outputs.version_name }}" \
+            --build-number "${{ steps.meta.outputs.version_code }}"
+
+      - name: Package release assets
+        env:
+          TAG_NAME: ${{ steps.ref.outputs.tag }}
+          VERSION_NAME: ${{ steps.meta.outputs.version_name }}
+          VERSION_CODE: ${{ steps.meta.outputs.version_code }}
+          SHORT_SHA: ${{ steps.meta.outputs.short_sha }}
+          BUNDLE_VERSION: ${{ steps.meta.outputs.bundle_version }}
+          MANIFEST_SHA: ${{ steps.meta.outputs.manifest_sha }}
+          APK_BASENAME: ${{ steps.meta.outputs.apk_basename }}
+          RELEASE_CHANNEL: ${{ steps.meta.outputs.release_channel }}
+          IS_PRERELEASE: ${{ steps.meta.outputs.is_prerelease }}
+        run: |
+          mkdir -p release-assets
+          cp app/build/app/outputs/flutter-apk/app-release.apk "release-assets/${APK_BASENAME}.apk"
+          shasum -a 256 "release-assets/${APK_BASENAME}.apk" > "release-assets/${APK_BASENAME}.sha256"
+          python3 - <<'PY'
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          data = {
+              "tag": os.environ["TAG_NAME"],
+              "version_name": os.environ["VERSION_NAME"],
+              "version_code": int(os.environ["VERSION_CODE"]),
+              "git_sha": os.environ["SHORT_SHA"],
+              "bundle_version": os.environ["BUNDLE_VERSION"],
+              "bundle_manifest_sha256": os.environ["MANIFEST_SHA"],
+              "release_channel": os.environ["RELEASE_CHANNEL"],
+              "prerelease": os.environ["IS_PRERELEASE"].lower() == "true",
+              "built_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+          }
+          out = Path("release-assets") / f"{os.environ['APK_BASENAME']}.json"
+          out.write_text(json.dumps(data, indent=2) + "\n")
+          PY
+          cat > release-assets/release-notes.md <<EOF
+          Release tag: ${TAG_NAME}
+
+          Version name: ${VERSION_NAME}
+          Version code: ${VERSION_CODE}
+          Commit: ${SHORT_SHA}
+          RAG bundle: ${BUNDLE_VERSION}
+          RAG manifest SHA-256: ${MANIFEST_SHA}
+          Release channel: ${RELEASE_CHANNEL}
+          Prerelease: ${IS_PRERELEASE}
+
+          Assets:
+          - ${APK_BASENAME}.apk
+          - ${APK_BASENAME}.sha256
+          - ${APK_BASENAME}.json
+          EOF
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.apk_basename }}
+          path: release-assets/*
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ steps.ref.outputs.tag }}
+          APK_BASENAME: ${{ steps.meta.outputs.apk_basename }}
+          IS_PRERELEASE: ${{ steps.meta.outputs.is_prerelease }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release upload "$TAG_NAME" \
+              "release-assets/${APK_BASENAME}.apk" \
+              "release-assets/${APK_BASENAME}.sha256" \
+              "release-assets/${APK_BASENAME}.json" \
+              --clobber
+          else
+            EXTRA_ARGS=()
+            if [[ "${IS_PRERELEASE}" == "true" ]]; then
+              EXTRA_ARGS+=(--prerelease)
+            fi
+            gh release create "$TAG_NAME" \
+              "release-assets/${APK_BASENAME}.apk" \
+              "release-assets/${APK_BASENAME}.sha256" \
+              "release-assets/${APK_BASENAME}.json" \
+              --title "$TAG_NAME" \
+              --notes-file release-assets/release-notes.md \
+              "${EXTRA_ARGS[@]}"
+          fi

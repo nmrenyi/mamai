@@ -94,6 +94,7 @@ class OpenAIBackend:
 MODEL_REGISTRY = {
     # Local GGUF models (backend, path, use_chat)
     # use_chat=True uses llama-cpp's built-in chat template instead of manual Gemma IT formatting
+    "gemma4-e4b": ("gguf", "gemma-4/google_gemma-4-E4B-it-Q4_0.gguf", False),
     "gemma3n-e4b": ("gguf", "gemma-3n/gemma-3n-E4B-it-Q4_0.gguf", False),
     "gemma3n-e2b": ("gguf", "gemma-3n/gemma-3n-E2B-it-Q4_0.gguf", False),
     "medgemma-gguf": ("gguf", "medgemma-4b/medgemma-4b-it-Q4_0.gguf", False),

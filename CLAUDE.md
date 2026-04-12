@@ -4,15 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-MAM-AI is a medical search application for nurses and midwives in Zanzibar. It uses on-device RAG (Retrieval-Augmented Generation) with the Gemma 3n model to provide medical information searches without requiring internet connectivity. The app runs LLM inference entirely on-device using Google AI Edge MediaPipe.
+MAM-AI is a medical search application for nurses and midwives in Zanzibar. It uses on-device RAG (Retrieval-Augmented Generation) with the Gemma 4 E4B model to provide medical information searches without requiring internet connectivity. The app runs LLM inference entirely on-device using Google AI Edge LiteRT-LM.
 
 ## Repository Structure
 
 - **`app/`**: Flutter application with Android backend
   - Flutter frontend in `app/lib/`
   - Android native code in `app/android/app/src/main/kotlin/com/example/app/`
-- **`rag/`**: Python scripts for document preprocessing and chunking
-- **`finetune/`**: Python scripts for Gemma 3n model finetuning (not currently deployed in app)
+- **`evaluation/`**: Evaluation harness, cluster scripts, and reports
+- **`scripts/`**: Dev tooling — RAG asset sync, model download, device push
+- **`config/`**: Shared runtime config and system prompts
 
 ## Building and Running
 
@@ -34,25 +35,14 @@ flutter run
 flutter run -v
 ```
 
-**Note**: The app requires real Android hardware (not emulators) because the MediaPipe inference library needs actual hardware acceleration.
+**Note**: The app requires real Android hardware (not emulators) because LiteRT-LM needs actual hardware acceleration.
 
-### Python Components
+## Release Tag Policy
 
-For RAG document processing (`rag/`):
-```bash
-cd rag
-pip install -r requirements.txt.txt
-python rag.py
-```
-
-For model finetuning (`finetune/`):
-```bash
-cd finetune
-python3.10 -m venv .venv
-source .venv/bin/activate  # or .venv\Scripts\activate on Windows
-pip install -r requirements.txt
-python main_training.py
-```
+- Use `vX.Y.Z` for stable releases
+- Use `vX.Y.Z-alpha.N`, `vX.Y.Z-beta.N`, or `vX.Y.Z-rc.N` for staged releases
+- Tag from `main` only
+- Never move or reuse a published tag
 
 ## Architecture
 
@@ -76,9 +66,9 @@ The app uses Flutter platform channels for bidirectional communication:
 
 The RAG pipeline (`RagPipeline.kt`) manages three main components:
 
-1. **LLM Backend**: MediaPipe-based Gemma 3n inference
-   - Model: `gemma-3n-E4B-it-int4.task` (int4 quantized)
-   - Runs on CPU (`LlmInference.Backend.CPU`)
+1. **LLM Backend**: LiteRT-LM Gemma 4 E4B inference
+   - Model: `gemma-4-E4B-it.litertlm` (int4 quantized, 3.65 GB)
+   - Runs on CPU
    - Max tokens: 4096
 
 2. **Embeddings**: Gecko embedding model for semantic search
@@ -90,13 +80,13 @@ The RAG pipeline (`RagPipeline.kt`) manages three main components:
    - Database: `embeddings.sqlite` (pre-computed document embeddings)
    - Retrieval: Top-3 documents via cosine similarity
 
-**Initialization**: Heavy initialization happens lazily and asynchronously. Models are loaded on first access and signal readiness via a rendezvous channel (`onLlmReady`).
+**Initialization**: Heavy initialization happens lazily and asynchronously. Models are loaded on first access and callers wait via `awaitLlmReady()`, which propagates init failures instead of silently unblocking.
 
 **Query flow**:
 1. User submits prompt in Flutter UI
 2. Android embeds the query and searches vector store for top-3 relevant documents
-3. Documents + query are fed to Gemma 3n with the prompt template
-4. LLM generates streaming response sent back to Flutter via EventChannel
+3. Documents + query are fed to Gemma 4 E4B with the prompt template
+4. LiteRT-LM generates a streaming response sent back to Flutter via EventChannel
 
 ### Streaming Architecture
 
@@ -107,27 +97,28 @@ The RAG pipeline (`RagPipeline.kt`) manages three main components:
 
 ### Model Files
 
-Models are fetched from a remote server on first launch and stored in `application.getExternalFilesDir(null)`:
-- `gemma-3n-E4B-it-int4.task`: Gemma 3n LLM (int4 quantized)
-- `Gecko_1024_quant.tflite`: Gecko embedding model
-- `sentencepiece.model`: Tokenizer
-- `embeddings.sqlite`: Pre-computed document embeddings
+Models are downloaded on first launch from HuggingFace and stored in `application.getExternalFilesDir(null)`:
+- `gemma-4-E4B-it.litertlm`: Gemma 4 E4B LLM (int4 quantized, 3.65 GB) — `litert-community/gemma-4-E4B-it-litert-lm`
+- `Gecko_1024_quant.tflite`: Gecko embedding model — `litert-community/Gecko-110m-en`
+- `sentencepiece.model`: Tokenizer — `litert-community/Gecko-110m-en`
+- `embeddings.sqlite`: Pre-computed document embeddings — mamai-medical-guidelines GitHub release
+
+Model download URLs are defined in `_modelFileUrls` in `app/lib/screens/intro_page.dart`. The pinned RAG bundle URL/version live in `config/rag_assets.lock.json`.
 
 ### Document Ingestion (RAG preprocessing)
 
-Documents are chunked and embedded offline using scripts in `rag/`:
+Chunking and embedding are managed in the companion `mamai-medical-guidelines` repo.
+This repo only consumes the published output via a versioned bundle.
 
-1. Extract text from PDFs using [MMORE](https://github.com/swiss-ai/mmore)
-2. Chunk documents with separator tags (`<sep>`, `<doc_sep>`)
-3. Embed chunks using Gecko model
-4. Store in SQLite vector database
+**To update RAG assets** (new guidelines or re-chunking):
+1. Run the producer pipeline in `mamai-medical-guidelines` and publish a new bundle
+2. Bump `config/rag_assets.lock.json` in this repo with the new version + manifest checksum
+3. Run `bash scripts/sync_rag_assets.sh` to install the bundle into `device_push/`
+4. Push to device (see `device_push/README.md`)
 
-**To add new documents**:
-1. Add chunks to `app/assets/mamai_trim.txt`
-2. Uncomment `memorizeChunks()` call in `RagPipeline.kt:103`
-3. Run app (waits while chunks are embedded and stored)
-4. Re-comment `memorizeChunks()`
-5. Use `adb` to pull updated `embeddings.sqlite` from device
+`memorizeChunks()` in `RagPipeline.kt` is intentionally commented out — embeddings
+are pre-computed in the producer repo and shipped as `embeddings.sqlite`, not
+generated on-device.
 
 ## Key Configuration
 
@@ -143,8 +134,8 @@ The RAG prompt is defined in `RagPipeline.kt:205-225`. It emphasizes:
 ### Backend Selection
 
 Both LLM and embeddings use **CPU backend** (not GPU). Change in `RagPipeline.kt`:
-- Line 41: `setPreferredBackend(LlmInference.Backend.CPU)`
-- Line 197: `USE_GPU_FOR_EMBEDDINGS = false`
+- LiteRT-LM backend: configured via `LlmInferenceOptions` in `RagPipeline.kt`
+- Embeddings GPU: `USE_GPU_FOR_EMBEDDINGS = false`
 
 ### Retrieval Parameters
 
@@ -184,7 +175,7 @@ Key packages:
 
 ### Concurrency Constraints
 
-**Critical**: MediaPipe LLM backend crashes if multiple queries run concurrently. `RagStream` enforces single-query execution:
+**Critical**: LiteRT-LM crashes if multiple queries run concurrently. `RagStream` enforces single-query execution:
 - Cancels previous job when new query arrives
 - Prevents duplicate queries for identical prompts
 - Uses synchronized blocks to protect job state
@@ -204,9 +195,4 @@ No automated tests are currently present in the repository. To test the app:
 
 ## Remote Resources
 
-The app downloads models from a temporary VPS on first launch. Files are hosted via nginx with self-signed cert (`cert.pem` bundled in assets for TLS verification).
-
-To use your own model hosting:
-1. Update download URLs in the Flutter code
-2. Replace `app/cert.pem` with your server's certificate
-3. Host the four model files (listed in "Model Files" section above)
+All model files are downloaded from public HuggingFace repos on first launch — no auth required. Update model URLs in `_modelFileUrls` in `app/lib/screens/intro_page.dart`. Update the pinned RAG bundle release in `config/rag_assets.lock.json`.

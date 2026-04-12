@@ -17,6 +17,7 @@ Thumbs.db
 
 # Android
 local.properties
+app/android/key.properties
 *.keystore
 *.jks
 
@@ -40,11 +41,21 @@ app/android/app/src/main/cpp/
 # Model files & large artifacts
 *.tflite
 *.task
+*.litertlm
 *.sqlite
 sentencepiece.model
 
+# Downloaded models directory
+models/
+
 # RAG output
 rag/out.txt
+
+# device_push — large binaries (populate via scripts/sync_rag_assets.sh + manual hard-links)
+device_push/bundle/
+device_push/models/
+device_push/bundle/debug/
+device_push.zip
 
 # Misc
 *.log

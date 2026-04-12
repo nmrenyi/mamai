@@ -9,6 +9,7 @@ Usage:
 """
 
 import argparse
+import hashlib
 import json
 import os
 import time
@@ -19,8 +20,14 @@ from tqdm import tqdm
 
 from inference import load_model
 from prompts import (TEMPERATURE, TOP_P, TOP_K, N_CTX, PROMPT_VERSION,
+                     PROTOCOL_VERSION, SPEC_SHA256, RETRIEVAL_TOP_K,
                      build_mcq_prompt, build_mcq_messages, build_open_prompt, build_open_messages,
                      build_rag_mcq_prompt, build_rag_mcq_messages, build_rag_open_prompt, build_rag_open_messages)
+
+# Eval-only defaults from eval_config.json (CLI flags override these)
+import json as _json
+from pathlib import Path as _Path
+_evalcfg = _json.loads((_Path(__file__).parents[1] / "config/eval_config.json").read_text())
 from scoring import JUDGE_DIMENSIONS, _parse_answer_set, create_judge_client, extract_letters, judge_response, score_mcq
 
 # Dataset registry: name -> (filename, type, question_col, options_col, answer_col, reference_col)
@@ -34,6 +41,17 @@ DATASETS = {
 }
 
 CHECKPOINT_INTERVAL = 100
+
+
+def _file_sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        while True:
+            chunk = f.read(1024 * 1024)
+            if not chunk:
+                break
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def run_mcq(model, df, question_col, options_col, answer_col, max_tokens, max_questions,
@@ -248,10 +266,10 @@ def main():
     parser.add_argument("--model-dir", default="models", help="Directory containing model files (not needed for API models)")
     parser.add_argument("--datasets", required=True, help="Comma-separated dataset names, or 'all'")
     parser.add_argument("--output-dir", default="results", help="Directory for output JSON files")
-    parser.add_argument("--max-tokens", type=int, default=2048, help="Max tokens to generate")
+    parser.add_argument("--max-tokens", type=int, default=_evalcfg["max_tokens"], help="Max tokens to generate")
     parser.add_argument("--max-questions", type=int, default=None, help="Limit questions per dataset (for debugging)")
     parser.add_argument("--judge", action="store_true", help="Enable LLM-as-judge for open-ended datasets")
-    parser.add_argument("--judge-model", default="gpt-5.2", help="OpenAI model for judging")
+    parser.add_argument("--judge-model", default=_evalcfg["judge_model"], help="OpenAI model for judging")
     parser.add_argument("--n-gpu-layers", type=int, default=None, help="GPU layers for GGUF (-1 = all, 0 = CPU, default: auto-detect)")
     parser.add_argument("--data-dir", default="data", help="Directory containing dataset TSV files")
     parser.add_argument("--rag", default=None, help="Path to pre-computed RAG contexts dir (from precompute_retrieval.py)")
@@ -290,6 +308,16 @@ def main():
     os.makedirs(run_dir, exist_ok=True)
 
     summary = []
+    rag_manifest = None
+    rag_manifest_sha256 = None
+    if args.rag:
+        manifest_path = os.path.join(args.rag, "manifest.json")
+        if os.path.exists(manifest_path):
+            with open(manifest_path) as f:
+                rag_manifest = json.load(f)
+            rag_manifest_sha256 = _file_sha256(manifest_path)
+            print(f"Loaded RAG manifest: {manifest_path}")
+
     for ds_name in dataset_names:
         filename, ds_type, q_col, opt_col, ans_col, ref_col = DATASETS[ds_name]
         filepath = os.path.join(args.data_dir, filename)
@@ -326,7 +354,9 @@ def main():
             "dataset_type": ds_type,
             "n_questions": min(len(df), args.max_questions or len(df)),
             "timestamp": run_timestamp,
+            "protocol_version": PROTOCOL_VERSION,
             "prompt_version": PROMPT_VERSION,
+            "spec_sha256": SPEC_SHA256,
             "rag": rag_contexts is not None,
             "generation_params": {
                 "temperature": TEMPERATURE,
@@ -336,6 +366,26 @@ def main():
                 "max_tokens": args.max_tokens,
             },
         }
+        if rag_contexts is not None:
+            rag_context_metadata = {
+                "dir": os.path.abspath(args.rag) if args.rag else None,
+                "top_k": rag_data["config"].get("top_k"),
+                "n_questions": rag_data["config"].get("n_questions"),
+                "context_version": None,
+                "manifest_sha256": rag_manifest_sha256,
+            }
+            if rag_manifest is not None:
+                rag_context_metadata.update({
+                    "context_version": rag_manifest.get("context_version"),
+                    "created_at_utc": rag_manifest.get("created_at_utc"),
+                    "repo_ref": rag_manifest.get("repo_ref"),
+                    "repo_commit": rag_manifest.get("repo_commit"),
+                    "source_lock": rag_manifest.get("source_lock"),
+                    "artifacts": rag_manifest.get("artifacts"),
+                })
+            else:
+                rag_context_metadata["context_version"] = rag_data.get("metadata", {}).get("context_version")
+            metadata["rag_context"] = rag_context_metadata
 
         # Load previous checkpoint for resume
         # Priority: 1) own output file (auto-resume), 2) --resume dir

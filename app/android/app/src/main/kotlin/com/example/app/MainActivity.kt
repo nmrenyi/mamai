@@ -1,11 +1,16 @@
 package com.example.app
 
+import android.content.Intent
+import android.util.Log
+import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import androidx.lifecycle.lifecycleScope
 import io.flutter.plugin.common.EventChannel
 import kotlinx.coroutines.launch
+import org.json.JSONObject
+import java.io.File
 
 class MainActivity : FlutterActivity() {
     private val channel = "io.github.mzsfighters.mam_ai/request_generation"
@@ -24,8 +29,17 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "ensureInit" -> {
                     lifecycleScope.launch {
-                        ragStream.waitForLlmInit()
-                        result.success(0)
+                        try {
+                            ragStream.waitForLlmInit()
+                            result.success(0)
+                        } catch (t: Throwable) {
+                            Log.e("mam-ai", "[ERROR] ensureInit failed", t)
+                            result.error(
+                                "LLM_INIT_FAILED",
+                                t.message ?: "On-device model initialization failed",
+                                t.stackTraceToString(),
+                            )
+                        }
                     }
                 }
                 "generateResponse" -> {
@@ -40,11 +54,46 @@ class MainActivity : FlutterActivity() {
                         }?.toMap()
                     } ?: emptyList()
                     val useRetrieval = args["useRetrieval"] as? Boolean ?: true
-                    ragStream.generateResponse(prompt, history, useRetrieval)
+                    val language = args["language"] as? String ?: "en"
+                    ragStream.generateResponse(prompt, history, useRetrieval, language)
                     result.success(0)
                 }
                 "cancelGeneration" -> {
                     ragStream.cancel()
+                    result.success(null)
+                }
+                "openPdf" -> {
+                    val source = call.argument<String>("source") ?: ""
+                    val page = call.argument<Int>("page") ?: 1
+                    val opened = openPdf(source, page)
+                    result.success(opened)
+                }
+                "getDeployedRagBundleInfo" -> {
+                    result.success(getDeployedRagBundleInfo())
+                }
+                "getPinnedRagBundleInfo" -> {
+                    result.success(getPinnedRagBundleInfo())
+                }
+                "startDownloadService" -> {
+                    // Start the ForegroundService so the OS keeps the process alive
+                    // while downloads run in the background.  We do NOT request
+                    // POST_NOTIFICATIONS at runtime: on Android ≤ 12 the notification
+                    // appears automatically; on Android 13+ the service still runs and
+                    // protects the process — the notification is just not visible.
+                    DownloadForegroundService.start(applicationContext)
+                    result.success(null)
+                }
+                "updateDownloadNotification" -> {
+                    @Suppress("UNCHECKED_CAST")
+                    val args = call.arguments<Map<String, Any>>()!!
+                    val message  = args["message"]  as? String ?: "Downloading…"
+                    val progress = (args["progress"] as? Number)?.toInt() ?: -1
+                    val max      = (args["max"]      as? Number)?.toInt() ?: 0
+                    DownloadForegroundService.update(applicationContext, message, progress, max)
+                    result.success(null)
+                }
+                "stopDownloadService" -> {
+                    DownloadForegroundService.stop(applicationContext)
                     result.success(null)
                 }
                 else -> {
@@ -55,5 +104,123 @@ class MainActivity : FlutterActivity() {
 
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, latestMessageEventChannel).setStreamHandler(ragStream)
     }
-}
 
+    /**
+     * Opens a PDF from getExternalFilesDir at the given page using the device's
+     * default PDF viewer via FileProvider. The [source] parameter is the raw SOURCE
+     * stem from the chunk metadata (e.g. "WHO_Abortion Care_2022"). It is normalized
+     * to a safe filename before resolving the file, matching the rule used by
+     * package_bundle.py in the mamai-medical-guidelines producer repo:
+     *   - replace any char that is not alphanumeric, '-', or '.' with '_'
+     *   - collapse consecutive underscores
+     *   - strip leading/trailing underscores
+     *
+     * The file is expected at getExternalFilesDir(null)/<normalizedSource>.pdf.
+     * Returns true if an app was found to handle the Intent, false otherwise.
+     */
+    private fun normalizeSourceId(source: String): String =
+        source
+            .replace(Regex("[^A-Za-z0-9\\-.]"), "_")
+            .replace(Regex("_+"), "_")
+            .trim('_')
+
+    private fun getDeployedRagBundleInfo(): Map<String, Any>? {
+        val baseFolder = application.getExternalFilesDir(null) ?: return null
+        val deployRecord = File(baseFolder, "rag_bundle_deployed.json")
+
+        if (!deployRecord.exists()) {
+            return null
+        }
+
+        return try {
+            val json = JSONObject(deployRecord.readText())
+            hashMapOf<String, Any>().apply {
+                json.optString("bundle_version").takeIf { it.isNotBlank() }?.let {
+                    put("bundleVersion", it)
+                }
+                json.optString("deployed_at_utc").takeIf { it.isNotBlank() }?.let {
+                    put("deployedAtUtc", it)
+                }
+                json.optString("producer_commit").takeIf { it.isNotBlank() }?.let {
+                    put("producerCommit", it)
+                }
+                json.optString("manifest_sha256").takeIf { it.isNotBlank() }?.let {
+                    put("manifestSha256", it)
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("mam-ai", "[RAG] failed to read deployed bundle metadata", e)
+            null
+        }
+    }
+
+    private fun getPinnedRagBundleInfo(): Map<String, Any>? =
+        try {
+            val json = assets.open("rag_assets.lock.json").bufferedReader().use { reader ->
+                JSONObject(reader.readText())
+            }
+            hashMapOf<String, Any>().apply {
+                json.optString("bundle_version").takeIf { it.isNotBlank() }?.let {
+                    put("bundleVersion", it)
+                }
+                json.optString("bundle_url").takeIf { it.isNotBlank() }?.let {
+                    put("bundleUrl", it)
+                }
+                json.optString("manifest_sha256").takeIf { it.isNotBlank() }?.let {
+                    put("manifestSha256", it)
+                }
+                json.optString("producer_commit").takeIf { it.isNotBlank() }?.let {
+                    put("producerCommit", it)
+                }
+                json.optInt("source_count").takeIf { it > 0 }?.let {
+                    put("sourceCount", it)
+                }
+                json.optInt("chunk_count").takeIf { it > 0 }?.let {
+                    put("chunkCount", it)
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("mam-ai", "[RAG] failed to read pinned bundle metadata", e)
+            null
+        }
+
+    private fun openPdf(source: String, page: Int): Boolean {
+        val baseFolder = application.getExternalFilesDir(null) ?: return false
+        val normalizedSource = normalizeSourceId(source)
+        val safePage = page.coerceAtLeast(1)
+        val pdfFile = File(baseFolder, "$normalizedSource.pdf")
+
+        if (!pdfFile.exists()) {
+            Log.w("mam-ai", "[PDF] file not found: ${pdfFile.absolutePath}")
+            return false
+        }
+
+        val uri = FileProvider.getUriForFile(
+            this,
+            "${applicationContext.packageName}.fileprovider",
+            pdfFile,
+        )
+
+        Log.d("mam-ai", "[PDF] opening $normalizedSource.pdf (source=$source) at page $safePage")
+
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/pdf")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT)
+            // Keep a single shared "page" extra and add viewer-specific variants.
+            putExtra("page", safePage)            // MuPDF / generic 1-indexed test
+            putExtra("startPage", safePage)       // Yozo Office / OPPO reader (1-indexed)
+            putExtra("startpage", safePage)       // lowercase variant
+            putExtra("pageNum", safePage)         // Yozo alternate
+            putExtra("PDF_PAGE_NUMBER", safePage) // Samsung (1-indexed)
+        }
+
+        return try {
+            startActivity(intent)
+            true
+        } catch (e: android.content.ActivityNotFoundException) {
+            Log.w("mam-ai", "[PDF] no PDF viewer app found on device")
+            false
+        }
+    }
+}

@@ -1,16 +1,43 @@
-# app
+# MAM-AI
 
-A new Flutter project.
+A clinical decision-support tool for nurse-midwives in Zanzibar. Provides fully offline, on-device answers grounded in medical guidelines — covering maternal health, obstetrics, and neonatal care.
 
-## Getting Started
+## Requirements
 
-This project is a starting point for a Flutter application.
+### Android device
 
-A few resources to get you started if this is your first Flutter project:
+| Requirement | Minimum |
+|---|---|
+| Android version | 7.0 (API 24) |
+| Architecture | arm64-v8a (64-bit) |
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+> **Why API 24?** The LiteRT-LM Android runtime used for on-device Gemma 4 requires Android 7.0+.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+> **Real device required.** The on-device LiteRT-LM stack is intended for physical Android hardware, not emulators.
+
+### Development machine
+
+- Flutter SDK (see `pubspec.yaml` for SDK constraint)
+- Android SDK with platform-tools (`adb` in PATH or at `~/Library/Android/sdk/platform-tools/`)
+
+## Building and running
+
+```bash
+cd app
+flutter pub get
+
+# Run on a connected Android device
+flutter run
+
+# Build a release APK
+flutter build apk
+```
+
+For signed local release builds, copy
+[`android/key.properties.example`](android/key.properties.example)
+to `app/android/key.properties` and fill in your keystore values. CI stage
+releases use the same fields via GitHub secrets.
+
+## Languages
+
+The app supports English and Swahili. The language toggle is available in the top-right corner of the main screen. Swahili translations are placeholder-quality and pending review by a qualified Swahili-speaking medical professional (see GitHub issue #29).

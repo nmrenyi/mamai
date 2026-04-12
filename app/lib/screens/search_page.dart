@@ -1,14 +1,53 @@
 import 'dart:async';
+import 'package:app/locale_notifier.dart';
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:app/l10n/app_localizations.dart';
 import 'package:markdown_widget/markdown_widget.dart';
 import '../conversation_store.dart';
+import 'about_page.dart';
+import 'pdf_viewer_page.dart';
+
+/// A retrieved guideline chunk with source metadata.
+class RetrievedDoc {
+  final String text; // chunk body
+  final String source; // filename stem, e.g. "WHO_PositiveBirth_2018"
+  final int page; // PDF page number (0 = unknown / legacy chunk)
+
+  const RetrievedDoc({required this.text, this.source = '', this.page = 0});
+
+  bool get hasSource => source.isNotEmpty && page > 0;
+
+  /// Human-readable label, e.g. "WHO Positive Birth 2018 · p.42"
+  String get label {
+    final name = source.replaceAll('_', ' ');
+    return hasSource
+        ? '$name · p.$page'
+        : name.isNotEmpty
+        ? name
+        : 'Guideline';
+  }
+
+  static RetrievedDoc fromMap(dynamic raw) {
+    if (raw is Map) {
+      return RetrievedDoc(
+        text: raw['text'] as String? ?? '',
+        source: raw['source'] as String? ?? '',
+        page: (raw['page'] as num?)?.toInt() ?? 0,
+      );
+    }
+    // Legacy: plain string (old embeddings.sqlite without metadata prefix)
+    return RetrievedDoc(text: raw as String? ?? '');
+  }
+}
 
 /// A single message in the conversation
 class ChatMessage {
   final String role; // "user" or "assistant"
   final String text;
-  final List<String> retrievedDocs;
+  final List<RetrievedDoc> retrievedDocs;
   final bool isLoading;
   final bool wasCancelled;
 
@@ -22,7 +61,7 @@ class ChatMessage {
 
   ChatMessage copyWith({
     String? text,
-    List<String>? retrievedDocs,
+    List<RetrievedDoc>? retrievedDocs,
     bool? isLoading,
     bool? wasCancelled,
   }) {
@@ -81,12 +120,12 @@ class _SearchPageState extends State<SearchPage> {
   bool _backgroundGenerating = false;
   String? _backgroundConvId;
   String _backgroundConvTitle = '';
-  List<Map<String, String>> _backgroundMessages = [];
+  List<ChatMessage> _backgroundMessages = [];
 
   // IDs of conversations that finished generating while the user was elsewhere.
   final Set<String> _unreadConvIds = {};
 
-  static const _modelContextTokens = 32000; // Gemma 3n E4B context window
+  static const _modelContextTokens = 32000; // Gemma 4 E4B context window
   static const _charsPerToken = 4; // rough estimate for English text
   static const _reservedChars =
       16000; // system prompt (~1800) + 3 retrieved docs (~6000) + query + response headroom
@@ -129,28 +168,50 @@ class _SearchPageState extends State<SearchPage> {
     return (history, truncated);
   }
 
+  Map<String, dynamic> _serializeMessage(ChatMessage message) => {
+    'role': message.role,
+    'text': message.text,
+    if (message.retrievedDocs.isNotEmpty)
+      'retrievedDocs': message.retrievedDocs
+          .map(
+            (doc) => {'text': doc.text, 'source': doc.source, 'page': doc.page},
+          )
+          .toList(),
+    if (message.wasCancelled) 'wasCancelled': true,
+  };
+
+  ChatMessage _deserializeMessage(Map<String, dynamic> raw) {
+    final docs = raw['retrievedDocs'];
+    return ChatMessage(
+      role: raw['role']?.toString() ?? 'assistant',
+      text: raw['text']?.toString() ?? '',
+      retrievedDocs: docs is List
+          ? docs.map<RetrievedDoc>(RetrievedDoc.fromMap).toList()
+          : const [],
+      wasCancelled: raw['wasCancelled'] == true,
+    );
+  }
+
   /// Request the model to generate a response — calls into Android code
   Future<void> _generateResponse(String prompt) async {
     if (prompt.trim().isEmpty) return;
     // If a previous conversation is still generating in the background, ask
     // the user to cancel it before sending a new message here.
     if (_backgroundGenerating && context.mounted) {
+      final l10n = AppLocalizations.of(context);
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Cancel previous generation?'),
-          content: const Text(
-            'A response is still being generated for a previous conversation. '
-            'Cancel it to send this message?',
-          ),
+          title: Text(l10n.dialogCancelGenerationTitle),
+          content: Text(l10n.dialogCancelGenerationContent),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Wait'),
+              child: Text(l10n.dialogWait),
             ),
             TextButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Cancel and send'),
+              child: Text(l10n.dialogCancelAndSend),
             ),
           ],
         ),
@@ -200,10 +261,8 @@ class _SearchPageState extends State<SearchPage> {
     await _saveCurrentConversation();
     if (historyTruncated && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Older messages were removed to fit the model\'s context window.',
-          ),
+        SnackBar(
+          content: Text(AppLocalizations.of(context).snackbarHistoryTruncated),
           duration: Duration(seconds: 4),
         ),
       );
@@ -213,6 +272,7 @@ class _SearchPageState extends State<SearchPage> {
         "prompt": prompt,
         "history": history,
         "useRetrieval": _useRetrieval,
+        "language": appLocale.value.languageCode,
       });
     } on PlatformException catch (e) {
       debugPrint('Platform error while generating response: $e');
@@ -234,6 +294,61 @@ class _SearchPageState extends State<SearchPage> {
           }
         }
       });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: ${e.message}')));
+    } on MissingPluginException catch (e) {
+      debugPrint('Channel unavailable: $e');
+      if (!mounted) return;
+      final l10n = AppLocalizations.of(context);
+      setState(() {
+        _isGenerating = false;
+        if (_messages.isNotEmpty &&
+            _messages.last.role == 'assistant' &&
+            _messages.last.text.isEmpty &&
+            _messages.last.retrievedDocs.isEmpty) {
+          _messages.removeLast();
+        }
+        if (_messages.isNotEmpty && _messages.last.role == 'user') {
+          _messages.removeLast();
+        }
+        _textController.text = prompt;
+      });
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          content: Text(l10n.errorOnDeviceUnavailable),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(l10n.dialogCancel),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      debugPrint('Unexpected generation error: $e');
+      if (!mounted) return;
+      setState(() {
+        _isGenerating = false;
+        if (_messages.isNotEmpty && _messages.last.role == 'assistant') {
+          final last = _messages.last;
+          if (last.text.isEmpty && last.retrievedDocs.isEmpty) {
+            _messages.removeLast();
+            if (_messages.isNotEmpty && _messages.last.role == 'user') {
+              _messages.removeLast();
+            }
+          } else {
+            _messages[_messages.length - 1] = last.copyWith(
+              isLoading: false,
+              wasCancelled: true,
+            );
+          }
+        }
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
@@ -310,10 +425,10 @@ class _SearchPageState extends State<SearchPage> {
         ? '${userMessages.first.text.substring(0, 60)}…'
         : userMessages.first.text;
 
-    // Save only completed messages (role + text). Skip loading placeholders.
+    // Save only completed messages. Skip loading placeholders.
     final saved = _messages
         .where((m) => m.text.isNotEmpty && !m.isLoading)
-        .map((m) => {'role': m.role, 'text': m.text})
+        .map(_serializeMessage)
         .toList();
 
     await _store.save(
@@ -344,15 +459,11 @@ class _SearchPageState extends State<SearchPage> {
         : firstUser.text;
     _backgroundMessages = _messages
         .where((m) => m.text.isNotEmpty && !m.isLoading)
-        .map((m) => <String, String>{'role': m.role, 'text': m.text})
-        .toList();
+        .toList(growable: true);
     // Ensure an assistant slot exists to receive further streaming tokens.
     if (_backgroundMessages.isEmpty ||
-        _backgroundMessages.last['role'] != 'assistant') {
-      _backgroundMessages.add(<String, String>{
-        'role': 'assistant',
-        'text': '',
-      });
+        _backgroundMessages.last.role != 'assistant') {
+      _backgroundMessages.add(const ChatMessage(role: 'assistant', text: ''));
     }
     _backgroundGenerating = true;
     _isGenerating = false; // hide stop button in the new conversation view
@@ -362,20 +473,22 @@ class _SearchPageState extends State<SearchPage> {
   Future<void> _saveAndClearBackground() async {
     final id = _backgroundConvId;
     final title = _backgroundConvTitle;
-    final messages = List<Map<String, String>>.from(_backgroundMessages);
+    final messages = List<ChatMessage>.from(_backgroundMessages);
     _backgroundGenerating = false;
     _backgroundConvId = null;
     _backgroundConvTitle = '';
     _backgroundMessages = [];
     if (id == null) return;
-    final completed = messages.where((m) => m['text']!.isNotEmpty).toList();
-    if (completed.every((m) => m['role'] != 'user')) return;
+    final completed = messages
+        .where((m) => m.text.isNotEmpty || m.retrievedDocs.isNotEmpty)
+        .toList();
+    if (completed.every((m) => m.role != 'user')) return;
     await _store.save(
       Conversation(
         id: id,
         title: title,
         timestamp: DateTime.now(),
-        messages: completed,
+        messages: completed.map(_serializeMessage).toList(),
       ),
     );
   }
@@ -394,7 +507,7 @@ class _SearchPageState extends State<SearchPage> {
     // If loading the conversation that is currently generating in background,
     // bring it back to the foreground so the response is visible again.
     if (_backgroundGenerating && _backgroundConvId == conversation.id) {
-      final bgMessages = List<Map<String, String>>.from(_backgroundMessages);
+      final bgMessages = List<ChatMessage>.from(_backgroundMessages);
       setState(() {
         _currentConversationId = conversation.id;
         _backgroundGenerating = false;
@@ -405,11 +518,7 @@ class _SearchPageState extends State<SearchPage> {
         _unreadConvIds.remove(conversation.id);
         _messages
           ..clear()
-          ..addAll(
-            bgMessages.map(
-              (m) => ChatMessage(role: m['role']!, text: m['text']!),
-            ),
-          );
+          ..addAll(bgMessages);
         // Re-attach the loading indicator to the last assistant message.
         if (_messages.isNotEmpty && _messages.last.role == 'assistant') {
           _messages[_messages.length - 1] = _messages.last.copyWith(
@@ -426,11 +535,7 @@ class _SearchPageState extends State<SearchPage> {
       _unreadConvIds.remove(conversation.id);
       _messages
         ..clear()
-        ..addAll(
-          conversation.messages.map(
-            (m) => ChatMessage(role: m['role']!, text: m['text']!),
-          ),
-        );
+        ..addAll(conversation.messages.map(_deserializeMessage));
     });
   }
 
@@ -478,24 +583,35 @@ class _SearchPageState extends State<SearchPage> {
   void _onLatestMessageUpdate(dynamic value) {
     if (value is! Map) return; // guard against unexpected non-Map events
     if (!_isGenerating && !_backgroundGenerating) return; // stray event
+    final cancelled = value["cancelled"] == true;
 
     if (_backgroundGenerating) {
       // User navigated away — update background buffer (no setState needed).
       if (value.containsKey("done")) {
+        if (cancelled &&
+            _backgroundMessages.isNotEmpty &&
+            _backgroundMessages.last.role == 'assistant') {
+          _backgroundMessages[_backgroundMessages.length -
+              1] = _backgroundMessages.last.copyWith(
+            isLoading: false,
+            wasCancelled: true,
+          );
+        }
         final convId = _backgroundConvId!;
         final convTitle = _backgroundConvTitle;
         _saveAndClearBackground(); // fire-and-forget
-        if (mounted) {
+        if (mounted && !cancelled) {
           setState(() => _unreadConvIds.add(convId));
           _drawerKey.currentState?.reload();
           final display = convTitle.length > 40
               ? '${convTitle.substring(0, 40)}…'
               : convTitle;
+          final l10n = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Response ready: "$display"'),
+              content: Text(l10n.snackbarResponseReady(display)),
               action: SnackBarAction(
-                label: 'View',
+                label: l10n.snackbarView,
                 onPressed: () => _scaffoldKey.currentState?.openDrawer(),
               ),
             ),
@@ -506,9 +622,20 @@ class _SearchPageState extends State<SearchPage> {
       if (value.containsKey("response")) {
         final text = _stripModelTokens(value["response"] as String);
         if (_backgroundMessages.isNotEmpty &&
-            _backgroundMessages.last['role'] == 'assistant') {
+            _backgroundMessages.last.role == 'assistant') {
           _backgroundMessages[_backgroundMessages.length - 1] =
-              <String, String>{'role': 'assistant', 'text': text};
+              _backgroundMessages.last.copyWith(text: text, isLoading: false);
+        }
+      } else if (value.containsKey("results")) {
+        final docs = value["results"];
+        if (docs is! List || _backgroundMessages.isEmpty) return;
+        if (_backgroundMessages.last.role == 'assistant') {
+          _backgroundMessages[_backgroundMessages.length -
+              1] = _backgroundMessages.last.copyWith(
+            retrievedDocs: docs
+                .map<RetrievedDoc>(RetrievedDoc.fromMap)
+                .toList(),
+          );
         }
       }
       return;
@@ -516,7 +643,26 @@ class _SearchPageState extends State<SearchPage> {
 
     // _isGenerating == true: update the visible conversation.
     if (value.containsKey("done")) {
-      setState(() => _isGenerating = false);
+      setState(() {
+        _isGenerating = false;
+        if (!cancelled ||
+            _messages.isEmpty ||
+            _messages.last.role != 'assistant') {
+          return;
+        }
+        final last = _messages.last;
+        if (last.text.isEmpty && last.retrievedDocs.isEmpty) {
+          _messages.removeLast();
+          if (_messages.isNotEmpty && _messages.last.role == 'user') {
+            _messages.removeLast();
+          }
+        } else {
+          _messages[_messages.length - 1] = last.copyWith(
+            isLoading: false,
+            wasCancelled: true,
+          );
+        }
+      });
       _saveCurrentConversation(); // fire-and-forget
       return;
     }
@@ -532,7 +678,7 @@ class _SearchPageState extends State<SearchPage> {
         final docs = value["results"];
         if (docs is! List) return;
         _messages[lastIdx] = _messages[lastIdx].copyWith(
-          retrievedDocs: docs.map<String>((a) => a as String).toList(),
+          retrievedDocs: docs.map<RetrievedDoc>(RetrievedDoc.fromMap).toList(),
         );
       }
     });
@@ -541,7 +687,11 @@ class _SearchPageState extends State<SearchPage> {
   @override
   void initState() {
     super.initState();
-    _startListeningForLatestMessage();
+    // EventChannel is Android-only — skip on web/desktop to avoid
+    // MissingPluginException during UI development without a device.
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      _startListeningForLatestMessage();
+    }
   }
 
   @override
@@ -554,12 +704,13 @@ class _SearchPageState extends State<SearchPage> {
 
   @override
   Widget build(BuildContext context) {
-    const examples = [
-      "Baby continuous crying",
-      "Preparing for home birth",
-      "Infection risks childbirth",
-      "Bleeding after delivery",
-      "Newborn not breathing",
+    final l10n = AppLocalizations.of(context);
+    final examples = [
+      (l10n.exampleChip1, Icons.pregnant_woman),
+      (l10n.exampleChip2, Icons.child_care),
+      (l10n.exampleChip3, Icons.healing),
+      (l10n.exampleChip4, Icons.medication),
+      (l10n.exampleChip5, Icons.monitor_weight),
     ];
 
     return Scaffold(
@@ -585,7 +736,7 @@ class _SearchPageState extends State<SearchPage> {
         leading: Builder(
           builder: (ctx) => IconButton(
             icon: const Icon(Icons.menu, color: Colors.white),
-            tooltip: 'Conversation history',
+            tooltip: l10n.tooltipConversationHistory,
             onPressed: () => Scaffold.of(ctx).openDrawer(),
           ),
         ),
@@ -598,21 +749,35 @@ class _SearchPageState extends State<SearchPage> {
               child: Image.asset('images/logo.png', height: 42),
             ),
             const SizedBox(width: 10),
-            const Flexible(
-              child: Text(
-                'MAM-AI clinical search',
-                style: TextStyle(color: Colors.white),
-                overflow: TextOverflow.ellipsis,
+            Flexible(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'MAM-AI',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    l10n.appBarSubtitle,
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
             ),
           ],
         ),
-        centerTitle: true,
-        backgroundColor: Colors.deepOrange,
+        backgroundColor: Color(0xffDE7356),
         actions: [
           IconButton(
             icon: const Icon(Icons.add_comment, color: Colors.white),
-            tooltip: 'New conversation',
+            tooltip: l10n.tooltipNewConversation,
             onPressed: _startNewConversation,
           ),
         ],
@@ -623,7 +788,7 @@ class _SearchPageState extends State<SearchPage> {
           children: [
             Expanded(
               child: _messages.isEmpty
-                  ? _buildSuggestionChips(examples)
+                  ? _buildSuggestionChips(examples, l10n)
                   : ListView.builder(
                       controller: _scrollController,
                       padding: const EdgeInsets.all(16),
@@ -642,24 +807,38 @@ class _SearchPageState extends State<SearchPage> {
                       },
                     ),
             ),
-            _buildInputBar(),
+            _buildInputBar(l10n),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSuggestionChips(List<String> examples) {
+  Widget _buildSuggestionChips(
+    List<(String, IconData)> examples,
+    AppLocalizations l10n,
+  ) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.only(bottom: 12),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
             child: Text(
-              'Try asking:',
-              style: TextStyle(fontSize: 16, color: Colors.black54),
+              l10n.emptyStateHeading,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Text(
+              l10n.emptyStateSubheading,
+              style: const TextStyle(fontSize: 14, color: Colors.black45),
             ),
           ),
           Wrap(
@@ -667,9 +846,10 @@ class _SearchPageState extends State<SearchPage> {
             runSpacing: 8,
             children: examples
                 .map(
-                  (text) => SearchSuggestionChip(
-                    text,
+                  (e) => SearchSuggestionChip(
+                    e.$1,
                     SuggestionType.example,
+                    chipIcon: e.$2,
                     onPressed: _generateResponse,
                   ),
                 )
@@ -680,7 +860,7 @@ class _SearchPageState extends State<SearchPage> {
     );
   }
 
-  Widget _buildInputBar() {
+  Widget _buildInputBar(AppLocalizations l10n) {
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -690,7 +870,7 @@ class _SearchPageState extends State<SearchPage> {
               child: TextField(
                 controller: _textController,
                 decoration: InputDecoration(
-                  hintText: 'Ask a medical question...',
+                  hintText: l10n.inputHint,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(24),
                   ),
@@ -706,43 +886,49 @@ class _SearchPageState extends State<SearchPage> {
               ),
             ),
             const SizedBox(width: 4),
-            GestureDetector(
-              onTap: () => setState(() => _useRetrieval = !_useRetrieval),
-              child: Tooltip(
-                message: _useRetrieval ? 'Search enabled' : 'Search disabled',
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _useRetrieval
-                        ? const Color(0xffcc5500)
-                        : Colors.grey[400],
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        _useRetrieval ? 'Search ON' : 'Search OFF',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
+            // Search toggle — only relevant on Android on-device mode.
+            if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) ...[
+              const SizedBox(width: 4),
+              GestureDetector(
+                onTap: () => setState(() => _useRetrieval = !_useRetrieval),
+                child: Tooltip(
+                  message: _useRetrieval
+                      ? l10n.tooltipSearchEnabled
+                      : l10n.tooltipSearchDisabled,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _useRetrieval
+                          ? Color(0xffDE7356)
+                          : Colors.grey[400],
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _useRetrieval ? l10n.searchOn : l10n.searchOff,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
+            ],
             const SizedBox(width: 4),
             if (_isGenerating)
               IconButton.filled(
                 icon: const Icon(Icons.stop),
                 style: IconButton.styleFrom(
-                  backgroundColor: const Color(0xffcc5500),
+                  backgroundColor: Color(0xffDE7356),
                   foregroundColor: Colors.white,
                 ),
                 onPressed: _cancelGeneration,
@@ -751,7 +937,7 @@ class _SearchPageState extends State<SearchPage> {
               IconButton.filled(
                 icon: const Icon(Icons.send),
                 style: IconButton.styleFrom(
-                  backgroundColor: const Color(0xffcc5500),
+                  backgroundColor: Color(0xffDE7356),
                   foregroundColor: Colors.white,
                 ),
                 onPressed: () => _generateResponse(_textController.text),
@@ -787,7 +973,7 @@ class SearchSuggestionTile extends StatelessWidget {
 
     switch (type) {
       case SuggestionType.example:
-        textColor = const Color(0xff994000);
+        textColor = const Color(0xffB85C42);
         icon = Icon(Icons.auto_awesome, color: textColor);
         break;
 
@@ -811,46 +997,54 @@ class SearchSuggestionChip extends StatelessWidget {
     this.type, {
     super.key,
     required this.onPressed,
+    this.chipIcon,
   });
 
   final String text;
   final Function(String) onPressed;
   final SuggestionType type;
+  final IconData? chipIcon;
 
   @override
   Widget build(BuildContext context) {
-    Icon icon;
     Color? bgColor;
     Color? textColor;
     Color borderColor;
 
     switch (type) {
       case SuggestionType.example:
-        icon = const Icon(Icons.auto_awesome);
-        bgColor = Colors.orange[50];
-        textColor = const Color(0xffcc5500);
-        borderColor = Colors.orange[300]!;
+        bgColor = Color(0xffF4F3EE);
+        textColor = Color(0xffDE7356);
+        borderColor = Color(0xffE8E6DC);
         break;
 
       case SuggestionType.history:
         textColor = Colors.black.withAlpha(166);
-        icon = Icon(Icons.history, color: textColor);
         bgColor = null;
         borderColor = Colors.grey;
         break;
     }
 
+    final resolvedIcon =
+        chipIcon ??
+        (type == SuggestionType.history ? Icons.history : Icons.auto_awesome);
+
     return ChipTheme(
       data: ChipThemeData(
-        labelStyle: TextStyle(color: textColor, fontWeight: FontWeight.w500),
+        labelStyle: TextStyle(
+          color: textColor,
+          fontWeight: FontWeight.w500,
+          fontSize: 14,
+        ),
         backgroundColor: bgColor,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         shape: RoundedRectangleBorder(
           side: BorderSide(color: borderColor),
           borderRadius: BorderRadiusGeometry.circular(12),
         ),
       ),
       child: ActionChip(
-        avatar: icon,
+        avatar: Icon(resolvedIcon, color: textColor),
         label: Text(text),
         onPressed: () => onPressed(text),
       ),
@@ -871,10 +1065,10 @@ class _UserBubble extends StatelessWidget {
         margin: const EdgeInsets.only(left: 64, bottom: 12),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: const Color(0xffcc5500),
+          color: Color(0xffDE7356),
           borderRadius: BorderRadius.circular(16),
         ),
-        child: Text(
+        child: SelectableText(
           text,
           style: const TextStyle(color: Colors.white, fontSize: 16),
         ),
@@ -896,10 +1090,19 @@ class _AssistantCard extends StatefulWidget {
 class _AssistantCardState extends State<_AssistantCard> {
   bool _docsExpanded = false;
 
+  /// Converts [1], [2], [3] or [1, 3] or [1, 2, 3] into tappable markdown links.
+  String _insertCitationLinks(String text) {
+    return text.replaceAllMapped(RegExp(r'\[([1-3](?:\s*,\s*[1-3])*)\]'), (m) {
+      final nums = m.group(1)!.split(',').map((s) => s.trim());
+      return nums.map((s) => '[[$s]](cite://${int.parse(s) - 1})').join('');
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final message = widget.message;
-    const lightOrange = Color(0xffff7f50);
+    final l10n = AppLocalizations.of(context);
+    const lightOrange = Color(0xffDE7356);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -930,27 +1133,54 @@ class _AssistantCardState extends State<_AssistantCard> {
                       end: 24,
                       bottom: message.wasCancelled ? 8 : 16,
                     ),
-                    child: SelectionContainer.disabled(
-                      child: MarkdownBlock(
-                        data: message.text,
-                        config: MarkdownConfig(
-                          configs: [
-                            PConfig(textStyle: const TextStyle(fontSize: 18)),
-                          ],
-                        ),
+                    child: MarkdownBlock(
+                      data: _insertCitationLinks(message.text),
+                      config: MarkdownConfig(
+                        configs: [
+                          PConfig(textStyle: const TextStyle(fontSize: 18)),
+                          LinkConfig(
+                            style: const TextStyle(
+                              color: Color(0xffDE7356),
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              decoration: TextDecoration.none,
+                            ),
+                            onTap: (url) {
+                              if (url.startsWith('cite://')) {
+                                final idx = int.tryParse(url.substring(7));
+                                if (idx != null &&
+                                    idx < message.retrievedDocs.length) {
+                                  final doc = message.retrievedDocs[idx];
+                                  if (doc.hasSource) {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => PdfViewerPage(
+                                          source: doc.source,
+                                          page: doc.page > 0 ? doc.page : 1,
+                                          highlightText: doc.text,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                }
+                              }
+                            },
+                          ),
+                        ],
                       ),
                     ),
                   ),
                 if (message.wasCancelled)
-                  const Padding(
-                    padding: EdgeInsetsDirectional.only(
+                  Padding(
+                    padding: const EdgeInsetsDirectional.only(
                       start: 16,
                       end: 24,
                       bottom: 12,
                     ),
                     child: Text(
-                      'Response was interrupted.',
-                      style: TextStyle(
+                      l10n.responseCancelled,
+                      style: const TextStyle(
                         color: Colors.grey,
                         fontSize: 14,
                         fontStyle: FontStyle.italic,
@@ -962,11 +1192,11 @@ class _AssistantCardState extends State<_AssistantCard> {
           ),
           // Disclaimer shown on the latest response once generation is complete
           if (widget.showDisclaimer)
-            const Padding(
-              padding: EdgeInsets.only(top: 4, left: 4),
+            Padding(
+              padding: const EdgeInsets.only(top: 4, left: 4),
               child: Text(
-                'MAM-AI can make mistakes. Please double-check responses.',
-                style: TextStyle(fontSize: 11, color: Colors.black38),
+                l10n.disclaimer,
+                style: const TextStyle(fontSize: 11, color: Colors.black38),
               ),
             ),
         ],
@@ -1005,7 +1235,8 @@ class _ThinkingIndicatorState extends State<_ThinkingIndicator>
 
   @override
   Widget build(BuildContext context) {
-    final label = widget.hasDocs ? 'Generating response' : 'Thinking';
+    final l10n = AppLocalizations.of(context);
+    final label = widget.hasDocs ? l10n.generatingLabel : l10n.thinkingLabel;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
       child: AnimatedBuilder(
@@ -1069,7 +1300,7 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
     if (mounted) setState(() => _conversations = conversations);
   }
 
-  String _formatTimestamp(DateTime dt) {
+  String _formatTimestamp(DateTime dt, AppLocalizations l10n) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = today.subtract(const Duration(days: 1));
@@ -1077,9 +1308,9 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
     if (date == today) {
       final h = dt.hour.toString().padLeft(2, '0');
       final m = dt.minute.toString().padLeft(2, '0');
-      return 'Today $h:$m';
+      return l10n.timestampToday('$h:$m');
     } else if (date == yesterday) {
-      return 'Yesterday';
+      return l10n.timestampYesterday;
     } else {
       return '${dt.day}/${dt.month}/${dt.year}';
     }
@@ -1087,19 +1318,20 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Drawer(
       child: Column(
         children: [
           DrawerHeader(
-            decoration: const BoxDecoration(color: Colors.deepOrange),
+            decoration: const BoxDecoration(color: Color(0xffDE7356)),
             padding: const EdgeInsets.fromLTRB(16, 16, 8, 16),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
-                    'Past conversations',
-                    style: TextStyle(
+                    l10n.drawerTitle,
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -1114,8 +1346,8 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
             ),
           ),
           ListTile(
-            leading: const Icon(Icons.add_comment, color: Colors.deepOrange),
-            title: const Text('New conversation'),
+            leading: const Icon(Icons.add_comment, color: Color(0xffDE7356)),
+            title: Text(l10n.drawerNewConversation),
             onTap: () {
               Navigator.pop(context);
               widget.onNewConversation();
@@ -1124,10 +1356,10 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
           const Divider(height: 1),
           Expanded(
             child: _conversations.isEmpty
-                ? const Center(
+                ? Center(
                     child: Text(
-                      'No conversations yet',
-                      style: TextStyle(color: Colors.grey),
+                      l10n.drawerNoConversations,
+                      style: const TextStyle(color: Colors.grey),
                     ),
                   )
                 : ListView.builder(
@@ -1142,7 +1374,7 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
                       final isUnread = widget.unreadIds.contains(c.id);
                       return ListTile(
                         selected: isActive,
-                        selectedTileColor: Colors.orange[50],
+                        selectedTileColor: Color(0xffF4F3EE),
                         // Blue dot for unread; transparent placeholder keeps
                         // alignment consistent across all rows.
                         leading: Container(
@@ -1158,7 +1390,7 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        subtitle: Text(_formatTimestamp(c.timestamp)),
+                        subtitle: Text(_formatTimestamp(c.timestamp, l10n)),
                         // Spinner for background generation; nothing for
                         // foreground generation; delete button otherwise.
                         trailing: isBackgroundGenerating
@@ -1166,7 +1398,7 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
                                 dimension: 24,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  color: Colors.deepOrange,
+                                  color: Color(0xffDE7356),
                                 ),
                               )
                             : isForegroundGenerating
@@ -1177,25 +1409,29 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
                                   size: 20,
                                 ),
                                 color: Colors.grey,
-                                tooltip: 'Delete',
+                                tooltip: l10n.dialogDelete,
                                 onPressed: () async {
                                   final confirmed = await showDialog<bool>(
                                     context: context,
                                     builder: (ctx) => AlertDialog(
-                                      title: const Text('Delete conversation?'),
-                                      content: Text('Delete "${c.title}"?'),
+                                      title: Text(l10n.deleteConversationTitle),
+                                      content: Text(
+                                        l10n.deleteConversationContent(c.title),
+                                      ),
                                       actions: [
                                         TextButton(
                                           onPressed: () =>
                                               Navigator.pop(ctx, false),
-                                          child: const Text('Cancel'),
+                                          child: Text(l10n.dialogCancel),
                                         ),
                                         TextButton(
                                           onPressed: () =>
                                               Navigator.pop(ctx, true),
-                                          child: const Text(
-                                            'Delete',
-                                            style: TextStyle(color: Colors.red),
+                                          child: Text(
+                                            l10n.dialogDelete,
+                                            style: const TextStyle(
+                                              color: Colors.red,
+                                            ),
                                           ),
                                         ),
                                       ],
@@ -1221,28 +1457,26 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
               top: false,
               child: ListTile(
                 leading: const Icon(Icons.delete_forever, color: Colors.red),
-                title: const Text(
-                  'Clear all conversations',
-                  style: TextStyle(color: Colors.red),
+                title: Text(
+                  l10n.clearAllDrawerItem,
+                  style: const TextStyle(color: Colors.red),
                 ),
                 onTap: () async {
                   final confirmed = await showDialog<bool>(
                     context: context,
                     builder: (ctx) => AlertDialog(
-                      title: const Text('Clear all conversations?'),
-                      content: const Text(
-                        'This will permanently delete all past conversations.',
-                      ),
+                      title: Text(l10n.clearAllTitle),
+                      content: Text(l10n.clearAllContent),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.pop(ctx, false),
-                          child: const Text('Cancel'),
+                          child: Text(l10n.dialogCancel),
                         ),
                         TextButton(
                           onPressed: () => Navigator.pop(ctx, true),
-                          child: const Text(
-                            'Clear all',
-                            style: TextStyle(color: Colors.red),
+                          child: Text(
+                            l10n.clearAllButton,
+                            style: const TextStyle(color: Colors.red),
                           ),
                         ),
                       ],
@@ -1256,6 +1490,21 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
               ),
             ),
           ],
+          const Divider(height: 1),
+          SafeArea(
+            top: false,
+            child: ListTile(
+              leading: const Icon(Icons.info_outline, color: Color(0xffDE7356)),
+              title: Text(l10n.drawerAbout),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AboutPage()),
+                );
+              },
+            ),
+          ),
         ],
       ),
     );
@@ -1264,7 +1513,7 @@ class _ConversationDrawerState extends State<_ConversationDrawer> {
 
 /// Collapsible section showing retrieved guideline chunks
 class _RetrievalDisclosure extends StatelessWidget {
-  final List<String> docs;
+  final List<RetrievedDoc> docs;
   final bool expanded;
   final VoidCallback onToggle;
 
@@ -1274,8 +1523,23 @@ class _RetrievalDisclosure extends StatelessWidget {
     required this.onToggle,
   });
 
+  void _openPdf(BuildContext context, RetrievedDoc doc) {
+    if (!doc.hasSource) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PdfViewerPage(
+          source: doc.source,
+          page: doc.page > 0 ? doc.page : 1,
+          highlightText: doc.text,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1294,7 +1558,7 @@ class _RetrievalDisclosure extends StatelessWidget {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  'Retrieved ${docs.length} guideline${docs.length == 1 ? '' : 's'}',
+                  l10n.retrievedGuidelines(docs.length),
                   style: const TextStyle(color: Colors.grey, fontSize: 13),
                 ),
               ],
@@ -1302,43 +1566,70 @@ class _RetrievalDisclosure extends StatelessWidget {
           ),
         ),
         if (expanded)
-          ...docs.asMap().entries.map(
-            (entry) => Container(
+          ...docs.map(
+            (doc) => Container(
               margin: const EdgeInsets.only(bottom: 8),
               decoration: BoxDecoration(
-                color: Colors.orange[50],
-                border: const Border(
-                  left: BorderSide(color: Color(0xffcc5500), width: 3),
-                ),
-                borderRadius: const BorderRadius.only(
-                  topRight: Radius.circular(8),
-                  bottomRight: Radius.circular(8),
-                ),
+                color: const Color(0xffF4F3EE),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xffE8E6DC)),
               ),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 14, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Guideline ${entry.key + 1} of ${docs.length}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.orange[800],
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Source chip — tappable if we have metadata
+                  if (doc.hasSource)
+                    InkWell(
+                      onTap: () => _openPdf(context, doc),
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(8),
+                      ),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 7,
+                        ),
+                        decoration: const BoxDecoration(
+                          color: Color(0xffE8E6DC),
+                          borderRadius: BorderRadius.vertical(
+                            top: Radius.circular(7),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.picture_as_pdf_outlined,
+                              size: 14,
+                              color: Color(0xff8B6914),
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                doc.label,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xff8B6914),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const Icon(
+                              Icons.chevron_right,
+                              size: 14,
+                              color: Color(0xff8B6914),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      entry.value,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        height: 1.5,
-                        color: Colors.black87,
-                      ),
-                    ),
-                  ],
-                ),
+                  // Chunk text
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Text(doc.text, style: const TextStyle(fontSize: 13)),
+                  ),
+                ],
               ),
             ),
           ),

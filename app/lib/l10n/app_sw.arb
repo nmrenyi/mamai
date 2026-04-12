@@ -1,0 +1,159 @@
+{
+  "@@locale": "sw",
+
+  "appBarSubtitle": "Kwa wauguzi wakunga Zanzibar",
+
+  "tooltipConversationHistory": "Historia ya mazungumzo",
+  "tooltipNewConversation": "Mazungumzo mapya",
+  "tooltipSearchEnabled": "Utafutaji umewashwa",
+  "tooltipSearchDisabled": "Utafutaji umezimwa",
+  "searchOn": "Tafuta IMEWASHWA",
+  "searchOff": "Tafuta IMEZIMWA",
+
+  "dialogCancelGenerationTitle": "Ghairi uzalishaji uliopita?",
+  "dialogCancelGenerationContent": "Jibu bado linazalishwa kwa mazungumzo ya awali. Lighairie kutuma ujumbe huu?",
+  "dialogWait": "Ngoja",
+  "dialogCancelAndSend": "Ghairi na tuma",
+
+  "snackbarHistoryTruncated": "Ujumbe wa zamani uliondolewa ili kulingana na dirisha la muktadha la modeli.",
+  "snackbarResponseReady": "Jibu liko tayari: \"{title}\"",
+  "@snackbarResponseReady": {
+    "placeholders": {
+      "title": { "type": "String" }
+    }
+  },
+  "snackbarView": "Tazama",
+
+  "emptyStateHeading": "Unahitaji msaada gani leo?",
+  "emptyStateSubheading": "Hapa kukusaidia mahali pa huduma.",
+
+  "exampleChip1": "Ninapimaje urefu wa fundal?",
+  "exampleChip2": "Mtoto mchanga wa mgonjwa wangu hawezi kunyonya, nifanye nini?",
+  "exampleChip3": "Ninatunzaje kitovu baada ya kuzaa?",
+  "exampleChip4": "Ninapaswa kutoa dawa za chuma lini wakati wa ujauzito?",
+  "exampleChip5": "Kupungua kwa uzito wa mtoto mchanga kiasi gani ni kawaida?",
+
+  "inputHint": "Eleza hali yako ya kliniki...",
+  "disclaimer": "Daima tumia uamuzi wako wa kimatibabu. Kwa dharura, piga kengele haraka.",
+
+  "thinkingLabel": "Nafikiri",
+  "generatingLabel": "Ninatengeneza jibu",
+  "responseCancelled": "Jibu lilikatizwa.",
+
+  "aboutTitle": "Kuhusu",
+  "aboutDescription": "Chombo cha msaada wa maamuzi ya kimatibabu kwa wauguzi-wakunga Zanzibar. Kinatoa majibu kamili bila mtandao, yanayolingana na miongozo ya kimatibabu — inayoshughulikia afya ya uzazi, uzazishaji, na utunzaji wa watoto wachanga — kwa msaada wa kuaminika, wa siri mahali pa huduma.",
+  "aboutKnowledgeBundleTitle": "Kifurushi cha maarifa",
+  "aboutKnowledgeBundleUnavailable": "Taarifa za kifurushi bado hazipatikani kwenye kifaa hiki.",
+  "aboutKnowledgeBundleVersionLabel": "Toleo",
+  "aboutKnowledgeBundleDeployedLabel": "Kimepelekwa",
+
+  "drawerAbout": "Kuhusu MAM-AI",
+  "drawerTitle": "Mazungumzo ya zamani",
+  "drawerNewConversation": "Mazungumzo mapya",
+  "drawerNoConversations": "Hakuna mazungumzo bado",
+  "timestampToday": "Leo {time}",
+  "@timestampToday": {
+    "placeholders": {
+      "time": { "type": "String" }
+    }
+  },
+  "timestampYesterday": "Jana",
+
+  "deleteConversationTitle": "Futa mazungumzo?",
+  "deleteConversationContent": "Futa \"{title}\"?",
+  "@deleteConversationContent": {
+    "placeholders": {
+      "title": { "type": "String" }
+    }
+  },
+  "dialogCancel": "Ghairi",
+  "dialogDelete": "Futa",
+
+  "clearAllTitle": "Futa mazungumzo yote?",
+  "clearAllContent": "Hii itafuta kabisa mazungumzo yote ya zamani.",
+  "clearAllButton": "Futa yote",
+  "clearAllDrawerItem": "Futa mazungumzo yote",
+
+  "retrievedGuidelines": "{count, plural, =1{Mwongozo 1 uliopatikana} other{Miongozo {count} iliyopatikana}}",
+  "@retrievedGuidelines": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+
+  "introCheckingLLM": "Inaangalia kama LLM imewekwa...",
+  "introLLMLoading": "LLM inawashwa (inaweza kuchukua muda mara ya kwanza)...",
+  "introStartChat": "Anza mazungumzo",
+  "introDownloadModels": "Pakua mifano",
+  "introDownloadIncludesTitle": "Usanidi huu utapakua",
+  "introDownloadSpeedLabel": "Kasi",
+  "introDownloadFinishesIn": "inakamilika baada ya {time}",
+  "@introDownloadFinishesIn": {
+    "placeholders": {
+      "time": { "type": "String" }
+    }
+  },
+  "introDownloadStatusQueued": "Imepangwa",
+  "introDownloadStatusStarting": "Inaanza",
+  "introDownloadStatusReady": "Tayari",
+  "introDownloadStatusFinalizing": "Inafungua kifurushi",
+  "introDownloadStatusDecompressing": "Inafungua data",
+  "introDownloadStatusScanning": "Inasoma faili",
+  "introDownloadStatusExtracting": "Inasanikisha maktaba ya maarifa",
+  "introDownloadStatusVerifying": "Inathibitisha",
+  "introDownloadBundleDecompressing": "Inafungua kumbukumbu ya kifurushi: {current} kati ya {total}.",
+  "@introDownloadBundleDecompressing": {
+    "placeholders": {
+      "current": { "type": "String" },
+      "total": { "type": "String" }
+    }
+  },
+  "introDownloadBundleScanning": "Inasoma yaliyomo kwenye kifurushi ili programu iandae faili za bila mtandao.",
+  "introDownloadBundleExtracting": "Inasanikisha maktaba ya maarifa ya matibabu ({current} kati ya {total}): inahifadhi faharasa ya utafutaji na PDF {count} za miongozo ya kliniki kwenye kifaa chako ili programu iweze kujibu maswali bila mtandao.",
+  "@introDownloadBundleExtracting": {
+    "placeholders": {
+      "current": { "type": "String" },
+      "total": { "type": "String" },
+      "count": { "type": "int" }
+    }
+  },
+  "introDownloadBundleVerifying": "Inakagua kuwa hifadhidata ya ulinganishi na PDF {count} za miongozo ziko tayari.",
+  "@introDownloadBundleVerifying": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "introDownloadBundleParallel": "Kifurushi cha maarifa tayari kimepakuliwa. Programu sasa inafungua hifadhidata ya ulinganishi na PDF {count} za miongozo huku faili za modeli zilizobaki zikiendelea kupakuliwa.",
+  "@introDownloadBundleParallel": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "introDownloadBundleOnly": "Vipakuzi vyote vimekamilika. Programu sasa inafungua hifadhidata ya ulinganishi na PDF {count} za miongozo, kisha inathibitisha data za bila mtandao.",
+  "@introDownloadBundleOnly": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "introAssetGemmaTitle": "Mfano wa Gemma 4 kwenye kifaa",
+  "introAssetGemmaSubtitle": "Mfano mkuu wa lugha kwa majibu ya mazungumzo.",
+  "introAssetGeckoTitle": "Mfano wa Gecko wa ulinganishi",
+  "introAssetGeckoSubtitle": "Hutumika kupata sehemu za mwongozo zinazofaa zaidi.",
+  "introAssetTokenizerTitle": "Tokenizer ya SentencePiece",
+  "introAssetTokenizerSubtitle": "Tokenizer inayohitajika na mfano wa ulinganishi.",
+  "introAssetBundleTitle": "Kifurushi cha maarifa",
+  "introAssetBundleSubtitle": "Hifadhidata ya ulinganishi pamoja na PDF {count} za miongozo.",
+  "@introAssetBundleSubtitle": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "introWelcome": "Karibu MAM-AI",
+  "introDescription": "Majibu ya kuaminika ya kimatibabu, bila mtandao, daima tayari.",
+  "introPartnership": "Kwa ushirikiano na",
+
+  "switchToSwahili": "Kiswahili",
+  "switchToEnglish": "Kiingereza",
+
+  "errorOnDeviceUnavailable": "Hali ya kwenye kifaa haipatikani kwenye mfumo huu."
+}

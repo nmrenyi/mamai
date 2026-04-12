@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -5,17 +7,34 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
+}
+
+fun propOrEnv(envName: String, propertyName: String): String? =
+    System.getenv(envName)?.takeIf { it.isNotBlank() }
+        ?: (keystoreProperties.getProperty(propertyName)?.takeIf { it.isNotBlank() })
+
 android {
     namespace = "com.example.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = "27.0.12077973"
+    val releaseStoreFile = propOrEnv("ANDROID_KEYSTORE_PATH", "storeFile")
+    val releaseStorePassword = propOrEnv("ANDROID_KEYSTORE_PASSWORD", "storePassword")
+    val releaseKeyAlias = propOrEnv("ANDROID_KEY_ALIAS", "keyAlias")
+    val releaseKeyPassword = propOrEnv("ANDROID_KEY_PASSWORD", "keyPassword")
+    val hasCustomReleaseSigning = listOf(
+        releaseStoreFile,
+        releaseStorePassword,
+        releaseKeyAlias,
+        releaseKeyPassword,
+    ).all { !it.isNullOrBlank() }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
-    }
-
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
     }
 
     buildFeatures {
@@ -33,15 +52,36 @@ android {
         versionName = flutter.versionName
     }
 
+    sourceSets {
+        getByName("main") {
+            assets.srcDirs("src/main/assets", "../../../config")
+        }
+    }
+
+    signingConfigs {
+        create("release") {
+            if (hasCustomReleaseSigning) {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
 
             isShrinkResources = false
 
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Real releases use the configured keystore; local/CI validation
+            // falls back to the debug keystore when no release secrets exist.
+            signingConfig = if (hasCustomReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }
@@ -49,10 +89,17 @@ android {
 flutter {
     source = "../.."
 }
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+    }
+}
 dependencies {
     implementation("com.google.ai.edge.localagents:localagents-rag:0.2.0")
-    implementation("com.google.mediapipe:tasks-genai:0.10.25")
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.10.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.10.2")
+    implementation("com.google.protobuf:protobuf-javalite:3.25.4")
 }
 
 tasks.register("prepareKotlinBuildScriptModel") {}

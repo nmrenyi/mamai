@@ -1,2 +1,0 @@
-include ':android'
-project(':android').projectDir = new File(rootDir, 'app/android/')
