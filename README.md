@@ -213,7 +213,7 @@ Downloaded on first launch and stored on-device. All files are fetched directly 
 | `sentencepiece.model` | Gecko tokenizer (794 KB) | [litert-community/Gecko-110m-en](https://huggingface.co/litert-community/Gecko-110m-en) |
 | `embeddings.sqlite` | Pre-computed embeddings for guideline chunks | [mamai-medical-guidelines releases](https://github.com/nmrenyi/mamai-medical-guidelines/releases) |
 
-> **Note:** Gemma requires license acceptance before use. The app presents the license dialog before downloading. The pinned RAG bundle URL/version now live in `config/rag_assets.lock.json`, which is shared by the app and the staging scripts.
+> **Note:** Gemma's Terms of Use and Prohibited Use Policy are presented as inline text on the download screen. The pinned RAG bundle URL/version live in `config/rag_assets.lock.json`, which is shared by the app and the staging scripts.
 
 ## Evaluation
 
