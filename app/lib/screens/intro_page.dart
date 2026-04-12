@@ -148,7 +148,7 @@ class _IntroPageState extends State<IntroPage> {
       );
       setState(() => download.finished = true);
     } catch (e) {
-      setState(() => download.markError(_downloadErrorMessage(e)));
+      setState(() => download.markError(_downloadErrorMessage(e, url: _modelFileUrls[filename]!)));
     }
   }
 
@@ -322,15 +322,12 @@ class _IntroPageState extends State<IntroPage> {
     }
   }
 
-  String _downloadErrorMessage(Object e) {
+  String _downloadErrorMessage(Object e, {required String url}) {
     const hint = 'Please connect to a stable internet connection, then tap Retry.';
-    if (e is TimeoutException) {
-      return 'Connection lost after several retries. $hint';
-    }
-    if (e is DioException) {
-      return 'Download failed after several retries. $hint';
-    }
-    return 'Download failed after several retries. $hint';
+    final body = e is TimeoutException
+        ? 'Connection lost after several retries. $hint'
+        : 'Download failed after several retries. $hint';
+    return '$body\nSource: $url';
   }
 
   /// Wraps [_downloadWithResume] with automatic exponential-backoff retries.
@@ -406,7 +403,7 @@ class _IntroPageState extends State<IntroPage> {
         download: download,
       );
     } catch (e) {
-      setState(() => download.markError(_downloadErrorMessage(e)));
+      setState(() => download.markError(_downloadErrorMessage(e, url: bundle.bundleUrl)));
       return;
     }
     setState(() {
@@ -601,11 +598,13 @@ class _IntroPageState extends State<IntroPage> {
           return false;
         }
         // Sanity-check: Gemma 4 E4B is 3.65 GB — reject truncated downloads.
+        // Threshold is 3.5 GB (95 % of actual) to catch partial downloads
+        // in the 3.0–3.65 GB range that would otherwise pass the old 3 GB guard.
         final gemmaSize = io.File(
           '${_downloadDir!.path}/gemma-4-E4B-it.litertlm',
         ).lengthSync();
         debugPrint('Gemma model size: $gemmaSize bytes');
-        return gemmaSize > 3000000000;
+        return gemmaSize > 3500000000;
       }
       return false;
     }
