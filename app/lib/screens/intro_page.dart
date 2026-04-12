@@ -1053,21 +1053,18 @@ class _IntroPageState extends State<IntroPage> {
         );
       }
     } else if (!downloadsStarted) {
-      // Download not yet started - prompt license
+      // Download not yet started
       nextButton = Column(
         children: [
           _buildDownloadChecklist(l10n),
           const SizedBox(height: 16),
           ElevatedButton(
-            onPressed: () async {
-              var accepted = await promptLicense(context, l10n);
-              if (accepted ?? false) {
-                _startDownloadService();
-                for (final filename in _modelFiles) {
-                  downloadFile(filename);
-                }
-                downloadAndExtractBundle();
+            onPressed: () {
+              _startDownloadService();
+              for (final filename in _modelFiles) {
+                downloadFile(filename);
               }
+              downloadAndExtractBundle();
             },
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.all(20),
@@ -1084,6 +1081,48 @@ class _IntroPageState extends State<IntroPage> {
                 fontWeight: FontWeight.bold,
               ),
             ),
+          ),
+          const SizedBox(height: 8),
+          Text.rich(
+            TextSpan(
+              style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+              children: [
+                const TextSpan(text: 'By downloading you agree to Google\'s '),
+                WidgetSpan(
+                  alignment: PlaceholderAlignment.baseline,
+                  baseline: TextBaseline.alphabetic,
+                  child: GestureDetector(
+                    onTap: () => launchUrlString('https://ai.google.dev/gemma/terms'),
+                    child: Text(
+                      'Gemma Terms of Use',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.blue[700],
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                ),
+                const TextSpan(text: ' and '),
+                WidgetSpan(
+                  alignment: PlaceholderAlignment.baseline,
+                  baseline: TextBaseline.alphabetic,
+                  child: GestureDetector(
+                    onTap: () => launchUrlString('https://ai.google.dev/gemma/prohibited_use_policy'),
+                    child: Text(
+                      'Prohibited Use Policy',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.blue[700],
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                ),
+                const TextSpan(text: '.'),
+              ],
+            ),
+            textAlign: TextAlign.center,
           ),
         ],
       );
@@ -1426,77 +1465,6 @@ void _forceBundleExtractProgress(
   });
 }
 
-Future<bool?> promptLicense(BuildContext context, AppLocalizations l10n) {
-  return showDialog<bool>(
-    context: context,
-    barrierDismissible: false,
-    builder: (BuildContext context) {
-      return AlertDialog(
-        title: Text(l10n.licenseTitle),
-        content: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 500),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(l10n.licenseIntro),
-              const SizedBox(height: 30),
-              Text(l10n.licenseTermsText),
-              const SizedBox(height: 15),
-              InkWell(
-                child: const Padding(
-                  padding: EdgeInsets.all(8.0),
-                  child: Text(
-                    "ai.google.dev/gemma/terms",
-                    style: TextStyle(
-                      color: Colors.blue,
-                      decoration: TextDecoration.underline,
-                    ),
-                  ),
-                ),
-                onTap: () {
-                  launchUrlString("https://ai.google.dev/gemma/terms");
-                },
-              ),
-              InkWell(
-                child: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Text(
-                    l10n.licenseUsagePolicyLink,
-                    style: const TextStyle(
-                      color: Colors.blue,
-                      decoration: TextDecoration.underline,
-                    ),
-                  ),
-                ),
-                onTap: () {
-                  launchUrlString(
-                    "https://ai.google.dev/gemma/prohibited_use_policy",
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
-        actions: <Widget>[
-          TextButton(
-            style: TextButton.styleFrom(
-              textStyle: Theme.of(context).textTheme.labelLarge,
-            ),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(l10n.licenseAccept),
-          ),
-          TextButton(
-            style: TextButton.styleFrom(
-              textStyle: Theme.of(context).textTheme.labelLarge,
-            ),
-            child: Text(l10n.licenseDeny),
-            onPressed: () => Navigator.of(context).pop(false),
-          ),
-        ],
-      );
-    },
-  );
-}
 
 class DownloadInProgress {
   int total;
