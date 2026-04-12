@@ -113,30 +113,30 @@ class _IntroPageState extends State<IntroPage> {
   // Marker file written after successful bundle extraction.
   static const String _bundleMarker = '.rag_bundle_ready';
 
-  /// Downloads a single model file from HuggingFace.
+  /// Downloads a single model file from HuggingFace, resuming from any
+  /// partial file already on disk.
   Future<void> downloadFile(String filename) async {
     final directory = await downloadDir();
-    final download = DownloadInProgress(total: 1, current: 0, finished: false);
+    final destPath = '${directory.path}/$filename';
+    final existingSize =
+        io.File(destPath).existsSync() ? io.File(destPath).lengthSync() : 0;
+    final download = DownloadInProgress(
+      total: existingSize > 0 ? existingSize : 1,
+      current: existingSize,
+      finished: false,
+      sessionStartBytes: existingSize,
+    );
     setState(() => downloads[filename] = download);
 
     try {
-      await Dio(
-        BaseOptions(receiveTimeout: const Duration(seconds: 30)),
-      ).download(
-        _modelFileUrls[filename]!,
-        '${directory.path}/$filename',
-        onReceiveProgress: (current, int total) {
-          setState(() {
-            download.updateProgress(current, total);
-          });
-        },
+      await _downloadWithResume(
+        url: _modelFileUrls[filename]!,
+        destPath: destPath,
+        download: download,
       );
       setState(() => download.finished = true);
     } catch (e) {
-      final msg = e is DioException && e.type == DioExceptionType.receiveTimeout
-          ? 'Download stalled (no data for 30 s). Tap Retry.'
-          : 'Download failed: ${e.toString().split('\n').first}';
-      setState(() => download.markError(msg));
+      setState(() => download.markError(_downloadErrorMessage(e)));
     }
   }
 
@@ -150,6 +150,76 @@ class _IntroPageState extends State<IntroPage> {
     }
   }
 
+  /// Downloads [url] to [destPath], resuming from any existing partial file.
+  ///
+  /// Sends `Range: bytes=<size>-` if a partial file exists.  If the server
+  /// honours the range (HTTP 206) the file is opened in append mode; if it
+  /// returns 200 instead the partial file is overwritten from scratch.
+  /// A 30-second per-chunk idle timeout detects stalled connections.
+  Future<void> _downloadWithResume({
+    required String url,
+    required String destPath,
+    required DownloadInProgress download,
+  }) async {
+    final destFile = io.File(destPath);
+    final existingSize =
+        destFile.existsSync() ? destFile.lengthSync() : 0;
+
+    final dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 15)));
+    final response = await dio.get<ResponseBody>(
+      url,
+      options: Options(
+        responseType: ResponseType.stream,
+        headers: existingSize > 0 ? {'Range': 'bytes=$existingSize-'} : {},
+        followRedirects: true,
+      ),
+    );
+
+    // 206 = server honoured our Range header; 200 = it ignored it.
+    final resuming = response.statusCode == HttpStatus.partialContent;
+    final sessionStart = resuming ? existingSize : 0;
+
+    final contentLength = int.tryParse(
+      response.headers.value(HttpHeaders.contentLengthHeader) ?? '',
+    ) ?? -1;
+    final fullSize =
+        contentLength > 0 ? sessionStart + contentLength : 0;
+
+    // Update progress baseline so the UI reflects already-downloaded bytes.
+    setState(() => download.resumeFrom(sessionStart, fullSize));
+
+    final sink = destFile.openWrite(
+      mode: resuming ? FileMode.append : FileMode.write,
+    );
+    var received = sessionStart;
+
+    try {
+      await for (final chunk in response.data!.stream.timeout(
+        const Duration(seconds: 30),
+      )) {
+        sink.add(chunk);
+        received += chunk.length;
+        setState(() => download.updateProgress(
+          received,
+          fullSize > 0 ? fullSize : received + 1,
+        ));
+      }
+      await sink.flush();
+    } finally {
+      await sink.close();
+    }
+  }
+
+  String _downloadErrorMessage(Object e) {
+    if (e is TimeoutException) {
+      return 'Download stalled (no data for 30 s). Tap Retry.';
+    }
+    if (e is DioException) {
+      return 'Download failed: ${e.message ?? e.type.name}';
+    }
+    return 'Download failed: ${e.toString().split('\n').first}';
+  }
+
   /// Downloads the RAG bundle tar.gz and extracts embeddings.sqlite + PDFs.
   Future<void> downloadAndExtractBundle() async {
     final bundle = _pinnedBundle;
@@ -158,26 +228,24 @@ class _IntroPageState extends State<IntroPage> {
     }
     final directory = await downloadDir();
     final tmpPath = '${directory.path}/rag-bundle.tar.gz.tmp';
-    final download = DownloadInProgress(total: 1, current: 0, finished: false);
+    final tmpExisting =
+        io.File(tmpPath).existsSync() ? io.File(tmpPath).lengthSync() : 0;
+    final download = DownloadInProgress(
+      total: tmpExisting > 0 ? tmpExisting : 1,
+      current: tmpExisting,
+      finished: false,
+      sessionStartBytes: tmpExisting,
+    );
     setState(() => downloads[_bundleKey] = download);
 
     try {
-      await Dio(
-        BaseOptions(receiveTimeout: const Duration(seconds: 30)),
-      ).download(
-        bundle.bundleUrl,
-        tmpPath,
-        onReceiveProgress: (current, int total) {
-          setState(() {
-            download.updateProgress(current, total);
-          });
-        },
+      await _downloadWithResume(
+        url: bundle.bundleUrl,
+        destPath: tmpPath,
+        download: download,
       );
     } catch (e) {
-      final msg = e is DioException && e.type == DioExceptionType.receiveTimeout
-          ? 'Download stalled (no data for 30 s). Tap Retry.'
-          : 'Download failed: ${e.toString().split('\n').first}';
-      setState(() => download.markError(msg));
+      setState(() => download.markError(_downloadErrorMessage(e)));
       return;
     }
     setState(() {
@@ -1310,6 +1378,10 @@ class DownloadInProgress {
   String? errorMessage;
   final DateTime startedAt;
   DateTime? _lastDisplayUpdateAt;
+  // Bytes already on disk at the start of this session (for resumed downloads).
+  // Speed is measured only over bytes received in the current session so it
+  // doesn't show an unrealistically high number right after resuming.
+  int _sessionStartBytes;
   double speedBytesPerSecond;
   double displayedSpeedBytesPerSecond;
   Duration? displayedEta;
@@ -1322,10 +1394,21 @@ class DownloadInProgress {
     this.stage,
     this.errorMessage,
     DateTime? startedAt,
+    int sessionStartBytes = 0,
     this.speedBytesPerSecond = 0,
     this.displayedSpeedBytesPerSecond = 0,
     this.displayedEta,
-  }) : startedAt = startedAt ?? DateTime.now();
+  }) : startedAt = startedAt ?? DateTime.now(),
+       _sessionStartBytes = sessionStartBytes;
+
+  /// Called once we know the server accepted our Range request and how many
+  /// bytes are already on disk. Adjusts the progress baseline so the UI
+  /// shows partial progress immediately and speed reflects only new bytes.
+  void resumeFrom(int alreadyOnDisk, int fullFileSize) {
+    _sessionStartBytes = alreadyOnDisk;
+    current = alreadyOnDisk;
+    if (fullFileSize > 0) total = fullFileSize;
+  }
 
   void updateProgress(int nextCurrent, int nextTotal) {
     final now = DateTime.now();
@@ -1335,12 +1418,13 @@ class DownloadInProgress {
     total = safeTotal;
     current = safeCurrent > safeTotal ? safeTotal : safeCurrent;
 
-    // Speed = total bytes received / total elapsed seconds since download began.
-    // This is always accurate from the first sample and never lags behind the
-    // byte counter the way an EWMA starting from 0 would.
+    // Speed = bytes received THIS session / elapsed seconds.
+    // Excludes bytes already on disk from a previous session so we don't
+    // show an inflated speed right after resuming a large partial download.
+    final sessionBytes = current - _sessionStartBytes;
     final elapsedSeconds = now.difference(startedAt).inMilliseconds / 1000.0;
-    if (elapsedSeconds > 0) {
-      speedBytesPerSecond = current / elapsedSeconds;
+    if (elapsedSeconds > 0 && sessionBytes > 0) {
+      speedBytesPerSecond = sessionBytes / elapsedSeconds;
     }
 
     final shouldRefreshDisplay =
