@@ -81,9 +81,15 @@ class DownloadForegroundService : Service() {
             progress: Int,
             max: Int,
         ): Notification {
+            val explanation = "MAM-AI is downloading AI models needed to answer " +
+                "medical questions offline. This only happens once."
             val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setContentTitle("MAM-AI")
+                .setContentTitle("MAM-AI — First-time setup")
                 .setContentText(message)
+                .setStyle(
+                    NotificationCompat.BigTextStyle()
+                        .bigText("$message\n\n$explanation")
+                )
                 .setSmallIcon(android.R.drawable.stat_sys_download)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
