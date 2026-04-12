@@ -221,7 +221,13 @@ class _IntroPageState extends State<IntroPage> {
   /// CDN with no redirect, ensuring the Range header is always honoured.
   Future<String> _resolveRedirectUrl(String url) async {
     try {
-      final dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 15)));
+      // Short timeouts: this is a best-effort redirect probe, not the real
+      // download.  If it takes too long we fall back gracefully rather than
+      // blocking the actual stream for 15 s.
+      final dio = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 8),
+        receiveTimeout: const Duration(seconds: 8),
+      ));
       final resp = await dio.head<dynamic>(
         url,
         options: Options(
@@ -258,7 +264,9 @@ class _IntroPageState extends State<IntroPage> {
     final resolvedUrl = await _resolveRedirectUrl(url);
     final redirectResolved = resolvedUrl != url;
 
-    final dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 15)));
+    // Longer connect timeout for the real streaming request: slow mobile
+    // connections can take > 15 s to establish the TCP + TLS handshake.
+    final dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 30)));
     late final Response<ResponseBody> response;
     try {
       response = await dio.get<ResponseBody>(
@@ -357,6 +365,11 @@ class _IntroPageState extends State<IntroPage> {
     const progressThreshold = 1 * 1024 * 1024; // 1 MB
 
     while (true) {
+      // Clear any reconnecting state from the previous attempt immediately so
+      // the UI shows the byte count (not "Reconnecting") while we establish
+      // the new connection and resolve the redirect URL.
+      setState(() => download.reconnecting = false);
+
       final bytesBefore =
           io.File(destPath).existsSync() ? io.File(destPath).lengthSync() : 0;
       try {
