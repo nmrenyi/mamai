@@ -185,7 +185,7 @@ bash scripts/sync_models.sh
 bash scripts/push_to_device.sh
 
 # Push Gecko + sentencepiece.model (and optionally Gemma)
-bash scripts/push_to_device.sh --models
+bash scripts/push_to_device.sh --embedding-models
 ```
 
 `sync_rag_assets.sh` keeps a local bundle cache in `_scratch/rag_bundle_cache/`

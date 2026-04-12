@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:app/locale_notifier.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:app/l10n/app_localizations.dart';
@@ -584,14 +584,24 @@ class _SearchPageState extends State<SearchPage> {
   void _onLatestMessageUpdate(dynamic value) {
     if (value is! Map) return; // guard against unexpected non-Map events
     if (!_isGenerating && !_backgroundGenerating) return; // stray event
+    final cancelled = value["cancelled"] == true;
 
     if (_backgroundGenerating) {
       // User navigated away — update background buffer (no setState needed).
       if (value.containsKey("done")) {
+        if (cancelled &&
+            _backgroundMessages.isNotEmpty &&
+            _backgroundMessages.last.role == 'assistant') {
+          _backgroundMessages[_backgroundMessages.length -
+              1] = _backgroundMessages.last.copyWith(
+            isLoading: false,
+            wasCancelled: true,
+          );
+        }
         final convId = _backgroundConvId!;
         final convTitle = _backgroundConvTitle;
         _saveAndClearBackground(); // fire-and-forget
-        if (mounted) {
+        if (mounted && !cancelled) {
           setState(() => _unreadConvIds.add(convId));
           _drawerKey.currentState?.reload();
           final display = convTitle.length > 40
@@ -634,7 +644,26 @@ class _SearchPageState extends State<SearchPage> {
 
     // _isGenerating == true: update the visible conversation.
     if (value.containsKey("done")) {
-      setState(() => _isGenerating = false);
+      setState(() {
+        _isGenerating = false;
+        if (!cancelled ||
+            _messages.isEmpty ||
+            _messages.last.role != 'assistant') {
+          return;
+        }
+        final last = _messages.last;
+        if (last.text.isEmpty && last.retrievedDocs.isEmpty) {
+          _messages.removeLast();
+          if (_messages.isNotEmpty && _messages.last.role == 'user') {
+            _messages.removeLast();
+          }
+        } else {
+          _messages[_messages.length - 1] = last.copyWith(
+            isLoading: false,
+            wasCancelled: true,
+          );
+        }
+      });
       _saveCurrentConversation(); // fire-and-forget
       return;
     }
@@ -661,7 +690,7 @@ class _SearchPageState extends State<SearchPage> {
     super.initState();
     // EventChannel is Android-only — skip on web/desktop to avoid
     // MissingPluginException during UI development without a device.
-    if (!kIsWeb && Platform.isAndroid) {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
       _startListeningForLatestMessage();
     }
   }
@@ -896,7 +925,7 @@ class _SearchPageState extends State<SearchPage> {
             ),
             const SizedBox(width: 4),
             // Search toggle — only relevant on Android on-device mode.
-            if (!kIsWeb && Platform.isAndroid) ...[
+            if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) ...[
               const SizedBox(width: 4),
               GestureDetector(
                 onTap: () => setState(() => _useRetrieval = !_useRetrieval),

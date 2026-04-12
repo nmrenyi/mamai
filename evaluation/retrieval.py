@@ -5,10 +5,13 @@ Reads pre-computed Gecko embeddings from the app's SQLite database and provides
 cosine similarity search for query embedding vectors.
 """
 
+import re
 import sqlite3
 import struct
 
 import numpy as np
+
+_METADATA_PREFIX = re.compile(r"^\[SOURCE:([^|]+)\|PAGE:(\d+)\]")
 
 
 def load_vector_store(db_path: str) -> list[tuple[str, np.ndarray]]:
@@ -111,3 +114,25 @@ class GeckoEmbedder:
         self.interpreter.invoke()
         embedding = self.interpreter.get_tensor(self.output_details[0]['index'])
         return embedding.flatten().astype(np.float32)
+
+
+def parse_chunk_metadata(raw: str) -> dict[str, object]:
+    """Parse the app's [SOURCE:stem|PAGE:n] prefix from a stored chunk."""
+    match = _METADATA_PREFIX.match(raw)
+    if not match:
+        return {"text": raw, "source": "", "page": 0}
+    return {
+        "text": raw[match.end():].strip(),
+        "source": match.group(1),
+        "page": int(match.group(2)),
+    }
+
+
+def format_app_context_chunks(raw_chunks: list[str]) -> tuple[list[str], list[dict[str, object]]]:
+    """Return app-parity `Document N:` context blocks plus structured doc metadata."""
+    docs = [parse_chunk_metadata(chunk) for chunk in raw_chunks]
+    chunks = [
+        f"Document {i + 1}:\n{doc['text']}"
+        for i, doc in enumerate(docs)
+    ]
+    return chunks, docs

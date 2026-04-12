@@ -77,4 +77,5 @@ download_file "sentencepiece.model" \
 
 echo ""
 echo "Models ready in $MODELS_DIR"
-echo "Next: bash scripts/push_to_device.sh --models"
+echo "Next: bash scripts/push_to_device.sh --embedding-models"
+echo "Note: this pushes only Gecko + sentencepiece. The Gemma .litertlm is downloaded here for staging/verification and is fetched by the app on first launch."

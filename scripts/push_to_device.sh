@@ -8,7 +8,7 @@
 #
 # Usage:
 #   scripts/push_to_device.sh
-#   scripts/push_to_device.sh --models
+#   scripts/push_to_device.sh --embedding-models
 #   scripts/push_to_device.sh --serial <device-id>
 
 set -euo pipefail
@@ -20,7 +20,7 @@ INSTALL_RECORD="$DEVICE_PUSH/bundle/debug/rag_bundle_staged.json"
 DEVICE_DIR="/sdcard/Android/data/com.example.app/files"
 DEPLOY_RECORD_NAME="rag_bundle_deployed.json"
 
-PUSH_MODELS=0
+PUSH_EMBEDDING_MODELS=0
 SERIAL=""
 TMP_DIR=""
 
@@ -30,8 +30,12 @@ TMP_DIR=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --embedding-models)
+            PUSH_EMBEDDING_MODELS=1
+            shift
+            ;;
         --models)
-            PUSH_MODELS=1
+            PUSH_EMBEDDING_MODELS=1
             shift
             ;;
         --serial)
@@ -132,7 +136,7 @@ if [[ "$DOC_COUNT" != "$LOCK_SOURCE_COUNT" ]]; then
     exit 1
 fi
 
-if [[ "$PUSH_MODELS" -eq 1 ]]; then
+if [[ "$PUSH_EMBEDDING_MODELS" -eq 1 ]]; then
     if [[ ! -f "$GECKO_MODEL" ]]; then
         echo "ERROR: staged model missing: $GECKO_MODEL" >&2
         exit 1
@@ -223,7 +227,8 @@ record = {
     "producer_commit": lock.get("producer_commit", ""),
     "chunk_count": lock.get("chunk_count"),
     "source_count": lock.get("source_count"),
-    "push_models": bool($PUSH_MODELS),
+    "push_models": bool($PUSH_EMBEDDING_MODELS),
+    "push_embedding_models": bool($PUSH_EMBEDDING_MODELS),
     "staged_at_utc": staged.get("staged_at_utc", staged.get("installed_at_utc", "")),
     "staged_sync_mode": staged.get("sync_mode", ""),
 }
@@ -243,7 +248,7 @@ for pdf in "$DOCS_DIR"/*.pdf; do
 done
 
 MODEL_COUNT=0
-if [[ "$PUSH_MODELS" -eq 1 ]]; then
+if [[ "$PUSH_EMBEDDING_MODELS" -eq 1 ]]; then
     echo "Pushing embedding model + tokenizer ..."
     "$ADB_BIN" "${ADB_ARGS[@]}" push "$GECKO_MODEL" "$DEVICE_DIR/" >/dev/null
     "$ADB_BIN" "${ADB_ARGS[@]}" push "$TOKENIZER_MODEL" "$DEVICE_DIR/" >/dev/null
@@ -261,7 +266,7 @@ echo ""
 echo "Push complete."
 echo "  Bundle version : $LOCK_BUNDLE_VERSION"
 echo "  RAG files      : $((DOC_COUNT + 2))"
-if [[ "$PUSH_MODELS" -eq 1 ]]; then
+if [[ "$PUSH_EMBEDDING_MODELS" -eq 1 ]]; then
     echo "  Model files    : $MODEL_COUNT"
 fi
 echo "  Device serial  : $DEVICE_SERIAL"

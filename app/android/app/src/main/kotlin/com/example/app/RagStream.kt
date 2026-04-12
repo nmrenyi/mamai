@@ -8,6 +8,7 @@ import androidx.lifecycle.LifecycleCoroutineScope
 import io.flutter.plugin.common.EventChannel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.Executor
@@ -27,6 +28,49 @@ class RagStream(application: Application, val lifecycleScope: LifecycleCoroutine
 
     // Channel sink that sends to flutter
     var latestGeneration: EventChannel.EventSink? = null
+
+    private fun postEventIfCurrent(job: Job, payload: Map<String, Any>) {
+        Handler(Looper.getMainLooper()).post {
+            synchronized(this@RagStream) {
+                if (currentJob !== job) {
+                    return@post
+                }
+                latestGeneration?.success(HashMap(payload))
+            }
+        }
+    }
+
+    private fun postTerminalIfCurrent(job: Job, cancelled: Boolean = false) {
+        Handler(Looper.getMainLooper()).post {
+            synchronized(this@RagStream) {
+                if (currentJob !== job) {
+                    return@post
+                }
+                val payload = hashMapOf<String, Any>("done" to true)
+                if (cancelled) {
+                    payload["cancelled"] = true
+                }
+                latestGeneration?.success(payload)
+                currentJob = null
+            }
+        }
+    }
+
+    private fun postErrorIfCurrent(job: Job, error: Exception) {
+        Handler(Looper.getMainLooper()).post {
+            synchronized(this@RagStream) {
+                if (currentJob !== job) {
+                    return@post
+                }
+                latestGeneration?.error(
+                    "LLM_ERROR",
+                    error.message ?: "Unknown error during generation",
+                    error.stackTraceToString()
+                )
+                currentJob = null
+            }
+        }
+    }
 
     override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
         requestLlmPreinit()
@@ -50,7 +94,6 @@ class RagStream(application: Application, val lifecycleScope: LifecycleCoroutine
             if (currentJob != null) {
                 Log.w("mam-ai", "[CANCEL] generation cancelled by user")
                 currentJob?.cancel()
-                currentJob = null
             }
         }
     }
@@ -63,6 +106,8 @@ class RagStream(application: Application, val lifecycleScope: LifecycleCoroutine
             }
 
             currentJob = lifecycleScope.launch {
+                val generationJob = currentCoroutineContext()[Job]
+                    ?: error("RagStream generation coroutine has no Job")
                 withContext(backgroundExecutor.asCoroutineDispatcher()) {
                     // Accumulate tokens so Flutter always receives the full text so far,
                     // not just the latest delta.
@@ -75,31 +120,31 @@ class RagStream(application: Application, val lifecycleScope: LifecycleCoroutine
                         // messages through event channels while on ui thread.
                         // The `post` puts the sending part back onto the ui thread
                         Handler(Looper.getMainLooper()).post {
-                            latestGeneration?.success(hashMapOf("response" to fullText))
-
-                            if (done) {
-                                latestGeneration?.success(hashMapOf("done" to true))
-                                synchronized(this@RagStream) {
-                                    currentJob = null
+                            synchronized(this@RagStream) {
+                                if (currentJob !== generationJob) {
+                                    return@post
                                 }
+                                latestGeneration?.success(hashMapOf("response" to fullText))
+                            }
+                            if (done) {
+                                postTerminalIfCurrent(generationJob)
                             }
                         }
                     }
 
                     fun onRetrieve(documents: List<RetrievedDoc>) {
-                        Handler(Looper.getMainLooper()).post {
-                            latestGeneration?.success(
-                                hashMapOf(
-                                    "results" to documents.map { doc ->
-                                        hashMapOf(
-                                            "text" to doc.text,
-                                            "source" to doc.source,
-                                            "page" to doc.page,
-                                        )
-                                    }
-                                )
+                        postEventIfCurrent(
+                            generationJob,
+                            hashMapOf(
+                                "results" to documents.map { doc ->
+                                    hashMapOf(
+                                        "text" to doc.text,
+                                        "source" to doc.source,
+                                        "page" to doc.page,
+                                    )
+                                }
                             )
-                        }
+                        )
                     }
 
                     try {
@@ -112,26 +157,13 @@ class RagStream(application: Application, val lifecycleScope: LifecycleCoroutine
                             { partial, done -> onGenerate(partial, done) }
                         )
                     } catch (e: kotlinx.coroutines.CancellationException) {
-                        // Normal cancellation — don't send error to Flutter,
-                        // just clean up. Re-throw so the coroutine framework
-                        // handles cancellation properly.
-                        synchronized(this@RagStream) {
-                            currentJob = null
-                        }
+                        // Only emit a terminal cancellation event if this job is still
+                        // the active generation. Superseded jobs are ignored so they
+                        // cannot terminate a newer request on the Flutter side.
+                        postTerminalIfCurrent(generationJob, cancelled = true)
                         throw e
                     } catch (e: Exception) {
-                        // Send error to Flutter via EventChannel
-                        Handler(Looper.getMainLooper()).post {
-                            latestGeneration?.error(
-                                "LLM_ERROR",
-                                e.message ?: "Unknown error during generation",
-                                e.stackTraceToString()
-                            )
-                        }
-                        // Clean up state
-                        synchronized(this@RagStream) {
-                            currentJob = null
-                        }
+                        postErrorIfCurrent(generationJob, e)
                     }
                 }
             }

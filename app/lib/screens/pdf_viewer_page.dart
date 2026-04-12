@@ -1,9 +1,9 @@
-import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:pdfrx/pdfrx.dart';
+
+import '../local_pdf_file.dart';
 
 /// Full-screen in-app PDF viewer that opens a local PDF at a specific page
 /// and highlights the retrieved text chunk.
@@ -28,7 +28,7 @@ class PdfViewerPage extends StatefulWidget {
 }
 
 class _PdfViewerPageState extends State<PdfViewerPage> {
-  late final Future<String> _pathFuture;
+  late final Future<LocalPdfFile> _pdfFuture;
   final _controller = PdfViewerController();
 
   // Created lazily in _onViewerReady, once controller.isReady is true.
@@ -40,7 +40,7 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
   @override
   void initState() {
     super.initState();
-    _pathFuture = _resolvePath();
+    _pdfFuture = _resolvePdf();
   }
 
   @override
@@ -131,11 +131,9 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
       .replaceAll(RegExp(r'_+'), '_')
       .replaceAll(RegExp(r'^_+|_+$'), '');
 
-  Future<String> _resolvePath() async {
-    final dir = await getExternalStorageDirectory();
-    if (dir == null) throw StateError('No external storage directory');
+  Future<LocalPdfFile> _resolvePdf() async {
     final normalizedSource = _normalizeSourceId(widget.source);
-    return '${dir.path}/$normalizedSource.pdf';
+    return resolveLocalPdfFile(normalizedSource);
   }
 
   @override
@@ -143,8 +141,8 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
     final title = widget.source.replaceAll('_', ' ');
     return Scaffold(
       appBar: AppBar(title: Text(title, overflow: TextOverflow.ellipsis)),
-      body: FutureBuilder<String>(
-        future: _pathFuture,
+      body: FutureBuilder<LocalPdfFile>(
+        future: _pdfFuture,
         builder: (context, snap) {
           if (snap.connectionState != ConnectionState.done) {
             return const Center(child: CircularProgressIndicator());
@@ -152,12 +150,16 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
           if (snap.hasError || snap.data == null) {
             return Center(child: Text('Could not locate ${widget.source}.pdf'));
           }
-          final path = snap.data!;
-          if (!File(path).existsSync()) {
-            return Center(child: Text('PDF not found:\n$path'));
+          final pdf = snap.data!;
+          if (pdf.path == null) {
+            return Center(
+              child: Text(
+                pdf.errorMessage ?? 'Could not locate ${widget.source}.pdf',
+              ),
+            );
           }
           return PdfViewer.file(
-            path,
+            pdf.path!,
             controller: _controller,
             initialPageNumber: widget.page,
             params: PdfViewerParams(

@@ -23,7 +23,13 @@ import pandas as pd
 from tqdm import tqdm
 
 from prompts import RETRIEVAL_TOP_K
-from retrieval import GeckoEmbedder, build_index, load_vector_store, retrieve
+from retrieval import (
+    GeckoEmbedder,
+    build_index,
+    format_app_context_chunks,
+    load_vector_store,
+    retrieve,
+)
 
 # Same dataset registry as run_eval.py
 DATASETS = {
@@ -177,10 +183,13 @@ def main():
 
             query_emb = embedder.embed(question)
             results = retrieve(query_emb, texts, normed_matrix, top_k=args.top_k)
+            raw_chunks = [chunk for chunk, _ in results]
+            context_chunks, retrieved_docs = format_app_context_chunks(raw_chunks)
 
             retrievals.append({
                 "question": question,
-                "chunks": [chunk for chunk, _ in results],
+                "chunks": context_chunks,
+                "retrieved_docs": retrieved_docs,
                 "similarities": [round(score, 4) for _, score in results],
             })
 

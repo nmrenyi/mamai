@@ -80,7 +80,7 @@ bash scripts/sync_models.sh --gecko-only
 bash scripts/push_to_device.sh
 
 # Also push Gecko + sentencepiece.model
-bash scripts/push_to_device.sh --models
+bash scripts/push_to_device.sh --embedding-models
 
 # If multiple devices are connected
 bash scripts/push_to_device.sh --serial <device-id>
