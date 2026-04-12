@@ -99,7 +99,7 @@
   "introDownloadStatusFinalizing": "Inafungua kifurushi",
   "introDownloadStatusDecompressing": "Inafungua data",
   "introDownloadStatusScanning": "Inasoma faili",
-  "introDownloadStatusExtracting": "Inaandika faili",
+  "introDownloadStatusExtracting": "Inasanikisha maktaba ya maarifa",
   "introDownloadStatusVerifying": "Inathibitisha",
   "introDownloadBundleDecompressing": "Inafungua kumbukumbu ya kifurushi: {current} kati ya {total}.",
   "@introDownloadBundleDecompressing": {
@@ -109,11 +109,12 @@
     }
   },
   "introDownloadBundleScanning": "Inasoma yaliyomo kwenye kifurushi ili programu iandae faili za bila mtandao.",
-  "introDownloadBundleExtracting": "Inaandika hifadhidata ya ulinganishi na PDF za miongozo: {current} kati ya {total}.",
+  "introDownloadBundleExtracting": "Inasanikisha maktaba ya maarifa ya matibabu ({current} kati ya {total}): inahifadhi faharasa ya utafutaji na PDF {count} za miongozo ya kliniki kwenye kifaa chako ili programu iweze kujibu maswali bila mtandao.",
   "@introDownloadBundleExtracting": {
     "placeholders": {
       "current": { "type": "String" },
-      "total": { "type": "String" }
+      "total": { "type": "String" },
+      "count": { "type": "int" }
     }
   },
   "introDownloadBundleVerifying": "Inakagua kuwa hifadhidata ya ulinganishi na PDF {count} za miongozo ziko tayari.",

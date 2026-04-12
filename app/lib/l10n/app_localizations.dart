@@ -461,7 +461,7 @@ abstract class AppLocalizations {
   /// No description provided for @introDownloadStatusExtracting.
   ///
   /// In en, this message translates to:
-  /// **'Writing files'**
+  /// **'Installing knowledge base'**
   String get introDownloadStatusExtracting;
 
   /// No description provided for @introDownloadStatusVerifying.
@@ -473,25 +473,25 @@ abstract class AppLocalizations {
   /// No description provided for @introDownloadBundleDecompressing.
   ///
   /// In en, this message translates to:
-  /// **'Decompressing the bundle archive: {current} of {total}.'**
+  /// **'Unpacking the downloaded archive ({current} of {total}) — this produces the raw files needed for the next step.'**
   String introDownloadBundleDecompressing(String current, String total);
 
   /// No description provided for @introDownloadBundleScanning.
   ///
   /// In en, this message translates to:
-  /// **'Reading the bundle contents so the app can prepare the offline files.'**
+  /// **'Scanning the archive to count files and plan the installation. No data is written yet.'**
   String get introDownloadBundleScanning;
 
   /// No description provided for @introDownloadBundleExtracting.
   ///
   /// In en, this message translates to:
-  /// **'Writing the embeddings database and guideline PDFs: {current} of {total}.'**
-  String introDownloadBundleExtracting(String current, String total);
+  /// **'Installing the medical knowledge base ({current} of {total}): saving the search index and {count} clinical guideline PDFs to your device so the app can answer questions without internet.'**
+  String introDownloadBundleExtracting(String current, String total, int count);
 
   /// No description provided for @introDownloadBundleVerifying.
   ///
   /// In en, this message translates to:
-  /// **'Checking that the embeddings database and {count} guideline PDFs are ready.'**
+  /// **'Checking that the search index and all {count} guideline PDFs were saved correctly.'**
   String introDownloadBundleVerifying(int count);
 
   /// No description provided for @introDownloadBundleParallel.

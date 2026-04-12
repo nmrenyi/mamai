@@ -216,28 +216,32 @@ class AppLocalizationsEn extends AppLocalizations {
   String get introDownloadStatusScanning => 'Reading files';
 
   @override
-  String get introDownloadStatusExtracting => 'Writing files';
+  String get introDownloadStatusExtracting => 'Installing knowledge base';
 
   @override
   String get introDownloadStatusVerifying => 'Verifying';
 
   @override
   String introDownloadBundleDecompressing(String current, String total) {
-    return 'Decompressing the bundle archive: $current of $total.';
+    return 'Unpacking the downloaded archive ($current of $total) — this produces the raw files needed for the next step.';
   }
 
   @override
   String get introDownloadBundleScanning =>
-      'Reading the bundle contents so the app can prepare the offline files.';
+      'Scanning the archive to count files and plan the installation. No data is written yet.';
 
   @override
-  String introDownloadBundleExtracting(String current, String total) {
-    return 'Writing the embeddings database and guideline PDFs: $current of $total.';
+  String introDownloadBundleExtracting(
+    String current,
+    String total,
+    int count,
+  ) {
+    return 'Installing the medical knowledge base ($current of $total): saving the search index and $count clinical guideline PDFs to your device so the app can answer questions without internet.';
   }
 
   @override
   String introDownloadBundleVerifying(int count) {
-    return 'Checking that the embeddings database and $count guideline PDFs are ready.';
+    return 'Checking that the search index and all $count guideline PDFs were saved correctly.';
   }
 
   @override

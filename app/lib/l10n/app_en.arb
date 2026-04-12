@@ -99,24 +99,25 @@
   "introDownloadStatusFinalizing": "Unpacking bundle",
   "introDownloadStatusDecompressing": "Decompressing",
   "introDownloadStatusScanning": "Reading files",
-  "introDownloadStatusExtracting": "Writing files",
+  "introDownloadStatusExtracting": "Installing knowledge base",
   "introDownloadStatusVerifying": "Verifying",
-  "introDownloadBundleDecompressing": "Decompressing the bundle archive: {current} of {total}.",
+  "introDownloadBundleDecompressing": "Unpacking the downloaded archive ({current} of {total}) — this produces the raw files needed for the next step.",
   "@introDownloadBundleDecompressing": {
     "placeholders": {
       "current": { "type": "String" },
       "total": { "type": "String" }
     }
   },
-  "introDownloadBundleScanning": "Reading the bundle contents so the app can prepare the offline files.",
-  "introDownloadBundleExtracting": "Writing the embeddings database and guideline PDFs: {current} of {total}.",
+  "introDownloadBundleScanning": "Scanning the archive to count files and plan the installation. No data is written yet.",
+  "introDownloadBundleExtracting": "Installing the medical knowledge base ({current} of {total}): saving the search index and {count} clinical guideline PDFs to your device so the app can answer questions without internet.",
   "@introDownloadBundleExtracting": {
     "placeholders": {
       "current": { "type": "String" },
-      "total": { "type": "String" }
+      "total": { "type": "String" },
+      "count": { "type": "int" }
     }
   },
-  "introDownloadBundleVerifying": "Checking that the embeddings database and {count} guideline PDFs are ready.",
+  "introDownloadBundleVerifying": "Checking that the search index and all {count} guideline PDFs were saved correctly.",
   "@introDownloadBundleVerifying": {
     "placeholders": {
       "count": { "type": "int" }

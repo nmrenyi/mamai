@@ -214,7 +214,7 @@ class AppLocalizationsSw extends AppLocalizations {
   String get introDownloadStatusScanning => 'Inasoma faili';
 
   @override
-  String get introDownloadStatusExtracting => 'Inaandika faili';
+  String get introDownloadStatusExtracting => 'Inasanikisha maktaba ya maarifa';
 
   @override
   String get introDownloadStatusVerifying => 'Inathibitisha';
@@ -229,8 +229,12 @@ class AppLocalizationsSw extends AppLocalizations {
       'Inasoma yaliyomo kwenye kifurushi ili programu iandae faili za bila mtandao.';
 
   @override
-  String introDownloadBundleExtracting(String current, String total) {
-    return 'Inaandika hifadhidata ya ulinganishi na PDF za miongozo: $current kati ya $total.';
+  String introDownloadBundleExtracting(
+    String current,
+    String total,
+    int count,
+  ) {
+    return 'Inasanikisha maktaba ya maarifa ya matibabu ($current kati ya $total): inahifadhi faharasa ya utafutaji na PDF $count za miongozo ya kliniki kwenye kifaa chako ili programu iweze kujibu maswali bila mtandao.';
   }
 
   @override
