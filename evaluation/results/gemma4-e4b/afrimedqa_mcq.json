@@ -19,10 +19,10 @@
     "avg_time_per_question_s": 0.11
   },
   "aggregate_scores": {
-    "accuracy": 0.3696969696969697,
-    "correct": 244,
+    "accuracy": 0.3712121212121212,
+    "correct": 245,
     "total": 660,
-    "partial_credit_accuracy": 0.41601010101010133,
+    "partial_credit_accuracy": 0.41752525252525285,
     "per_question": [
       true,
       false,
@@ -207,7 +207,7 @@
       true,
       false,
       true,
-      false,
+      true,
       false,
       true,
       false,
@@ -869,7 +869,7 @@
       1.0,
       0.0,
       1.0,
-      0.0,
+      1.0,
       0.0,
       1.0,
       0.0,
@@ -1558,7 +1558,7 @@
       "inference_time_s": 0.1
     },
     {
-      "question": "A couple presented in OPD with H/0 infertility since last 2 years. Husbands’ semen analysis was advised. What is WHO criterion for minimum sperm counts in normal semen? \\n",
+      "question": "A couple presented in OPD with H/0 infertility since last 2 years. Husbands\u2019 semen analysis was advised. What is WHO criterion for minimum sperm counts in normal semen? \\n",
       "options": "A. 10 million. | B. 20 million. | C. 30 million. | D. 40 million. | E. 70 million.",
       "ground_truth": "B",
       "rag_context": "",
@@ -1597,7 +1597,7 @@
       "inference_time_s": 0.06
     },
     {
-      "question": "Which Leopold’s maneuver involves fundal palpation to define which fetal pole occupies the fundus \\n",
+      "question": "Which Leopold\u2019s maneuver involves fundal palpation to define which fetal pole occupies the fundus \\n",
       "options": "A. First | B. Second | C. Third | D. Fourth | E. Fifth",
       "ground_truth": "A",
       "rag_context": "",
@@ -1637,7 +1637,7 @@
     },
     {
       "question": "As regards fertilization and capacitation, which statement is false \\n",
-      "options": "A. Capacitation lasts about 7 hours | B. A glycoprotein coat is removed from the surface of the sperm’s acrosome | C. Capacitation occurs in the cervix | D. Capacitated sperms are more active | E. The acrosomal reaction cannot occur until capacitation has occurred",
+      "options": "A. Capacitation lasts about 7 hours | B. A glycoprotein coat is removed from the surface of the sperm\u2019s acrosome | C. Capacitation occurs in the cervix | D. Capacitated sperms are more active | E. The acrosomal reaction cannot occur until capacitation has occurred",
       "ground_truth": "C",
       "rag_context": "",
       "model_response": "B",
@@ -1649,7 +1649,7 @@
       "inference_time_s": 0.05
     },
     {
-      "question": "You have attempted to perform a direct entry for your laparoscopy and opted to undertake a Palmer's point entry. When would you find Palmer’s point? \\n\\n",
+      "question": "You have attempted to perform a direct entry for your laparoscopy and opted to undertake a Palmer's point entry. When would you find Palmer\u2019s point? \\n\\n",
       "options": "A. 1cm below the left costal margin in the mid-clavicular line | B. 1cm below the right costal margin in the mid-clavicular line | C. 3cm below the left costal margin in the mid-axilla | D. 3cm below the left costal margin in the mid-clavicular line | E. 3cm inferior to the right intercostal margin",
       "ground_truth": "A",
       "rag_context": "",
@@ -1676,7 +1676,7 @@
     },
     {
       "question": "A 19-year-old woman is to undergo a laparoscopy for pelvic pain. How would you describe the correct technique or entry with the veress needle? \\n",
-      "options": "A. Enter below the umbilicus horizontally and then pass the needle at 45° to the skin | B. Enter below the umbilicus transverse plane and then pass the needle at 45° to the skin | C. Enter below the umbilicus vertical to the skin | D. Enter at the base of the umbilicus and pass the needle at 60° to the skin | E. Enter the base of the umbilicus vertical to the skin",
+      "options": "A. Enter below the umbilicus horizontally and then pass the needle at 45\u00b0 to the skin | B. Enter below the umbilicus transverse plane and then pass the needle at 45\u00b0 to the skin | C. Enter below the umbilicus vertical to the skin | D. Enter at the base of the umbilicus and pass the needle at 60\u00b0 to the skin | E. Enter the base of the umbilicus vertical to the skin",
       "ground_truth": "B",
       "rag_context": "",
       "model_response": "D",
@@ -1897,7 +1897,7 @@
     },
     {
       "question": "A patient undergoes a challenging hysterectomy. A drain is left in the pelvis. You are called to review the patient eight hours later as the nurses have noted a high serous drain output and poor urinary output. What finding would identify if the drain fluid is urine (suggestive of a bladder/ureteric injury) or normal peritoneal fluid? \\n",
-      "options": "A. Peritoneal creatinine urine nitrogen | B. Peritoneal urea > urine urea | C. Serum creatinine à peritoneal creatinine | D. Serum nitrogen > drain fluid nitrogen levels | E. Urine nitrogen > peritoneal nitrogen",
+      "options": "A. Peritoneal creatinine urine nitrogen | B. Peritoneal urea > urine urea | C. Serum creatinine \u00e0 peritoneal creatinine | D. Serum nitrogen > drain fluid nitrogen levels | E. Urine nitrogen > peritoneal nitrogen",
       "ground_truth": "A",
       "rag_context": "",
       "model_response": "E",
@@ -2170,7 +2170,7 @@
     },
     {
       "question": "Which one of the following is incorrect with respect to puerperal pyrexia? \\n\\n",
-      "options": "A. Endometritis is a common cause. | B. Puerperal pyrexia refers to a temperature of 38°C within the first 6 weeks after delivery | C. Prolonged rupture of membranes is associated with puerperal pyrexia. | D. Anaemia is a predisposing factor. | E. Mastitis can cause puerperal pyrexia.",
+      "options": "A. Endometritis is a common cause. | B. Puerperal pyrexia refers to a temperature of 38\u00b0C within the first 6 weeks after delivery | C. Prolonged rupture of membranes is associated with puerperal pyrexia. | D. Anaemia is a predisposing factor. | E. Mastitis can cause puerperal pyrexia.",
       "ground_truth": "B",
       "rag_context": "",
       "model_response": "B",
@@ -2391,7 +2391,7 @@
     },
     {
       "question": "A 29-year-old woman presents to her GP at 27 weeks' gestation with a rash on her trunk. She had developed this rash 10 hours previously and thought that she had developed a food allergy. On questioning she gives a history of coming in close contact, 3 days earlier, with her niece, who had developed chickenpox rash. General examination reveals rash typical of varicella or chickenpox. She is otherwise well. What is her next initial management following diagnosis of chickenpox \\n",
-      "options": "A. Intravenous acyclovir | B. Oral gancyclovir for 7 days | C. Oral acyclovir for 7 days | D. Elective caesarean section at 39 weeks' gestation | E. Ultrasound scan for structural abnormalities in 5 weeks’ time",
+      "options": "A. Intravenous acyclovir | B. Oral gancyclovir for 7 days | C. Oral acyclovir for 7 days | D. Elective caesarean section at 39 weeks' gestation | E. Ultrasound scan for structural abnormalities in 5 weeks\u2019 time",
       "ground_truth": "C",
       "rag_context": "",
       "model_response": "C",
@@ -2937,7 +2937,7 @@
     },
     {
       "question": "Which of the following is the best definition of evidence-based medicine (practice) \\n",
-      "options": "A. Making medical decisions only when there is adequate evidence to support them | B. Adhering strictly to the scientific evidence, despite patients’ preference | C. The conscientious, explicit and judicious best evidence in making decisions about the care of the individual patient | D. Making medical decisions that are consistent with grade A evidence | E. a and b",
+      "options": "A. Making medical decisions only when there is adequate evidence to support them | B. Adhering strictly to the scientific evidence, despite patients\u2019 preference | C. The conscientious, explicit and judicious best evidence in making decisions about the care of the individual patient | D. Making medical decisions that are consistent with grade A evidence | E. a and b",
       "ground_truth": "C",
       "rag_context": "",
       "model_response": "C",
@@ -3729,19 +3729,21 @@
       "inference_time_s": 0.06
     },
     {
-      "question": "A 17-year-old, pregnant woman was brought to maternity ward, because was found to have generalized convulsion at the central market. O/E: (positive finding) unconscious, pale +, BP 156/100 mmHg, hyperreflexia, urine dipstick for protein +; F/L 35 cm. V/E Cervix effaced, dilated 4 cm, station –1. How do you manage this patient? \\n",
+      "question": "A 17-year-old, pregnant woman was brought to maternity ward, because was found to have generalized convulsion at the central market. O/E: (positive finding) unconscious, pale +, BP 156/100 mmHg, hyperreflexia, urine dipstick for protein +; F/L 35 cm. V/E Cervix effaced, dilated 4 cm, station \u20131. How do you manage this patient? \\n",
       "options": "A. General measure, prophylactic antibiotic and immediate C/section. | B. General measures, antihypertensive, MgSO4, resuscitation of the patient, foetal assessment and emergency c/section. | C. General measures, antihypertensive, anticonvulsant and augmentation. | D. General measures, BP control, fit control, mother stabilization and conservative management. | E. None of the above is true",
       "ground_truth": "B",
       "rag_context": "",
       "model_response": "B</start_of_turn>",
-      "extracted_answer": "",
-      "extracted_answers": [],
-      "correct": false,
+      "extracted_answer": "B",
+      "extracted_answers": [
+        "B"
+      ],
+      "correct": true,
       "inference_time_s": 0.39
     },
     {
       "question": "A 56-year-old lady presented with a small cervical lesion which bled to touch, she reported that she had difficulty closing her left eye. She had nausea and loss of appetite. She had a staring gaze and paresis on the right. No other pelvic lesions were found. \\n",
-      "options": "A. This is Ca Cervix stage four | B. The condition can be diagnosed by ultrasound | C. The diagnosis can be suspected from the previous history and confirmed by Laboratory investigations | D. She has Burkitt’s lymphoma | E. None of the above",
+      "options": "A. This is Ca Cervix stage four | B. The condition can be diagnosed by ultrasound | C. The diagnosis can be suspected from the previous history and confirmed by Laboratory investigations | D. She has Burkitt\u2019s lymphoma | E. None of the above",
       "ground_truth": "A",
       "rag_context": "",
       "model_response": "C",
@@ -4859,7 +4861,7 @@
     },
     {
       "question": "In which age group do malignant ovarian germ cell tumours most commonly occur?",
-      "options": "A. 0-20 years | B. 21 - 40 years | C. 41-60 years | D. 61-80 years | E. . ≥81",
+      "options": "A. 0-20 years | B. 21 - 40 years | C. 41-60 years | D. 61-80 years | E. . \u226581",
       "ground_truth": "A",
       "rag_context": "",
       "model_response": "B",
@@ -4898,7 +4900,7 @@
     },
     {
       "question": "According to the modified World Health Organization Prognostic Scoring System, the entire category of low-risk gestational trophoblastic neoplasia is represented by which range of scores?",
-      "options": "A. A.\t0-2 | B. B.\t1-4 | C. 0 - 6 | D. 1-10 | E. 11–15",
+      "options": "A. A.\t0-2 | B. B.\t1-4 | C. 0 - 6 | D. 1-10 | E. 11\u201315",
       "ground_truth": "C",
       "rag_context": "",
       "model_response": "A",
@@ -5755,7 +5757,7 @@
       "inference_time_s": 0.07
     },
     {
-      "question": "A 34 year old client, G 1 PO with a EGA of 38 weeks 5 days reports to the emergency unit with a 2 hour history of watery vaginal discharge She is not pale or jaundiced and afebrile Her blood pressure is 150/110 mmHg and the pulse in 70 bpm. Her temperature is 36.7°C There is no headache, epigastric pain or vomiting. The symphysiofundal height is 36 cm. presentation is cephalic and the foetal heart rate is 138 bpm. No contractions are palpated. Sterile speculum examination reveals clear liquor draining from the cervical as which is 2 cm dilated, central, soft and fully effaced Station is-2 (For questions 8 to 11)\\n8. The following test is NOT urgent at this time\\n",
+      "question": "A 34 year old client, G 1 PO with a EGA of 38 weeks 5 days reports to the emergency unit with a 2 hour history of watery vaginal discharge She is not pale or jaundiced and afebrile Her blood pressure is 150/110 mmHg and the pulse in 70 bpm. Her temperature is 36.7\u00b0C There is no headache, epigastric pain or vomiting. The symphysiofundal height is 36 cm. presentation is cephalic and the foetal heart rate is 138 bpm. No contractions are palpated. Sterile speculum examination reveals clear liquor draining from the cervical as which is 2 cm dilated, central, soft and fully effaced Station is-2 (For questions 8 to 11)\\n8. The following test is NOT urgent at this time\\n",
       "options": "A. n/a | B. Liver function tests | C. Urinalysis | D. Endocervical swab for culture and sensitivity | E. C-Reactive protein",
       "ground_truth": "E",
       "rag_context": "",
@@ -5912,7 +5914,7 @@
     },
     {
       "question": "Factors that may contribute to the formation of vesico-vaginal fistula include all of the following except\\n \\n",
-      "options": "A. Obstructed labor | B. Pelvic radiation | C. Tribal “gishiri” cuts to the vaginal | D. HIV infection | E. Hysterectomy",
+      "options": "A. Obstructed labor | B. Pelvic radiation | C. Tribal \u201cgishiri\u201d cuts to the vaginal | D. HIV infection | E. Hysterectomy",
       "ground_truth": "E",
       "rag_context": "",
       "model_response": "C",
@@ -5990,7 +5992,7 @@
     },
     {
       "question": "Indications for elective cervical cerclage",
-      "options": "A. Three spontaneous first – trimester abortions | B. Spontaneous twin conception | C. Three second – trimester pregnancy losses without evidence of labour or abruption | D. History of loop electrosurgical excision procedure for cervical dysplasia | E. Cervical length of 15 mm by ultrasound at 14 weeks",
+      "options": "A. Three spontaneous first \u2013 trimester abortions | B. Spontaneous twin conception | C. Three second \u2013 trimester pregnancy losses without evidence of labour or abruption | D. History of loop electrosurgical excision procedure for cervical dysplasia | E. Cervical length of 15 mm by ultrasound at 14 weeks",
       "ground_truth": "C,D,E",
       "rag_context": "",
       "model_response": "C",
@@ -6003,7 +6005,7 @@
     },
     {
       "question": "Heavy but regular period is a likely feature of which of the following condition\\n",
-      "options": "A. Subserous uterine fibroids | B. Bartholin’s cyst | C. Dysfunctional uterine bleeding | D. Myxoedema | E. Diabetes mellitus",
+      "options": "A. Subserous uterine fibroids | B. Bartholin\u2019s cyst | C. Dysfunctional uterine bleeding | D. Myxoedema | E. Diabetes mellitus",
       "ground_truth": "D",
       "rag_context": "",
       "model_response": "A",
@@ -6067,7 +6069,7 @@
       "inference_time_s": 0.13
     },
     {
-      "question": "A woman presents to clinic with a blood pressure of 165/112 mmHg (confirmed by repeat measurement after at least 15 minutes), at 28 weeks’ gestation. Which of the following management approaches is true?",
+      "question": "A woman presents to clinic with a blood pressure of 165/112 mmHg (confirmed by repeat measurement after at least 15 minutes), at 28 weeks\u2019 gestation. Which of the following management approaches is true?",
       "options": "A. This woman can be seen in hospital the next day | B. This woman should receive antihypertensive therapy | C. This woman may have pre-eclampsia even if she has no proteinuria | D. This woman may have pre-eclampsia even if she has no symptoms | E. Anxiolytic is adequate for her",
       "ground_truth": "B,C,D",
       "rag_context": "",
@@ -6302,7 +6304,7 @@
     },
     {
       "question": "Normal cardiotocograms (CTGs):",
-      "options": "A. The baseline at term is usually 120 – 160 beats/minute | B. The short-term variability is 10 – 25 beats/ minute | C. An acceleration is a baseline increase of 15 beats/minute for 15 seconds | D. A reactive trace would have one acceleration in 20 minutes | E. The tocograph trace indicates the strength of contractions",
+      "options": "A. The baseline at term is usually 120 \u2013 160 beats/minute | B. The short-term variability is 10 \u2013 25 beats/ minute | C. An acceleration is a baseline increase of 15 beats/minute for 15 seconds | D. A reactive trace would have one acceleration in 20 minutes | E. The tocograph trace indicates the strength of contractions",
       "ground_truth": "A,B,C",
       "rag_context": "",
       "model_response": "A",
@@ -6510,7 +6512,7 @@
     },
     {
       "question": "With regard to pregnancy dating:\\n",
-      "options": "A. The last menstrual period (LMP) is used in preference to ultrasound | B. The LMP is reliable even if cycles are irregular | C. The LMP can be used if pregnancy was due to a contraceptive pill failure | D. Breastfeeding makes LMP dating inaccurate | E. The EDD is calculated as LMP + 12 months – 3 months + 7 days",
+      "options": "A. The last menstrual period (LMP) is used in preference to ultrasound | B. The LMP is reliable even if cycles are irregular | C. The LMP can be used if pregnancy was due to a contraceptive pill failure | D. Breastfeeding makes LMP dating inaccurate | E. The EDD is calculated as LMP + 12 months \u2013 3 months + 7 days",
       "ground_truth": "A,D,E",
       "rag_context": "",
       "model_response": "A",
@@ -6665,7 +6667,7 @@
       "inference_time_s": 0.12
     },
     {
-      "question": "Turner’s syndrome:",
+      "question": "Turner\u2019s syndrome:",
       "options": "A. May not present until delayed puberty or infertility is diagnosed | B. May have a male phenotype | C. Is characterized by short stature, wide carrying angle and wide spaced nipples | D. Is characterized by low oestrogen levels due to primary hypopituitarism | E. The luteinizing hormone (LH) and FSH levels are usually markedly elevated",
       "ground_truth": "A,C,E",
       "rag_context": "",
@@ -6678,7 +6680,7 @@
       "inference_time_s": 0.13
     },
     {
-      "question": "In Turner’s syndrome:",
+      "question": "In Turner\u2019s syndrome:",
       "options": "A. A chromosomal structure of 45XY is characteristic | B. Secondary amenorrhoea is usual | C. Coarctation of the aorta may occur | D. The ovaries are multicystic | E. Public hair is absent",
       "ground_truth": "C,E",
       "rag_context": "",
@@ -6783,7 +6785,7 @@
     },
     {
       "question": "Hyperandrogenism",
-      "options": "A. Dihydrotestosterone is 100 times more potent than testosterone | B. Spironolactone can be used in its treatment | C. Associated with Excessive growth of normal Hair | D. Does not affect voice | E. Ferryman Galway’s classification is used to assess the level of hirsutism",
+      "options": "A. Dihydrotestosterone is 100 times more potent than testosterone | B. Spironolactone can be used in its treatment | C. Associated with Excessive growth of normal Hair | D. Does not affect voice | E. Ferryman Galway\u2019s classification is used to assess the level of hirsutism",
       "ground_truth": "A,B,C,E",
       "rag_context": "",
       "model_response": "B",
@@ -6874,7 +6876,7 @@
     },
     {
       "question": "The following are signs of early pregnancy EXCEPT",
-      "options": "A. Mastodynia | B. Hegars sign | C. Braxton Hick’s sign | D. Ladin’s sign | E. Chloasma",
+      "options": "A. Mastodynia | B. Hegars sign | C. Braxton Hick\u2019s sign | D. Ladin\u2019s sign | E. Chloasma",
       "ground_truth": "C",
       "rag_context": "",
       "model_response": "E",
@@ -6887,7 +6889,7 @@
     },
     {
       "question": "The following are derivatives of the paramesonephric duct except:",
-      "options": "A. Oviducts | B. Uterus | C. Upper part of vaginal | D. Supra vaginal cervix | E. Cowper’s glands.",
+      "options": "A. Oviducts | B. Uterus | C. Upper part of vaginal | D. Supra vaginal cervix | E. Cowper\u2019s glands.",
       "ground_truth": "A,B,C,D",
       "rag_context": "",
       "model_response": "A",
@@ -6900,7 +6902,7 @@
     },
     {
       "question": "Concerning the vulva",
-      "options": "A. The vestibule is the area between the labia minora. | B. The vestibule is perforated by the urethral and vaginal orifices and the ducts of Bartholin’s glands | C. The labia minora contain fat and many sebaceous glands | D. The lateral labial surfaces are pigmented and hairy. | E. Mons pubis is not a component",
+      "options": "A. The vestibule is the area between the labia minora. | B. The vestibule is perforated by the urethral and vaginal orifices and the ducts of Bartholin\u2019s glands | C. The labia minora contain fat and many sebaceous glands | D. The lateral labial surfaces are pigmented and hairy. | E. Mons pubis is not a component",
       "ground_truth": "A,B,C,D,E",
       "rag_context": "",
       "model_response": "B",
@@ -7029,7 +7031,7 @@
       "inference_time_s": 0.1
     },
     {
-      "question": "Kallman’s syndrome is characterized by\\n F\\n  T\\n  T\\n  T\\n F\\n",
+      "question": "Kallman\u2019s syndrome is characterized by\\n F\\n  T\\n  T\\n  T\\n F\\n",
       "options": "A. Precocious puberty | B. Over secretion of gonadotrophin releasing hormone | C. Anosmia | D. Amenorrhoea | E. Genital hypertrophy",
       "ground_truth": "B,C,D",
       "rag_context": "",
@@ -7381,7 +7383,7 @@
     },
     {
       "question": "Regarding carcinoma of the ovary:",
-      "options": "A. It is most common in developing countries. | B. The incidence is similar to carcinoma of the endometrium with similar prognosis. | C. The peak age is 80–90 years old. | D. The majority are epithelial in origin. | E. The mainstay of treatment is surgery and radiotherapy combined.",
+      "options": "A. It is most common in developing countries. | B. The incidence is similar to carcinoma of the endometrium with similar prognosis. | C. The peak age is 80\u201390 years old. | D. The majority are epithelial in origin. | E. The mainstay of treatment is surgery and radiotherapy combined.",
       "ground_truth": "D",
       "rag_context": "",
       "model_response": "D",
@@ -7407,7 +7409,7 @@
     },
     {
       "question": "Which of the statements describe sex cord tumours: \\n",
-      "options": "A. All granulosa cell tumours are malignant, but are usually confined to the ovary and have a good prognosis. | B. Call–Exner bodies are pathognomonic of theca cell tumours. | C. Many theca cell tumours cause post-menopausal bleeding and endometrial carcinoma. | D. Meigs’ syndrome is the combination of fibroma, ascites and pleural effusions. | E. Virilization is seen in 75 per cent of Sertoli–Leydig cell tumours.",
+      "options": "A. All granulosa cell tumours are malignant, but are usually confined to the ovary and have a good prognosis. | B. Call\u2013Exner bodies are pathognomonic of theca cell tumours. | C. Many theca cell tumours cause post-menopausal bleeding and endometrial carcinoma. | D. Meigs\u2019 syndrome is the combination of fibroma, ascites and pleural effusions. | E. Virilization is seen in 75 per cent of Sertoli\u2013Leydig cell tumours.",
       "ground_truth": "B,C,D,E",
       "rag_context": "",
       "model_response": "A",
@@ -7472,7 +7474,7 @@
     },
     {
       "question": "Which of the following is correct regarding hyperthyroidism in pregnancy? \\n",
-      "options": "A. Should be treated surgically rather than with carbimazole. | B. Can be diagnosed by total T4 measurements. | C. More than half are due to Grave’s disease. | D. The main complications for the fetus include growth restriction and fetal bradycardia. | E. Therapy should maintain free T4 and T3 levels in the low normal range.",
+      "options": "A. Should be treated surgically rather than with carbimazole. | B. Can be diagnosed by total T4 measurements. | C. More than half are due to Grave\u2019s disease. | D. The main complications for the fetus include growth restriction and fetal bradycardia. | E. Therapy should maintain free T4 and T3 levels in the low normal range.",
       "ground_truth": "E",
       "rag_context": "",
       "model_response": "E",
@@ -7601,7 +7603,7 @@
       "inference_time_s": 0.1
     },
     {
-      "question": "Asherman’s syndrome\\n\\n",
+      "question": "Asherman\u2019s syndrome\\n\\n",
       "options": "A. Is also known as amenorrhea traumatica | B. Arises from hypovolaemic shock following childbirth | C. Gives a funnel shaped appearance on hysterosalpingography | D. Is a cause of secondary amenorrhoea | E. Treatment is by endometrial resection",
       "ground_truth": "A,C,D",
       "rag_context": "",
@@ -7654,7 +7656,7 @@
     },
     {
       "question": "Systemic lupus Erythematosus (SLE)",
-      "options": "A. Pregnancy may exacerbate the symptoms | B. Flaring symptoms may mimic Preeclampsia | C. It’s a disease of women in the reproductive age group | D. It is associated with preterm delivery | E. Vaginal delivery is contraindicated",
+      "options": "A. Pregnancy may exacerbate the symptoms | B. Flaring symptoms may mimic Preeclampsia | C. It\u2019s a disease of women in the reproductive age group | D. It is associated with preterm delivery | E. Vaginal delivery is contraindicated",
       "ground_truth": "A,B,C,D",
       "rag_context": "",
       "model_response": "C",
@@ -7719,7 +7721,7 @@
     },
     {
       "question": "The following have an XX karyotype:\\n",
-      "options": "A. Congenital adrenal hyperplasia. | B. Rokitansky’s syndrome. | C. Turner’s syndrome. | D. 5 alpha-reductase deficiency. | E. Androgen insensitivity.",
+      "options": "A. Congenital adrenal hyperplasia. | B. Rokitansky\u2019s syndrome. | C. Turner\u2019s syndrome. | D. 5 alpha-reductase deficiency. | E. Androgen insensitivity.",
       "ground_truth": "B",
       "rag_context": "",
       "model_response": "D",
@@ -7745,7 +7747,7 @@
     },
     {
       "question": "During an assisted breech delivery: \\n",
-      "options": "A. An episiotomy may be cut once the anus is seen at the fourchette. | B. Pinard’s manoeuvre can be used to deliver the legs in an extended position. | C. Mauriceau–Smellie–Veit is used to deliver extended arms. | D. Forceps should not be applied to the fetal head. | E. Epidural analgesia is mandatory.",
+      "options": "A. An episiotomy may be cut once the anus is seen at the fourchette. | B. Pinard\u2019s manoeuvre can be used to deliver the legs in an extended position. | C. Mauriceau\u2013Smellie\u2013Veit is used to deliver extended arms. | D. Forceps should not be applied to the fetal head. | E. Epidural analgesia is mandatory.",
       "ground_truth": "B",
       "rag_context": "",
       "model_response": "B",
@@ -7783,7 +7785,7 @@
       "inference_time_s": 0.12
     },
     {
-      "question": "The aims of the 18–22 weeks scan include: \\n",
+      "question": "The aims of the 18\u201322 weeks scan include: \\n",
       "options": "A. To locate the placenta. | B. To determine the chorionicity of a twin pregnancy. | C. Assessment of amniotic fluid volume. | D. Promoting parental bonding with the fetus. | E. To identify fetal structural defects.",
       "ground_truth": "E",
       "rag_context": "",
@@ -7848,7 +7850,7 @@
       "inference_time_s": 0.13
     },
     {
-      "question": "A 36 year-old woman presents with vaginal bleeding at 8 weeks 3 days’ gestation. She has never been pregnant before. The bright red ’spotting’ started 3 days ago with no abdominal pain. Vaginal examination revealed a closed cervix. Which of the following is helpful in the diagnosis of this condition?\\n",
+      "question": "A 36 year-old woman presents with vaginal bleeding at 8 weeks 3 days\u2019 gestation. She has never been pregnant before. The bright red \u2019spotting\u2019 started 3 days ago with no abdominal pain. Vaginal examination revealed a closed cervix. Which of the following is helpful in the diagnosis of this condition?\\n",
       "options": "A. Transvaginal ultrasound scan | B. Full blood count | C. Urine pregnancy test | D. Blood pregnancy test | E. Chromosomal studies",
       "ground_truth": "A",
       "rag_context": "",
@@ -8070,7 +8072,7 @@
     },
     {
       "question": "Which of the following is least accurate regarding adrenal disease in pregnancy?\\n \\n",
-      "options": "A. Cushing’s syndrome may resemble the features of normal pregnancy. | B. Addison’s disease may be difficult to diagnose in pregnancy due to changes in steroid profiles. | C. Phaeochromocytoma may be diagnosed using 24-hour urine catecholamine testing. | D. Steroid replacement therapy should be reduced to allow normal delivery. | E. Phaeochromocytoma may mimic the features of pre-eclampsia.",
+      "options": "A. Cushing\u2019s syndrome may resemble the features of normal pregnancy. | B. Addison\u2019s disease may be difficult to diagnose in pregnancy due to changes in steroid profiles. | C. Phaeochromocytoma may be diagnosed using 24-hour urine catecholamine testing. | D. Steroid replacement therapy should be reduced to allow normal delivery. | E. Phaeochromocytoma may mimic the features of pre-eclampsia.",
       "ground_truth": "D",
       "rag_context": "",
       "model_response": "A",
@@ -8161,7 +8163,7 @@
     },
     {
       "question": "Which statement is correct regarding general examination in pregnancy?\\n a) \\nb) \\n c) \\n d) \\ne)",
-      "options": "A. The abdomen should always be palpated lying flat. | B. Breast examination should be conducted as part of routine antenatal care. | C. Approximately 80 per cent of women have an audible murmur at 12/40. | D. A symphysis–fundal height measurement should be plotted at every visit after 16/40. | E. Nipple examination can predict women who will need help in breastfeeding.",
+      "options": "A. The abdomen should always be palpated lying flat. | B. Breast examination should be conducted as part of routine antenatal care. | C. Approximately 80 per cent of women have an audible murmur at 12/40. | D. A symphysis\u2013fundal height measurement should be plotted at every visit after 16/40. | E. Nipple examination can predict women who will need help in breastfeeding.",
       "ground_truth": "E",
       "rag_context": "",
       "model_response": "B",
@@ -8213,7 +8215,7 @@
     },
     {
       "question": "Management of a cervical smear showing moderate dyskaryosis is:\\n \\n",
-      "options": "A. Repeat smear in six months. | B. HPV vaccination. | C. Colposcopy and biopsy. | D. LLETZ procedure. | E. Wertheim’s hysterectomy.",
+      "options": "A. Repeat smear in six months. | B. HPV vaccination. | C. Colposcopy and biopsy. | D. LLETZ procedure. | E. Wertheim\u2019s hysterectomy.",
       "ground_truth": "C",
       "rag_context": "",
       "model_response": "C",
@@ -8278,7 +8280,7 @@
     },
     {
       "question": "A nineteen year-old-girl is admitted with pelvic pain, a positive pregnancy test and a 3 cm viable ectopic pregnancy seen in the right fallopian tube on ultrasound. She has already had a left saplingectomy for a previous ectopic. The best management would be:\\n  \\n",
-      "options": "A. Laparoscopic salpingectomy. | B. Laparoscopic salpingostomy. | C. Conservative management with serial βHCGs. | D. Laparotomy. | E. Methotrexate.",
+      "options": "A. Laparoscopic salpingectomy. | B. Laparoscopic salpingostomy. | C. Conservative management with serial \u03b2HCGs. | D. Laparotomy. | E. Methotrexate.",
       "ground_truth": "B",
       "rag_context": "",
       "model_response": "A",
@@ -8330,7 +8332,7 @@
     },
     {
       "question": "Regarding carcinoma of the ovary:\\n a) \\nb) \\n c) \\nd) \\ne) \\n",
-      "options": "A. It is most common in developing countries. | B. The incidence is similar to carcinoma of the endometrium with similar prognosis. | C. The peak age is 80–90 years old. | D. The majority are epithelial in origin. | E. The mainstay of treatment is surgery and radiotherapy combined.",
+      "options": "A. It is most common in developing countries. | B. The incidence is similar to carcinoma of the endometrium with similar prognosis. | C. The peak age is 80\u201390 years old. | D. The majority are epithelial in origin. | E. The mainstay of treatment is surgery and radiotherapy combined.",
       "ground_truth": "D",
       "rag_context": "",
       "model_response": "D",
@@ -8343,7 +8345,7 @@
     },
     {
       "question": "Which of the statements does not describe sex cord tumours: \\n\\n\\n\\n\\n \\n",
-      "options": "A. All granulosa cell tumours are malignant, but are usually confined to the ovary and have a good prognosis. | B. Call–Exner bodies are pathognomonic of theca cell tumours. | C. Many theca cell tumours cause post-menopausal bleeding and endometrial carcinoma. | D. Meigs’ syndrome is the combination of fibroma, ascites and pleural effusions. | E. Virilization is seen in 75 per cent of Sertoli–Leydig cell tumours.",
+      "options": "A. All granulosa cell tumours are malignant, but are usually confined to the ovary and have a good prognosis. | B. Call\u2013Exner bodies are pathognomonic of theca cell tumours. | C. Many theca cell tumours cause post-menopausal bleeding and endometrial carcinoma. | D. Meigs\u2019 syndrome is the combination of fibroma, ascites and pleural effusions. | E. Virilization is seen in 75 per cent of Sertoli\u2013Leydig cell tumours.",
       "ground_truth": "A",
       "rag_context": "",
       "model_response": "D",
@@ -8524,7 +8526,7 @@
       "inference_time_s": 0.06
     },
     {
-      "question": "Pearl’s index indicates:\\n         \\n         \\n         \\n         \\n",
+      "question": "Pearl\u2019s index indicates:\\n         \\n         \\n         \\n         \\n",
       "options": "A. Malnutrition | B. Population | C. Contraceptive failure | D. Low birth weight | E. Intrauterine growth restriction",
       "ground_truth": "C",
       "rag_context": "",
@@ -8758,7 +8760,7 @@
       "inference_time_s": 0.2
     },
     {
-      "question": "A mother brings her 12-year old daughter to the clinic because she is concerned that most of the other girls in her daughter’s class have already started having their period. She thinks her daughter hasn’t shown any evidence of going into puberty yet. Knowing the usual first sign of the onset of puberty, you should ask the mother which of the following questions?\\n\\n\\n\\n\\n\\n",
+      "question": "A mother brings her 12-year old daughter to the clinic because she is concerned that most of the other girls in her daughter\u2019s class have already started having their period. She thinks her daughter hasn\u2019t shown any evidence of going into puberty yet. Knowing the usual first sign of the onset of puberty, you should ask the mother which of the following questions?\\n\\n\\n\\n\\n\\n",
       "options": "A. Has your daughter had any acne? | B. Has your daughter started to develop breasts? | C. Does your daughter have any axillary or pubic hair? | D. Has your daughter started her growth spurt? | E. Has your daughter has any vaginal spotting?",
       "ground_truth": "B",
       "rag_context": "",
@@ -9032,7 +9034,7 @@
     },
     {
       "question": "A nineteen-year-old-girl is admitted with pelvic pain, a positive pregnancy test and a 3 cm viable ectopic pregnancy seen in the right fallopian tube on ultrasound. She has already had a left salpingectomy for a previous ectopic. The best management would be:\\n \\n\\n\\n\\n\\n",
-      "options": "A. Laparoscopic salpingectomy. | B. Conservative management with serial βHCGs. | C. Laparotomy. | D. Laparoscopic salpingostomy | E. Methotrexate.",
+      "options": "A. Laparoscopic salpingectomy. | B. Conservative management with serial \u03b2HCGs. | C. Laparotomy. | D. Laparoscopic salpingostomy | E. Methotrexate.",
       "ground_truth": "D",
       "rag_context": "",
       "model_response": "A",
@@ -9175,7 +9177,7 @@
     },
     {
       "question": "Concerning Implanon NXT, which of the following is not true?\\n \\n\\n\\n\\n",
-      "options": "A. Removal is more difficult than insertion | B. It is inserted in the inner aspect of a client’s dominant arm | C. Inhibits ovulation | D. Implanon is for 3 years | E. May require barrier form of contraceptive in the first 7 days after insertion in some situation.",
+      "options": "A. Removal is more difficult than insertion | B. It is inserted in the inner aspect of a client\u2019s dominant arm | C. Inhibits ovulation | D. Implanon is for 3 years | E. May require barrier form of contraceptive in the first 7 days after insertion in some situation.",
       "ground_truth": "B",
       "rag_context": "",
       "model_response": "A",
@@ -9305,7 +9307,7 @@
     },
     {
       "question": "Regarding carcinoma of the ovary, which of the following is true?\\n\\n \\n\\n\\n",
-      "options": "A. It is most common in developing countries. | B. The incidence is similar to carcinoma of the endometrium with similar prognosis. | C. The peak age is 80–90 years old. | D. The mainstay of treatment is surgery and radiotherapy combined | E. The majority are epithelial in origin.",
+      "options": "A. It is most common in developing countries. | B. The incidence is similar to carcinoma of the endometrium with similar prognosis. | C. The peak age is 80\u201390 years old. | D. The mainstay of treatment is surgery and radiotherapy combined | E. The majority are epithelial in origin.",
       "ground_truth": "E",
       "rag_context": "",
       "model_response": "E",
@@ -9422,7 +9424,7 @@
     },
     {
       "question": "Ante-partum haemorrhage\\n\t \\n\t\\n\t\\n\t\\n",
-      "options": "A. Is defined as “bleeding from the genital tract in pregnancy” | B. May be complicated by hypofibrinogenaemia | C. Requires assessment by vaginal examination | D. May be caused by carcinoma insitu of the cervix | E. Is always painless.",
+      "options": "A. Is defined as \u201cbleeding from the genital tract in pregnancy\u201d | B. May be complicated by hypofibrinogenaemia | C. Requires assessment by vaginal examination | D. May be caused by carcinoma insitu of the cervix | E. Is always painless.",
       "ground_truth": "B",
       "rag_context": "",
       "model_response": "A",
@@ -9551,7 +9553,7 @@
       "inference_time_s": 0.15
     },
     {
-      "question": "Turner’s syndrome is a chromosomal abnormality that has many clinical features. Which of this is an exception?\\n\\n\\n",
+      "question": "Turner\u2019s syndrome is a chromosomal abnormality that has many clinical features. Which of this is an exception?\\n\\n\\n",
       "options": "A. May be diagnosed as delayed puberty | B. May have a male phenotype | C. Is characterized by short stature, wide carrying angle and wide spaced nipples | D. Is characterized by low oestrogen levels due to streaked ovaries | E. The luteinizing hormone (LH) and FSH levels are usually markedly elevated",
       "ground_truth": "B",
       "rag_context": "",
@@ -9629,7 +9631,7 @@
       "inference_time_s": 0.13
     },
     {
-      "question": "A 36 year-old woman presents with vaginal bleeding at 8 weeks 3 days’ gestation. She has never been pregnant before. The bright red ’spotting’ started 3 days ago with no abdominal pain. Vaginal examination revealed a closed cervix. The following is helpful in the diagnosis of this condition:\\n\\n\\n\\n\\n \\n",
+      "question": "A 36 year-old woman presents with vaginal bleeding at 8 weeks 3 days\u2019 gestation. She has never been pregnant before. The bright red \u2019spotting\u2019 started 3 days ago with no abdominal pain. Vaginal examination revealed a closed cervix. The following is helpful in the diagnosis of this condition:\\n\\n\\n\\n\\n \\n",
       "options": "A. Transvaginal ultrasound scan | B. Full blood count | C. Urine pregnancy test | D. Blood pregnancy test | E. Chromosomal studies",
       "ground_truth": "A",
       "rag_context": "",
@@ -9734,7 +9736,7 @@
     },
     {
       "question": "which of the following does not represent Ante-partum haemorrhage\\n\t\\n\\n",
-      "options": "A. Is defined as “bleeding from the genital tract in pregnancy” | B. Maybe complicated by hypofibrinogenaemia | C. Requires assessment by vaginal examination. | D. May be caused by cervical carcinoma | E. Is always painless.",
+      "options": "A. Is defined as \u201cbleeding from the genital tract in pregnancy\u201d | B. Maybe complicated by hypofibrinogenaemia | C. Requires assessment by vaginal examination. | D. May be caused by cervical carcinoma | E. Is always painless.",
       "ground_truth": "E",
       "rag_context": "",
       "model_response": "E",
@@ -9903,7 +9905,7 @@
     },
     {
       "question": "Elective cervical cerclage is indicated in which of the following\\n",
-      "options": "A. Three spontaneous first – trimester abortions | B. Spontaneous twin conception | C. Three second – trimester pregnancy losses without evidence of labour or abruption | D. History of loop electrosurgical excision procedure for cervical dysplasia | E. Cervical length of 15 mm by ultrasound at 14 weeks",
+      "options": "A. Three spontaneous first \u2013 trimester abortions | B. Spontaneous twin conception | C. Three second \u2013 trimester pregnancy losses without evidence of labour or abruption | D. History of loop electrosurgical excision procedure for cervical dysplasia | E. Cervical length of 15 mm by ultrasound at 14 weeks",
       "ground_truth": "C",
       "rag_context": "",
       "model_response": "C",

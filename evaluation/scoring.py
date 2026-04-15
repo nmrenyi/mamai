@@ -72,6 +72,13 @@ def extract_letters(response: str) -> set[str]:
     if m:
         return {m.group(1).upper()}
 
+    # 10. Fallback: first line is a single letter immediately followed by a quote or
+    #     tag-like corruption — e.g. 'A"', 'B</start_of_turn>', 'E</body>'.
+    #     Only fires when all prior rules failed (empty result so far).
+    m = re.match(r"""^([A-H])(?:["'`]|</?[^>]+>)""", first_line)
+    if m:
+        return {m.group(1).upper()}
+
     return set()
 
 
