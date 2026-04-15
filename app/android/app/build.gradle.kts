@@ -20,7 +20,6 @@ fun propOrEnv(envName: String, propertyName: String): String? =
 android {
     namespace = "com.example.app"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = "27.0.12077973"
     val releaseStoreFile = propOrEnv("ANDROID_KEYSTORE_PATH", "storeFile")
     val releaseStorePassword = propOrEnv("ANDROID_KEYSTORE_PASSWORD", "storePassword")
     val releaseKeyAlias = propOrEnv("ANDROID_KEY_ALIAS", "keyAlias")
