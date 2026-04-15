@@ -11,11 +11,19 @@ from prompts import TEMPERATURE, TOP_P, TOP_K, N_CTX
 
 def _detect_gpu_layers() -> int:
     """Return -1 (all layers on GPU) if CUDA is available, else 0 (CPU only)."""
+    import ctypes
+    for lib in ("libcuda.so", "libcuda.so.1", "libcuda.dylib"):
+        try:
+            ctypes.CDLL(lib)
+            return -1
+        except OSError:
+            pass
+    # Fallback: nvidia-smi
     try:
-        import ctypes
-        ctypes.CDLL("libcuda.so")
+        import subprocess
+        subprocess.run(["nvidia-smi"], capture_output=True, check=True, timeout=5)
         return -1
-    except OSError:
+    except Exception:
         pass
     return 0
 
