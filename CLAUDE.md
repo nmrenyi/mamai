@@ -2,6 +2,16 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Development Priority
+
+**Evaluation quality and response safety are the top priorities in this project, above all other concerns** (performance, code hygiene, new features, etc.).
+
+This is a medical app used by nurses and midwives in Zanzibar. Wrong or unsafe medical advice has direct patient harm consequences. When triaging work or making any technical decision, always ask: *does this help ensure the model is accurate and safe?*
+
+- Safety judge scores of 1 (the lowest rating) must always be flagged and addressed before other work.
+- Deployment decisions (model selection, RAG config) must be driven by eval results, especially on clinical datasets (e.g. `kenya_vignettes`).
+- RAG regressions — where retrieval context hurts model accuracy — are a patient safety concern, not just a benchmarking curiosity.
+
 ## Project Overview
 
 MAM-AI is a medical search application for nurses and midwives in Zanzibar. It uses on-device RAG (Retrieval-Augmented Generation) with the Gemma 4 E4B model to provide medical information searches without requiring internet connectivity. The app runs LLM inference entirely on-device using Google AI Edge LiteRT-LM.
