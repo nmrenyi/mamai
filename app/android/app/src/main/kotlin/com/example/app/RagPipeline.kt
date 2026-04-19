@@ -309,8 +309,9 @@ class RagPipeline(application: Application) {
         }
 
     private fun buildEngine(modelPath: String, backend: Backend, cacheDir: String) {
-        engine = Engine(EngineConfig(modelPath = modelPath, backend = backend, cacheDir = cacheDir))
-        engine.initialize()
+        val e = Engine(EngineConfig(modelPath = modelPath, backend = backend, cacheDir = cacheDir))
+        e.initialize()
+        engine = e
     }
 
     companion object {

@@ -51,7 +51,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        buildConfigField("Boolean", "USE_GPU_FOR_LLM", useGpuForLlm.toString())
+        buildConfigField("boolean", "USE_GPU_FOR_LLM", useGpuForLlm.toString())
     }
 
     sourceSets {
