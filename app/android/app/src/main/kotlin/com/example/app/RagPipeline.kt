@@ -94,16 +94,37 @@ class RagPipeline(application: Application) {
     init {
         Executors.newSingleThreadExecutor().execute {
             try {
+                val useGpu = BuildConfig.USE_GPU_FOR_LLM
                 Log.w("mam-ai", "[TIMING] Engine.initialize() starting...")
-                engine = Engine(
-                    EngineConfig(
-                        modelPath = baseFolder + appConfig.getString("llm_model"),
-                        backend = Backend.CPU(),
-                        cacheDir = application.cacheDir.path,
-                    )
-                )
-                engine.initialize()
-                Log.w("mam-ai", "[TIMING] Engine ready: ${System.currentTimeMillis() - initStartTime}ms after construction")
+                var activeBackend = if (useGpu) "GPU" else "CPU"
+                val modelPath = baseFolder + appConfig.getString("llm_model")
+                val cacheDir = application.cacheDir.path
+                val backend = if (useGpu) {
+                    try {
+                        Log.i("mam-ai", "[BACKEND] Attempting GPU backend for LLM")
+                        Backend.GPU()
+                    } catch (gpuError: Throwable) {
+                        Log.w("mam-ai", "[BACKEND] WARNING: GPU backend unavailable, falling back to CPU", gpuError)
+                        activeBackend = "CPU"
+                        Backend.CPU()
+                    }
+                } else {
+                    Log.i("mam-ai", "[BACKEND] Using CPU backend for LLM")
+                    Backend.CPU()
+                }
+                if (useGpu && activeBackend == "GPU") {
+                    try {
+                        buildEngine(modelPath, backend, cacheDir)
+                    } catch (gpuInitError: Throwable) {
+                        Log.w("mam-ai", "[BACKEND] WARNING: GPU engine init failed, falling back to CPU", gpuInitError)
+                        activeBackend = "CPU"
+                        buildEngine(modelPath, Backend.CPU(), cacheDir)
+                    }
+                } else {
+                    buildEngine(modelPath, backend, cacheDir)
+                }
+                Log.w("mam-ai", "[BACKEND] *** LLM running on $activeBackend ***")
+                Log.i("mam-ai", "[TIMING] Engine ready: ${System.currentTimeMillis() - initStartTime}ms after construction")
                 val rt = Runtime.getRuntime()
                 Log.w("mam-ai", "[MEMORY] post-init heap: ${rt.totalMemory() / 1024 / 1024}MB used, ${rt.freeMemory() / 1024 / 1024}MB free, ${rt.maxMemory() / 1024 / 1024}MB max")
                 Log.i("mam-ai", "LLM initialized!")
@@ -292,6 +313,12 @@ class RagPipeline(application: Application) {
             Log.w("mam-ai", "[TIMING] total query: ${System.currentTimeMillis() - qStart}ms")
             result
         }
+
+    private fun buildEngine(modelPath: String, backend: Backend, cacheDir: String) {
+        val e = Engine(EngineConfig(modelPath = modelPath, backend = backend, cacheDir = cacheDir))
+        e.initialize()
+        engine = e
+    }
 
     companion object {
         private val CHUNK_SEPARATORS = listOf("<sep>", "<doc_sep>")

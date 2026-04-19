@@ -61,6 +61,12 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- Optional native libraries for the LiteRT-LM GPU backend (OpenCL).
+             required="false" avoids install-time rejection on devices without
+             these libraries; runtime fallback to CPU is handled in RagPipeline. -->
+        <uses-native-library android:name="libOpenCL.so" android:required="false"/>
+        <uses-native-library android:name="libvndksupport.so" android:required="false"/>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

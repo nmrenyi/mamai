@@ -13,6 +13,8 @@ if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
 }
 
+val useGpuForLlm = project.findProperty("useGpuForLlm")?.toString()?.toBoolean() ?: false
+
 fun propOrEnv(envName: String, propertyName: String): String? =
     System.getenv(envName)?.takeIf { it.isNotBlank() }
         ?: (keystoreProperties.getProperty(propertyName)?.takeIf { it.isNotBlank() })
@@ -49,6 +51,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        buildConfigField("boolean", "USE_GPU_FOR_LLM", useGpuForLlm.toString())
     }
 
     sourceSets {
@@ -96,7 +99,7 @@ kotlin {
 }
 dependencies {
     implementation("com.google.ai.edge.localagents:localagents-rag:0.2.0")
-    implementation("com.google.ai.edge.litertlm:litertlm-android:0.10.0")
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.10.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.10.2")
     implementation("com.google.protobuf:protobuf-javalite:3.25.4")
 }
