@@ -103,6 +103,7 @@ class RagPipeline(application: Application) {
                     Backend.CPU()
                 }
                 Log.w("mam-ai", "[TIMING] Engine.initialize() starting...")
+                var activeBackend = if (useGpu) "GPU" else "CPU"
                 try {
                     engine = Engine(
                         EngineConfig(
@@ -112,10 +113,10 @@ class RagPipeline(application: Application) {
                         )
                     )
                     engine.initialize()
-                    Log.w("mam-ai", "[BACKEND] ${if (useGpu) "GPU" else "CPU"} backend initialized successfully")
                 } catch (gpuError: Throwable) {
                     if (!useGpu) throw gpuError
                     Log.w("mam-ai", "[BACKEND] WARNING: GPU init failed (${gpuError.message}), falling back to CPU")
+                    activeBackend = "CPU"
                     engine = Engine(
                         EngineConfig(
                             modelPath = baseFolder + appConfig.getString("llm_model"),
@@ -124,8 +125,8 @@ class RagPipeline(application: Application) {
                         )
                     )
                     engine.initialize()
-                    Log.w("mam-ai", "[BACKEND] CPU fallback initialized successfully")
                 }
+                Log.w("mam-ai", "[BACKEND] *** LLM running on $activeBackend ***")
                 Log.w("mam-ai", "[TIMING] Engine ready: ${System.currentTimeMillis() - initStartTime}ms after construction")
                 val rt = Runtime.getRuntime()
                 Log.w("mam-ai", "[MEMORY] post-init heap: ${rt.totalMemory() / 1024 / 1024}MB used, ${rt.freeMemory() / 1024 / 1024}MB free, ${rt.maxMemory() / 1024 / 1024}MB max")
