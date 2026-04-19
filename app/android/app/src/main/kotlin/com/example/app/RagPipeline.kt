@@ -95,16 +95,16 @@ class RagPipeline(application: Application) {
         Executors.newSingleThreadExecutor().execute {
             try {
                 val useGpu = appConfig.optBoolean("use_gpu_for_llm", false)
-                val backend = if (useGpu) {
-                    Log.w("mam-ai", "[BACKEND] Attempting GPU backend for LLM")
-                    Backend.GPU()
-                } else {
-                    Log.w("mam-ai", "[BACKEND] Using CPU backend for LLM")
-                    Backend.CPU()
-                }
                 Log.w("mam-ai", "[TIMING] Engine.initialize() starting...")
                 var activeBackend = if (useGpu) "GPU" else "CPU"
                 try {
+                    val backend = if (useGpu) {
+                        Log.w("mam-ai", "[BACKEND] Attempting GPU backend for LLM")
+                        Backend.GPU()
+                    } else {
+                        Log.w("mam-ai", "[BACKEND] Using CPU backend for LLM")
+                        Backend.CPU()
+                    }
                     engine = Engine(
                         EngineConfig(
                             modelPath = baseFolder + appConfig.getString("llm_model"),
@@ -113,9 +113,9 @@ class RagPipeline(application: Application) {
                         )
                     )
                     engine.initialize()
-                } catch (gpuError: Throwable) {
+                } catch (gpuError: Exception) {
                     if (!useGpu) throw gpuError
-                    Log.w("mam-ai", "[BACKEND] WARNING: GPU init failed (${gpuError.message}), falling back to CPU")
+                    Log.w("mam-ai", "[BACKEND] WARNING: GPU init failed, falling back to CPU", gpuError)
                     activeBackend = "CPU"
                     engine = Engine(
                         EngineConfig(
