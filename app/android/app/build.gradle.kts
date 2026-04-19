@@ -96,7 +96,7 @@ kotlin {
 }
 dependencies {
     implementation("com.google.ai.edge.localagents:localagents-rag:0.2.0")
-    implementation("com.google.ai.edge.litertlm:litertlm-android:0.10.0")
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.10.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.10.2")
     implementation("com.google.protobuf:protobuf-javalite:3.25.4")
 }

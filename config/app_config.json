@@ -3,5 +3,6 @@
   "embedding_model": "Gecko_1024_quant.tflite",
   "tokenizer": "sentencepiece.model",
   "embedding_dim": 768,
-  "use_gpu_for_embeddings": false
+  "use_gpu_for_embeddings": false,
+  "use_gpu_for_llm": true
 }
