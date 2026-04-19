@@ -4,5 +4,5 @@
   "tokenizer": "sentencepiece.model",
   "embedding_dim": 768,
   "use_gpu_for_embeddings": false,
-  "use_gpu_for_llm": true
+  "use_gpu_for_llm": false
 }

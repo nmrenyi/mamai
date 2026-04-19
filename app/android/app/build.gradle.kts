@@ -13,6 +13,13 @@ if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
 }
 
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.inputStream().use { localProperties.load(it) }
+}
+val useGpuForLlm = localProperties.getProperty("useGpuForLlm", "false").toBoolean()
+
 fun propOrEnv(envName: String, propertyName: String): String? =
     System.getenv(envName)?.takeIf { it.isNotBlank() }
         ?: (keystoreProperties.getProperty(propertyName)?.takeIf { it.isNotBlank() })
@@ -49,6 +56,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        buildConfigField("Boolean", "USE_GPU_FOR_LLM", useGpuForLlm.toString())
     }
 
     sourceSets {
