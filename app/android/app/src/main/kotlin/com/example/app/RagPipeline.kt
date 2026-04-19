@@ -97,26 +97,20 @@ class RagPipeline(application: Application) {
                 val useGpu = BuildConfig.USE_GPU_FOR_LLM
                 Log.w("mam-ai", "[TIMING] Engine.initialize() starting...")
                 var activeBackend = if (useGpu) "GPU" else "CPU"
-                try {
-                    val backend = if (useGpu) {
+                val backend = if (useGpu) {
+                    try {
                         Log.i("mam-ai", "[BACKEND] Attempting GPU backend for LLM")
                         Backend.GPU()
-                    } else {
-                        Log.i("mam-ai", "[BACKEND] Using CPU backend for LLM")
+                    } catch (gpuError: Throwable) {
+                        Log.w("mam-ai", "[BACKEND] WARNING: GPU backend unavailable, falling back to CPU", gpuError)
+                        activeBackend = "CPU"
                         Backend.CPU()
                     }
-                    buildEngine(baseFolder + appConfig.getString("llm_model"), backend, application.cacheDir.path)
-                } catch (gpuError: Throwable) {
-                    if (!useGpu) throw gpuError
-                    Log.w("mam-ai", "[BACKEND] WARNING: GPU init failed, falling back to CPU", gpuError)
-                    activeBackend = "CPU"
-                    try {
-                        buildEngine(baseFolder + appConfig.getString("llm_model"), Backend.CPU(), application.cacheDir.path)
-                    } catch (cpuError: Throwable) {
-                        cpuError.addSuppressed(gpuError)
-                        throw cpuError
-                    }
+                } else {
+                    Log.i("mam-ai", "[BACKEND] Using CPU backend for LLM")
+                    Backend.CPU()
                 }
+                buildEngine(baseFolder + appConfig.getString("llm_model"), backend, application.cacheDir.path)
                 Log.w("mam-ai", "[BACKEND] *** LLM running on $activeBackend ***")
                 Log.i("mam-ai", "[TIMING] Engine ready: ${System.currentTimeMillis() - initStartTime}ms after construction")
                 val rt = Runtime.getRuntime()
