@@ -94,7 +94,7 @@ class RagPipeline(application: Application) {
     init {
         Executors.newSingleThreadExecutor().execute {
             try {
-                val useGpu = BuildConfig.USE_GPU_FOR_LLM || appConfig.optBoolean("use_gpu_for_llm", false)
+                val useGpu = BuildConfig.USE_GPU_FOR_LLM
                 Log.w("mam-ai", "[TIMING] Engine.initialize() starting...")
                 var activeBackend = if (useGpu) "GPU" else "CPU"
                 try {
