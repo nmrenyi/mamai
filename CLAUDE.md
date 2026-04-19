@@ -78,13 +78,13 @@ The RAG pipeline (`RagPipeline.kt`) manages three main components:
 
 1. **LLM Backend**: LiteRT-LM Gemma 4 E4B inference
    - Model: `gemma-4-E4B-it.litertlm` (int4 quantized, 3.65 GB)
-   - Runs on CPU
+   - CPU by default; GPU opt-in via `useGpuForLlm` Gradle property (see Backend Selection)
    - Max tokens: 4096
 
 2. **Embeddings**: Gecko embedding model for semantic search
    - Model: `Gecko_1024_quant.tflite` (768-dim embeddings)
    - Tokenizer: `sentencepiece.model`
-   - Runs on CPU (`USE_GPU_FOR_EMBEDDINGS = false`)
+   - Always CPU (`use_gpu_for_embeddings: false` in `app_config.json`)
 
 3. **Vector Store**: SQLite-backed semantic memory
    - Database: `embeddings.sqlite` (pre-computed document embeddings)
@@ -143,9 +143,14 @@ The RAG prompt is defined in `RagPipeline.kt:205-225`. It emphasizes:
 
 ### Backend Selection
 
-Both LLM and embeddings use **CPU backend** (not GPU). Change in `RagPipeline.kt`:
-- LiteRT-LM backend: configured via `LlmInferenceOptions` in `RagPipeline.kt`
-- Embeddings GPU: `USE_GPU_FOR_EMBEDDINGS = false`
+- **LLM**: defaults to CPU in production. Controlled by the `USE_GPU_FOR_LLM` `BuildConfig` field, set at compile time via the Gradle property `useGpuForLlm` (default `false`). If GPU init fails at runtime, `RagPipeline.kt` automatically falls back to CPU.
+- **Embeddings**: always CPU (`use_gpu_for_embeddings: false` in `config/app_config.json`).
+
+**To enable GPU locally** (e.g. for latency testing on a capable device), add to `~/.gradle/gradle.properties`:
+```
+useGpuForLlm=true
+```
+Or pass it at build time: `flutter build apk -PuseGpuForLlm=true`. Do not commit this flag — production APKs ship with CPU by default until GPU support is validated across target devices.
 
 ### Retrieval Parameters
 
