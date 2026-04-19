@@ -84,7 +84,7 @@ The RAG pipeline (`RagPipeline.kt`) manages three main components:
 2. **Embeddings**: Gecko embedding model for semantic search
    - Model: `Gecko_1024_quant.tflite` (768-dim embeddings)
    - Tokenizer: `sentencepiece.model`
-   - Always CPU (`use_gpu_for_embeddings: false` in `app_config.json`)
+   - CPU by default (`use_gpu_for_embeddings: false` in `app_config.json`)
 
 3. **Vector Store**: SQLite-backed semantic memory
    - Database: `embeddings.sqlite` (pre-computed document embeddings)
@@ -144,7 +144,7 @@ The RAG prompt is defined in `RagPipeline.kt:205-225`. It emphasizes:
 ### Backend Selection
 
 - **LLM**: defaults to CPU in production. Controlled by the `USE_GPU_FOR_LLM` `BuildConfig` field, set at compile time via the Gradle property `useGpuForLlm` (default `false`). If GPU init fails at runtime, `RagPipeline.kt` automatically falls back to CPU.
-- **Embeddings**: always CPU (`use_gpu_for_embeddings: false` in `config/app_config.json`).
+- **Embeddings**: CPU by default (`use_gpu_for_embeddings: false` in `config/app_config.json`).
 
 **To enable GPU locally** (e.g. for latency testing on a capable device), add to `~/.gradle/gradle.properties`:
 ```
