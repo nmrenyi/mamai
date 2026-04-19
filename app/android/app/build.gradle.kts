@@ -13,12 +13,7 @@ if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
 }
 
-val localProperties = Properties()
-val localPropertiesFile = rootProject.file("local.properties")
-if (localPropertiesFile.exists()) {
-    localPropertiesFile.inputStream().use { localProperties.load(it) }
-}
-val useGpuForLlm = localProperties.getProperty("useGpuForLlm", "false").toBoolean()
+val useGpuForLlm = (project.findProperty("useGpuForLlm") as String?)?.toBoolean() ?: false
 
 fun propOrEnv(envName: String, propertyName: String): String? =
     System.getenv(envName)?.takeIf { it.isNotBlank() }
