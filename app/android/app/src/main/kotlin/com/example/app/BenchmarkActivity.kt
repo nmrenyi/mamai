@@ -235,6 +235,21 @@ class BenchmarkActivity : Activity() {
                         put("estimated_tokens", result.estimatedTokens)
                         put("decode_throughput_tps", decodeTps)
                         put("num_retrieved_docs", result.numRetrievedDocs)
+                        // Full content for downstream analysis: chunks the retriever surfaced,
+                        // total chunk-text length (drives prefill cost), and the model's
+                        // generated response.
+                        put("retrieved_chunks", JSONArray().apply {
+                            result.retrievedChunks.forEach { doc ->
+                                put(JSONObject().apply {
+                                    put("text", doc.text)
+                                    put("source", doc.source)
+                                    put("page", doc.page)
+                                    put("chars", doc.text.length)
+                                })
+                            }
+                        })
+                        put("retrieved_total_chars", result.retrievedTotalChars)
+                        put("response_text", result.responseText)
                         put("error", result.error ?: JSONObject.NULL)
                         put("heap_before_mb", preMemory.getInt("used_mb"))
                         put("heap_after_mb", postMemory.getInt("used_mb"))
@@ -308,6 +323,9 @@ class BenchmarkActivity : Activity() {
         val responseChars: Int,
         val estimatedTokens: Int,
         val numRetrievedDocs: Int,
+        val retrievedChunks: List<RetrievedDoc>,
+        val retrievedTotalChars: Int,
+        val responseText: String,
         val error: String?,
     )
 
@@ -322,6 +340,7 @@ class BenchmarkActivity : Activity() {
         var firstTokenTime = 0L
         var error: String? = null
         val responseBuilder = StringBuilder()
+        var retrievedChunks: List<RetrievedDoc> = emptyList()
 
         val qStart = System.currentTimeMillis()
         var retrievalDoneTime = 0L
@@ -336,6 +355,7 @@ class BenchmarkActivity : Activity() {
                         retrievalDoneTime = System.currentTimeMillis()
                         retrievalTimeMs = retrievalDoneTime - qStart
                         numDocs = docs.size
+                        retrievedChunks = docs
                     },
                     generationListener = { partial, _ ->
                         responseBuilder.append(partial)
@@ -372,6 +392,9 @@ class BenchmarkActivity : Activity() {
             responseChars = responseChars,
             estimatedTokens = estimatedTokens,
             numRetrievedDocs = numDocs,
+            retrievedChunks = retrievedChunks,
+            retrievedTotalChars = retrievedChunks.sumOf { it.text.length },
+            responseText = responseBuilder.toString(),
             error = error,
         )
     }
