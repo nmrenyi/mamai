@@ -74,6 +74,9 @@ class MainActivity : FlutterActivity() {
                 "getPinnedRagBundleInfo" -> {
                     result.success(getPinnedRagBundleInfo())
                 }
+                "getRuntimeInfo" -> {
+                    result.success(getRuntimeInfo())
+                }
                 "startDownloadService" -> {
                     // Start the ForegroundService so the OS keeps the process alive
                     // while downloads run in the background.  We do NOT request
@@ -183,6 +186,14 @@ class MainActivity : FlutterActivity() {
             Log.w("mam-ai", "[RAG] failed to read pinned bundle metadata", e)
             null
         }
+
+    private fun getRuntimeInfo(): Map<String, Any> = mapOf(
+        "appVersionName" to BuildConfig.VERSION_NAME,
+        "appVersionCode" to BuildConfig.VERSION_CODE,
+        "litertlmVersion" to BuildConfig.LITERTLM_VERSION,
+        "llmBackendConfigured" to if (BuildConfig.USE_GPU_FOR_LLM) "GPU" else "CPU",
+        "mtpEnabled" to BuildConfig.USE_MTP_FOR_LLM,
+    )
 
     private fun openPdf(source: String, page: Int): Boolean {
         val baseFolder = application.getExternalFilesDir(null) ?: return false

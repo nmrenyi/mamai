@@ -19,6 +19,10 @@ val useGpuForLlm = project.findProperty("useGpuForLlm")?.toString()?.toBoolean()
 // long retrieved-context prompts + constrained medical prose. Re-test before re-enabling.
 val useMtpForLlm = project.findProperty("useMtpForLlm")?.toString()?.toBoolean() ?: false
 
+// Used in both the dependency declaration below and the BuildConfig field so the About page
+// can surface what's actually linked at build time. Update in lockstep with the dependency.
+val litertlmVersion = "0.11.0"
+
 fun propOrEnv(envName: String, propertyName: String): String? =
     System.getenv(envName)?.takeIf { it.isNotBlank() }
         ?: (keystoreProperties.getProperty(propertyName)?.takeIf { it.isNotBlank() })
@@ -57,6 +61,7 @@ android {
         versionName = flutter.versionName
         buildConfigField("boolean", "USE_GPU_FOR_LLM", useGpuForLlm.toString())
         buildConfigField("boolean", "USE_MTP_FOR_LLM", useMtpForLlm.toString())
+        buildConfigField("String", "LITERTLM_VERSION", "\"$litertlmVersion\"")
     }
 
     sourceSets {
@@ -104,7 +109,7 @@ kotlin {
 }
 dependencies {
     implementation("com.google.ai.edge.localagents:localagents-rag:0.2.0")
-    implementation("com.google.ai.edge.litertlm:litertlm-android:0.11.0")
+    implementation("com.google.ai.edge.litertlm:litertlm-android:$litertlmVersion")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.10.2")
     implementation("com.google.protobuf:protobuf-javalite:3.25.4")
 }

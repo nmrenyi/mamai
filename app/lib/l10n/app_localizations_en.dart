@@ -116,6 +116,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aboutKnowledgeBundleDeployedLabel => 'Deployed';
 
   @override
+  String get aboutKnowledgeBundlePinnedNote =>
+      'Pinned in this build; deployment receipt not found on device.';
+
+  @override
+  String get aboutRuntimeTitle => 'Runtime';
+
+  @override
+  String get aboutRuntimeAppLabel => 'App';
+
+  @override
+  String get aboutRuntimeLitertlmLabel => 'LiteRT-LM';
+
+  @override
+  String get aboutRuntimeBackendLabel => 'LLM backend';
+
+  @override
   String get drawerAbout => 'About MAM-AI';
 
   @override

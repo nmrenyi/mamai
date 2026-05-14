@@ -46,6 +46,11 @@
   "aboutKnowledgeBundleUnavailable": "Bundle metadata is not available on this device yet.",
   "aboutKnowledgeBundleVersionLabel": "Version",
   "aboutKnowledgeBundleDeployedLabel": "Deployed",
+  "aboutKnowledgeBundlePinnedNote": "Pinned in this build; deployment receipt not found on device.",
+  "aboutRuntimeTitle": "Runtime",
+  "aboutRuntimeAppLabel": "App",
+  "aboutRuntimeLitertlmLabel": "LiteRT-LM",
+  "aboutRuntimeBackendLabel": "LLM backend",
 
   "drawerAbout": "About MAM-AI",
   "drawerTitle": "Past conversations",
