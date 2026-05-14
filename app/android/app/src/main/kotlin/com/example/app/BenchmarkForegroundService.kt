@@ -309,7 +309,11 @@ class BenchmarkForegroundService : Service() {
                 put("query_filter", queryFilter ?: JSONObject.NULL)
                 put("retrieval_top_k_override", retrieveKOverride ?: JSONObject.NULL)
                 put("model", "gemma-4-E4B-it.litertlm")
-                put("backend", "CPU")
+                // Read backend from BuildConfig at compile time. Older builds
+                // hard-coded "CPU" here even when GPU was active — fixed so the
+                // JSON metadata matches reality.
+                put("backend", if (BuildConfig.USE_GPU_FOR_LLM) "GPU" else "CPU")
+                put("mtp_enabled", BuildConfig.USE_MTP_FOR_LLM)
                 put("max_tokens", 32000)
                 put("temperature", 1.0)
                 put("top_p", 0.95)
