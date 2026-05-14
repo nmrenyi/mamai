@@ -1,6 +1,6 @@
 # MAM-AI On-Device Latency Sweep — GPU vs CPU
 
-_Generated: 2026-05-15T04:35:52_
+_Generated: 2026-05-15T07:40:25_
 
 
 ## Device & stack
@@ -34,7 +34,7 @@ screen-off and device-lock; OPPO Hans whitelist set manually.
 | 7 | 5139 | 21.3 / 23.2 / 22.8 | 61.4 / 62.3 / 60.4 | 2.72× |
 | 10 | 7482 | 22.5 / 20.5 / 20.4 | 61.8 / 70.6 / 77.9 | 3.10× |
 | 15 | 11297 | 25.3 / 24.0 / 22.4 | 84.8 / 80.8 / 89.7 | 3.48× |
-| 20 | 14520 | 23.9 / 20.5 / 18.5 | — |  |
+| 20 | 14520 | 23.9 / 20.5 / 18.5 | 88.7 / 95.6 / 95.6 | 4.46× |
 
 ## TTFT (ms, median) — prefill cost grows with retrieved-doc content
 
@@ -47,7 +47,7 @@ screen-off and device-lock; OPPO Hans whitelist set manually.
 | 7 | 5139 | 1920 | 36444 | 19.0× |
 | 10 | 7482 | 2523 | 40013 | 15.9× |
 | 15 | 11297 | 3457 | 54748 | 15.8× |
-| 20 | 14520 | 3986 | — |  |
+| 20 | 14520 | 3986 | 72881 | 18.3× |
 
 ## Decode (ms, median) — first token to last token
 
@@ -63,7 +63,7 @@ the model writing *longer answers* when given more context (more material to dra
 | 7 | 17215 | 23473 | 1.36× |
 | 10 | 18118 | 21699 | 1.20× |
 | 15 | 16820 | 22497 | 1.34× |
-| 20 | 14688 | — |  |
+| 20 | 14688 | 22634 | 1.54× |
 
 ## p95 total query latency (s) — tail-latency view
 
@@ -76,7 +76,7 @@ the model writing *longer answers* when given more context (more material to dra
 | 7 | 35.1 | 81.7 |
 | 10 | 29.0 | 84.5 |
 | 15 | 30.6 | 112.6 |
-| 20 | 35.3 | — |
+| 20 | 35.3 | 104.9 |
 
 ## Errors and the 4096-token context wall
 
@@ -89,12 +89,17 @@ the model writing *longer answers* when given more context (more material to dra
 | 7 | 0 | 0 |
 | 10 | 0 | 0 |
 | 15 | 0 | 0 |
-| 20 | 24 | — |
+| 20 | 24 | 24 |
 
-At k=20 on GPU, 24 of 54 runs failed with `Input token ids are too long. Exceeding the maximum 
-number of tokens allowed: …>= 4096` errors. The 4096-token cap is baked into the Gemma 4 E4B 
-`.litertlm` export — it's a model-artifact property, not a runtime config. CPU k=20 was skipped 
-for the same reason (would hit identical limit).
+At k=20, **24 of 54 runs failed on both GPU and CPU** with `Input token ids are too long. 
+Exceeding the maximum number of tokens allowed: …>= 4096`. The **exact same 8 queries failed on both 
+backends** (`long_01, long_03, medium_02, medium_04, short_01, short_03, short_04, short_05`) — 
+the same 24 (query × rep) pairs. This is direct evidence that the 4096-token cap is a property of 
+the Gemma 4 E4B `.litertlm` artifact itself, not a runtime configuration, not a backend choice. 
+The 8 surviving queries on either side were the ones whose retrieved chunks happened to be shorter.
+
+Successful-run timing at CPU k=20: TTFT 65–73 s, total 89–96 s — confirming CPU is well past any 
+deployment budget at this depth even when the request fits in the context window.
 
 ## Wall-clock comparison
 
@@ -107,7 +112,7 @@ for the same reason (would hit identical limit).
 | 7 | 30.0 | 66.5 | 2.22× |
 | 10 | 29.1 | 73.2 | 2.51× |
 | 15 | 32.4 | 90.8 | 2.80× |
-| 20 | 22.8 | — |  |
+| 20 | 22.8 | 58.6 | 2.57× |
 
 ## Key findings
 
@@ -118,10 +123,12 @@ That's a 13–19× TTFT speedup from GPU. Decode time is largely backend-invaria
 so the *total* speedup is closer to 2–3.5× — but those seconds of TTFT translate directly to perceived UX latency.
 
 ### 2. The model's 4096-token context window is the binding ceiling at high k
-k=15 works (54/54 on both GPU and CPU). k=20 fails on 44% of queries on GPU — input exceeds 4096 tokens 
-with chunks averaging ~200 tokens and system prompt + query ~500 tokens. **k_max ≈ 17–18** for this 
-`.litertlm` artifact. Latency is *not* the constraint at the upper end; the model's context window is. 
-CPU k=20 was skipped — same model, same limit.
+k=15 works cleanly (54/54 on both GPU and CPU). k=20 fails identically on **both backends** — 
+the **exact same 24 of 54 runs (8 queries × 3 reps)** error with `Input token ids are too long … >= 4096`. 
+Same queries fail on both because the chunks retrieved are deterministic and chunk length × k drives 
+the prompt past the window. The 4096-token cap is a property of the `.litertlm` model artifact, 
+not a runtime config and not a backend choice. **k_max ≈ 17–18** for this artifact. 
+Latency is *not* the constraint at the upper end; the model's context window is.
 
 ### 3. Latency is not the binding factor on GPU below k=15
 GPU total medians stay between 13 s (no-RAG) and 25 s (k=15) — all well under any reasonable UX budget. 
@@ -156,6 +163,7 @@ the GPU primarily speeds up the *compute-heavy* prefill phase while decode stays
 | CPU | 7 | `benchmark_20260515T000622_k7.json` | 66.5 | 54 | 0 |
 | CPU | 10 | `benchmark_20260515T011307_k10.json` | 73.2 | 54 | 0 |
 | CPU | 15 | `benchmark_20260515T030401_k15.json` | 90.8 | 54 | 0 |
+| CPU | 20 | `benchmark_20260515T064042_k20.json` | 58.6 | 54 | 24 |
 | GPU | 0 (no-RAG) | `benchmark_20260514T210522.json` | 23.5 | 54 | 0 |
 | GPU | 1 | `benchmark_20260514T174502_k1.json` | 23.0 | 54 | 0 |
 | GPU | 3 | `benchmark_20260514T180830_k3.json` | 27.3 | 54 | 0 |
