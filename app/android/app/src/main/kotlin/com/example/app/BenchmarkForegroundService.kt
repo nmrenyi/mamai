@@ -123,6 +123,10 @@ class BenchmarkForegroundService : Service() {
         }
         wakeLock = null
         scope.cancel()
+        // Shut down the single-thread executor that ferries pipeline calls off
+        // the coroutine dispatchers. Otherwise its worker thread keeps the
+        // :benchmark process alive after the service stops.
+        executor.shutdown()
         @Suppress("DEPRECATION")
         stopForeground(true)
     }
@@ -239,8 +243,6 @@ class BenchmarkForegroundService : Service() {
             for (useRetrieval in retrievalModes) {
                 for (rep in 1..repeats) {
                     runIndex++
-
-                    val pct = (runIndex * 100) / totalRuns
                     updateNotification("[$runIndex/$totalRuns] ${query.id} rep=$rep", runIndex, totalRuns)
 
                     Log.w(BENCH_TAG, "[BENCHMARK] [$runIndex/$totalRuns] query=${query.id} retrieval=$useRetrieval rep=$rep/$repeats")

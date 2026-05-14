@@ -5,9 +5,10 @@ Reads all benchmark_*.json files produced by benchmark_latency.py, groups them
 by (backend, k_override), and writes a markdown report at
 evaluation/reports/latency_report_v2.md.
 
-Notes on backend identification: GPU sweep JSONs from before commit ef96538
-(2026-05-14 ~21:34) have config.backend="CPU" hard-coded (bug fixed later);
-we identify them by timestamp instead. Anything before the threshold is GPU.
+Notes on backend identification: post-fix benchmark JSONs (commit ef96538
+onward) record `backend` correctly and are trusted as-is. Pre-fix GPU sweep
+JSONs hard-code `backend="CPU"`; we backfill those using a one-time timestamp
+threshold (see `backend_of`). Future runs of any backend are unaffected.
 """
 from __future__ import annotations
 
@@ -19,14 +20,24 @@ import statistics
 from collections import defaultdict
 from pathlib import Path
 
-# Timestamp threshold separating GPU runs (before) from CPU runs (after).
-# The CPU rebuild + reinstall happened at ~21:34 on 2026-05-14.
+# One-time backfill: GPU sweep JSONs from before commit ef96538 ("fix(benchmark):
+# record actual backend (GPU/CPU) in config metadata") have config.backend="CPU"
+# hard-coded. For just those files, the timestamp identifies them as the GPU
+# sweep we ran before the rebuild at ~21:34 on 2026-05-14. Files with a
+# timestamp at or after the threshold have correct metadata and are trusted.
 THRESHOLD_TS = "20260514T2130"
 
 
 def backend_of(timestamp: str, recorded: str) -> str:
-    """Override stale GPU-era "CPU" labels using the timestamp."""
-    if timestamp < THRESHOLD_TS:
+    """Trust the recorded backend, but backfill pre-fix GPU runs.
+
+    Pre-fix files always say "CPU" in metadata even when GPU was active.
+    We override only when (a) the recorded value is "CPU" AND (b) the
+    timestamp predates the metadata fix. New GPU runs (which write
+    backend="GPU" correctly) and any CPU run from any time are trusted
+    as-is.
+    """
+    if recorded == "CPU" and timestamp < THRESHOLD_TS:
         return "GPU"
     return recorded
 
@@ -34,12 +45,13 @@ def backend_of(timestamp: str, recorded: str) -> str:
 def load_runs() -> list[dict]:
     files = sorted(glob.glob(os.path.join(
         os.path.dirname(os.path.abspath(__file__)),
-        "latency_results", "benchmark_2026051*.json",
+        "latency_results", "benchmark_*.json",
     )))
     runs = []
     for f in files:
         try:
-            d = json.load(open(f))
+            with open(f) as fp:
+                d = json.load(fp)
         except (json.JSONDecodeError, OSError):
             continue
         if "config" not in d or "results" not in d:
@@ -95,7 +107,9 @@ def aggregate_overall(d: dict, key: str) -> dict:
     }
 
 
-def avg_doc_chars(d: dict) -> int:
+def median_doc_chars(d: dict) -> int:
+    """Median retrieved_total_chars across successful runs (the table column
+    is labeled 'doc_chars med', so this is the median by definition)."""
     vs = [r.get("retrieved_total_chars", 0) for r in d["results"] if not r.get("error")]
     return int(statistics.median(vs)) if vs else 0
 
@@ -162,12 +176,9 @@ def write_report(runs: list[dict], out_path: Path) -> None:
         gpu_run = matrix.get(("GPU", k))
         cpu_run = matrix.get(("CPU", k))
         # doc chars: take from GPU if available, else CPU
-        doc_chars = avg_doc_chars(gpu_run["data"] if gpu_run else cpu_run["data"]) if (gpu_run or cpu_run) else 0
+        doc_chars = median_doc_chars(gpu_run["data"] if gpu_run else cpu_run["data"]) if (gpu_run or cpu_run) else 0
         gpu_cells = "—"
         cpu_cells = "—"
-        ratios = []
-        for col, run, key in [("gpu", gpu_run, "gpu"), ("cpu", cpu_run, "cpu")]:
-            pass
         if gpu_run:
             g = aggregate_per_category(gpu_run["data"], "total_query_ms")
             gpu_cells = " / ".join(fmt_s(g.get(c, {}).get("median")) for c in ["short", "medium", "long"])
@@ -192,7 +203,7 @@ def write_report(runs: list[dict], out_path: Path) -> None:
     for k in all_ks:
         gpu_run = matrix.get(("GPU", k))
         cpu_run = matrix.get(("CPU", k))
-        doc_chars = avg_doc_chars(gpu_run["data"] if gpu_run else cpu_run["data"]) if (gpu_run or cpu_run) else 0
+        doc_chars = median_doc_chars(gpu_run["data"] if gpu_run else cpu_run["data"]) if (gpu_run or cpu_run) else 0
         gv = aggregate_overall(gpu_run["data"], "ttft_ms")["median"] if gpu_run else None
         cv = aggregate_overall(cpu_run["data"], "ttft_ms")["median"] if cpu_run else None
         ratio = f"{cv / gv:.1f}×" if gv and cv else ""

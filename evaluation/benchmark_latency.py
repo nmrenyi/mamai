@@ -488,6 +488,9 @@ Examples:
                         help="Timeout in seconds (default: 7200)")
     args = parser.parse_args()
 
+    if args.no_retrieval and args.rag_only:
+        parser.error("--no-retrieval and --rag-only are mutually exclusive")
+
     print("=" * 60)
     print("MAM-AI On-Device Latency Benchmark")
     print("=" * 60)

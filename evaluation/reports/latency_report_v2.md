@@ -1,6 +1,6 @@
 # MAM-AI On-Device Latency Sweep — GPU vs CPU
 
-_Generated: 2026-05-15T07:40:25_
+_Generated: 2026-05-15T07:56:55_
 
 
 ## Device & stack
