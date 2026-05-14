@@ -105,9 +105,11 @@ Benchmarks run across AfriMedQA, MedQA USMLE, MedMCQA, Kenya Vignettes, AfriMedQ
 | Gemma 3n E4B (no-RAG) | 45.5% | 2.98 / 5 |
 | **Gemma 4 E4B (deployed, no-RAG)** | **42.9%** | **2.61 / 5** |
 
-RAG slightly hurts both on-device models on MCQ; GPT-5 is unaffected. GPU decode for Gemma 4 E4B is blocked pending a LiteRT-LM Android GPU release.
+RAG slightly hurts both on-device models on MCQ; GPT-5 is unaffected.
 
 On an OPPO Snapdragon 8 Elite device, Gemma 4 E4B averages **11.7 s TTFT**, **26.8 s total**, **13.8 tok/s** — slower TTFT than Gemma 3n E4B (6.8 s) despite faster decode.
+
+With LiteRT-LM 0.11.0 on GPU (opt-in), TTFT drops to ~1–2 s on the same device; decode rate is unchanged. Multi-token Prediction (`ExperimentalFlags.enableSpeculativeDecoding`, gated behind the `useMtpForLlm` Gradle property) was smoke-tested and produced a **~10–20% decode slowdown** rather than the vendor's claimed >2× — drafter acceptance is likely poor for our long retrieved-context prompts. Off by default; re-test before re-enabling.
 
 Full results: [eval report](evaluation/reports/eval_report_app_parity_v1.md) · [latency report](evaluation/reports/latency_report.md)
 

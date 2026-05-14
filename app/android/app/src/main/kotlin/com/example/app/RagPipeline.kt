@@ -16,6 +16,8 @@ import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.ExperimentalApi
+import com.google.ai.edge.litertlm.ExperimentalFlags
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.SamplerConfig
 import kotlinx.coroutines.CompletableDeferred
@@ -36,6 +38,7 @@ data class RetrievedDoc(
 )
 
 /** The RAG pipeline for LLM generation. */
+@OptIn(ExperimentalApi::class)
 class RagPipeline(application: Application) {
     private val baseFolder = application.getExternalFilesDir(null).toString() + "/"
 
@@ -95,6 +98,13 @@ class RagPipeline(application: Application) {
         Executors.newSingleThreadExecutor().execute {
             try {
                 val useGpu = BuildConfig.USE_GPU_FOR_LLM
+                val useMtp = BuildConfig.USE_MTP_FOR_LLM
+                if (useMtp) {
+                    ExperimentalFlags.enableSpeculativeDecoding = true
+                    Log.w("mam-ai", "[MTP] speculative decoding ENABLED")
+                } else {
+                    Log.i("mam-ai", "[MTP] speculative decoding disabled")
+                }
                 Log.w("mam-ai", "[TIMING] Engine.initialize() starting...")
                 var activeBackend = if (useGpu) "GPU" else "CPU"
                 val modelPath = baseFolder + appConfig.getString("llm_model")
