@@ -4,6 +4,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <!-- Required on Android 14+ for network-data foreground services -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+    <!-- BenchmarkActivity acquires a PARTIAL_WAKE_LOCK so the CPU keeps running
+         when the screen is off or locked. Without this, multi-hour benchmarks
+         stall silently when the device idles. Used only by BenchmarkActivity. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
 
     <application
         android:label="MAM-AI"

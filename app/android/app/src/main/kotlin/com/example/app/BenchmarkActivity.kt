@@ -1,8 +1,10 @@
 package com.example.app
 
 import android.app.Activity
+import android.content.Context
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.util.Log
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -50,13 +52,31 @@ class BenchmarkActivity : Activity() {
         private const val CHARS_PER_TOKEN_ESTIMATE = 4.0
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    // Default dispatcher so the benchmark coroutine isn't tied to the UI thread —
+    // if it were on Dispatchers.Main, the entire run would stall as soon as the
+    // screen sleeps or the activity loses focus.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val executor = Executors.newSingleThreadExecutor()
     private lateinit var logView: TextView
     private lateinit var scrollView: ScrollView
+    private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Acquire a PARTIAL_WAKE_LOCK so the CPU keeps running even if the
+        // screen turns off or the device is locked. Released in onDestroy.
+        // Without this, multi-hour benchmarks stall silently when the device
+        // idles (OPPO and other vendors aggressively pause background work).
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "mam-ai:benchmark"
+        ).apply {
+            setReferenceCounted(false)
+            acquire(6L * 60L * 60L * 1000L)  // 6 h max — failsafe upper bound
+        }
+        Log.w(BENCH_TAG, "[BENCHMARK] Acquired PARTIAL_WAKE_LOCK (CPU stays on through screen-off)")
 
         // Scrollable log console UI
         scrollView = ScrollView(this).apply {
@@ -90,6 +110,17 @@ class BenchmarkActivity : Activity() {
                 finish()
             }
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        wakeLock?.let {
+            if (it.isHeld) {
+                it.release()
+                Log.w(BENCH_TAG, "[BENCHMARK] Released PARTIAL_WAKE_LOCK")
+            }
+        }
+        wakeLock = null
     }
 
     private fun logStatus(text: String) {
