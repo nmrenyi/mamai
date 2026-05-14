@@ -11,6 +11,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -173,7 +174,7 @@ class BenchmarkActivity : Activity() {
         // Step 4: Cooldown before timed runs
         logStatus("--- Init summary: gecko=${syncInitMs}ms llm=${llmInitMs}ms warmup=${warmupMs}ms total=${totalInitMs}ms")
         logStatus("Cooldown ${cooldownMs}ms...")
-        Thread.sleep(cooldownMs)
+        delay(cooldownMs)
 
         // Filter queries
         val queries = if (queryFilter != null) {
@@ -274,9 +275,13 @@ class BenchmarkActivity : Activity() {
                     val elapsedMin = (System.currentTimeMillis() - loopStart) / 60000
                     logStatus("  [${"█".repeat(pct / 5)}${"░".repeat(20 - pct / 5)}] $pct% ($elapsedMin min elapsed)")
 
-                    // Cooldown between queries (skip after last run)
+                    // Cooldown between queries (skip after last run).
+                    // delay() vs Thread.sleep(): the suspending variant doesn't block the
+                    // UI thread, which is essential — cooldowns >5s with Thread.sleep
+                    // trigger an ANR (Input Dispatching Timeout) and Android kills the
+                    // activity mid-benchmark.
                     if (runIndex < totalRuns) {
-                        Thread.sleep(cooldownMs)
+                        delay(cooldownMs)
                     }
                 }
             }
