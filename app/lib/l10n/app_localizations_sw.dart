@@ -115,6 +115,22 @@ class AppLocalizationsSw extends AppLocalizations {
   String get aboutKnowledgeBundleDeployedLabel => 'Kimepelekwa';
 
   @override
+  String get aboutKnowledgeBundlePinnedNote =>
+      'Pinned in this build; deployment receipt not found on device.';
+
+  @override
+  String get aboutRuntimeTitle => 'Runtime';
+
+  @override
+  String get aboutRuntimeAppLabel => 'App';
+
+  @override
+  String get aboutRuntimeLitertlmLabel => 'LiteRT-LM';
+
+  @override
+  String get aboutRuntimeBackendLabel => 'LLM backend';
+
+  @override
   String get drawerAbout => 'Kuhusu MAM-AI';
 
   @override

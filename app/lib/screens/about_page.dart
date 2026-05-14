@@ -15,20 +15,36 @@ class _AboutPageState extends State<AboutPage> {
   );
 
   late final Future<RagBundleInfo?> _bundleInfoFuture;
+  late final Future<RuntimeInfo?> _runtimeInfoFuture;
 
   @override
   void initState() {
     super.initState();
     _bundleInfoFuture = _loadBundleInfo();
+    _runtimeInfoFuture = _loadRuntimeInfo();
   }
 
   Future<RagBundleInfo?> _loadBundleInfo() async {
+    final deployed = await _invokeMap("getDeployedRagBundleInfo");
+    if (deployed != null) {
+      return RagBundleInfo.fromMap(deployed, source: BundleInfoSource.deployed);
+    }
+    final pinned = await _invokeMap("getPinnedRagBundleInfo");
+    if (pinned != null) {
+      return RagBundleInfo.fromMap(pinned, source: BundleInfoSource.pinned);
+    }
+    return null;
+  }
+
+  Future<RuntimeInfo?> _loadRuntimeInfo() async {
+    final raw = await _invokeMap("getRuntimeInfo");
+    if (raw == null) return null;
+    return RuntimeInfo.fromMap(raw);
+  }
+
+  Future<Map<String, dynamic>?> _invokeMap(String method) async {
     try {
-      final raw = await _platform.invokeMapMethod<String, dynamic>(
-        "getDeployedRagBundleInfo",
-      );
-      if (raw == null) return null;
-      return RagBundleInfo.fromMap(raw);
+      return await _platform.invokeMapMethod<String, dynamic>(method);
     } on PlatformException {
       return null;
     } on MissingPluginException {
@@ -78,6 +94,8 @@ class _AboutPageState extends State<AboutPage> {
             ),
             const SizedBox(height: 36),
             _BundleInfoCard(bundleInfoFuture: _bundleInfoFuture),
+            const SizedBox(height: 16),
+            _RuntimeInfoCard(runtimeInfoFuture: _runtimeInfoFuture),
             const SizedBox(height: 36),
 
             // Partnership
@@ -110,19 +128,51 @@ class _AboutPageState extends State<AboutPage> {
   }
 }
 
+enum BundleInfoSource { deployed, pinned }
+
 class RagBundleInfo {
   final String bundleVersion;
   final String deployedAtUtc;
+  final BundleInfoSource source;
 
   const RagBundleInfo({
     required this.bundleVersion,
     required this.deployedAtUtc,
+    required this.source,
   });
 
-  factory RagBundleInfo.fromMap(Map<String, dynamic> raw) {
+  factory RagBundleInfo.fromMap(
+    Map<String, dynamic> raw, {
+    required BundleInfoSource source,
+  }) {
     return RagBundleInfo(
       bundleVersion: raw['bundleVersion']?.toString() ?? '',
       deployedAtUtc: raw['deployedAtUtc']?.toString() ?? '',
+      source: source,
+    );
+  }
+}
+
+class RuntimeInfo {
+  final String appVersion;
+  final String litertlmVersion;
+  final String llmBackend;
+
+  const RuntimeInfo({
+    required this.appVersion,
+    required this.litertlmVersion,
+    required this.llmBackend,
+  });
+
+  factory RuntimeInfo.fromMap(Map<String, dynamic> raw) {
+    final name = raw['appVersionName']?.toString() ?? '';
+    final code = raw['appVersionCode']?.toString() ?? '';
+    final appVersion =
+        code.isNotEmpty && name.isNotEmpty ? '$name ($code)' : name;
+    return RuntimeInfo(
+      appVersion: appVersion,
+      litertlmVersion: raw['litertlmVersion']?.toString() ?? '',
+      llmBackend: raw['llmBackendConfigured']?.toString() ?? '',
     );
   }
 }
@@ -206,6 +256,82 @@ class _BundleInfoCard extends StatelessWidget {
                   value: info.deployedAtUtc,
                 ),
               ],
+              if (info.source == BundleInfoSource.pinned) ...[
+                const SizedBox(height: 10),
+                Text(
+                  l10n.aboutKnowledgeBundlePinnedNote,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontStyle: FontStyle.italic,
+                    color: Color(0xff786A5E),
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _RuntimeInfoCard extends StatelessWidget {
+  final Future<RuntimeInfo?> runtimeInfoFuture;
+
+  const _RuntimeInfoCard({required this.runtimeInfoFuture});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xffF8F5F1),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xffE7DED3)),
+      ),
+      child: FutureBuilder<RuntimeInfo?>(
+        future: runtimeInfoFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2.4),
+              ),
+            );
+          }
+          final info = snapshot.data;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l10n.aboutRuntimeTitle,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xff4E4338),
+                ),
+              ),
+              const SizedBox(height: 14),
+              _BundleInfoRow(
+                label: l10n.aboutRuntimeAppLabel,
+                value: info?.appVersion ?? '—',
+              ),
+              const SizedBox(height: 10),
+              _BundleInfoRow(
+                label: l10n.aboutRuntimeLitertlmLabel,
+                value: info?.litertlmVersion ?? '—',
+              ),
+              const SizedBox(height: 10),
+              _BundleInfoRow(
+                label: l10n.aboutRuntimeBackendLabel,
+                value: info?.llmBackend ?? '—',
+              ),
             ],
           );
         },

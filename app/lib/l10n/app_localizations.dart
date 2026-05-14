@@ -290,6 +290,36 @@ abstract class AppLocalizations {
   /// **'Deployed'**
   String get aboutKnowledgeBundleDeployedLabel;
 
+  /// No description provided for @aboutKnowledgeBundlePinnedNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Pinned in this build; deployment receipt not found on device.'**
+  String get aboutKnowledgeBundlePinnedNote;
+
+  /// No description provided for @aboutRuntimeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Runtime'**
+  String get aboutRuntimeTitle;
+
+  /// No description provided for @aboutRuntimeAppLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'App'**
+  String get aboutRuntimeAppLabel;
+
+  /// No description provided for @aboutRuntimeLitertlmLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'LiteRT-LM'**
+  String get aboutRuntimeLitertlmLabel;
+
+  /// No description provided for @aboutRuntimeBackendLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'LLM backend'**
+  String get aboutRuntimeBackendLabel;
+
   /// No description provided for @drawerAbout.
   ///
   /// In en, this message translates to:

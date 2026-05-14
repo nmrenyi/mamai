@@ -46,6 +46,11 @@
   "aboutKnowledgeBundleUnavailable": "Taarifa za kifurushi bado hazipatikani kwenye kifaa hiki.",
   "aboutKnowledgeBundleVersionLabel": "Toleo",
   "aboutKnowledgeBundleDeployedLabel": "Kimepelekwa",
+  "aboutKnowledgeBundlePinnedNote": "Pinned in this build; deployment receipt not found on device.",
+  "aboutRuntimeTitle": "Runtime",
+  "aboutRuntimeAppLabel": "App",
+  "aboutRuntimeLitertlmLabel": "LiteRT-LM",
+  "aboutRuntimeBackendLabel": "LLM backend",
 
   "drawerAbout": "Kuhusu MAM-AI",
   "drawerTitle": "Mazungumzo ya zamani",
