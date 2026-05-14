@@ -32,6 +32,9 @@ import java.util.concurrent.Executors
  * Optional extras:
  *   --ez skip_retrieval true     Skip RAG retrieval (generation only)
  *   --es query_filter short      Filter by category or specific query ID
+ *   --ei retrieve_k N            Override retrieval top_k for this session
+ *                                (default: use runtime_config.json's value).
+ *                                Used by the per-k latency sweep.
  */
 class BenchmarkActivity : Activity() {
 
@@ -68,10 +71,12 @@ class BenchmarkActivity : Activity() {
         val cooldownMs = intent.getLongExtra("cooldown_ms", DEFAULT_COOLDOWN_MS)
         val skipRetrieval = intent.getBooleanExtra("skip_retrieval", false)
         val queryFilter = intent.getStringExtra("query_filter")
+        // -1 sentinel = no override; any non-negative value overrides runtime_config's top_k.
+        val retrieveKOverride: Int? = intent.getIntExtra("retrieve_k", -1).takeIf { it >= 0 }
 
         scope.launch {
             try {
-                runBenchmark(repeats, cooldownMs, skipRetrieval, queryFilter)
+                runBenchmark(repeats, cooldownMs, skipRetrieval, queryFilter, retrieveKOverride)
             } catch (t: Throwable) {
                 Log.e(TAG, "[BENCHMARK] FATAL ERROR: ${t.message}", t)
                 Log.w(BENCH_TAG, "[BENCHMARK] FAILED")
@@ -96,6 +101,7 @@ class BenchmarkActivity : Activity() {
         cooldownMs: Long,
         skipRetrieval: Boolean,
         queryFilter: String?,
+        retrieveKOverride: Int?,
     ) {
         val benchmarkStart = System.currentTimeMillis()
         val timestamp = SimpleDateFormat("yyyyMMdd'T'HHmmss", Locale.US).format(Date())
@@ -205,7 +211,7 @@ class BenchmarkActivity : Activity() {
                     logStatus("[$runIndex/$totalRuns] ${query.id} | retrieval=$useRetrieval rep=$rep | $etaStr")
 
                     val preMemory = collectMemoryInfo()
-                    val result = runQuery(pipeline, query.text, useRetrieval)
+                    val result = runQuery(pipeline, query.text, useRetrieval, retrieveKOverride)
                     val postMemory = collectMemoryInfo()
 
                     val decodeTps = if (result.decodeMs > 0)
@@ -261,6 +267,9 @@ class BenchmarkActivity : Activity() {
                 put("cooldown_ms", cooldownMs)
                 put("skip_retrieval", skipRetrieval)
                 put("query_filter", queryFilter ?: JSONObject.NULL)
+                // retrieval_top_k_override is null when the session uses runtime_config.json's
+                // value; non-null records the override value used for this whole session.
+                put("retrieval_top_k_override", retrieveKOverride ?: JSONObject.NULL)
                 put("model", "gemma-4-E4B-it.litertlm")
                 put("backend", "CPU")
                 put("max_tokens", 32000)
@@ -302,7 +311,12 @@ class BenchmarkActivity : Activity() {
         val error: String?,
     )
 
-    private suspend fun runQuery(pipeline: RagPipeline, queryText: String, useRetrieval: Boolean): QueryResult {
+    private suspend fun runQuery(
+        pipeline: RagPipeline,
+        queryText: String,
+        useRetrieval: Boolean,
+        retrieveKOverride: Int?,
+    ): QueryResult {
         var retrievalTimeMs = 0L
         var numDocs = 0
         var firstTokenTime = 0L
@@ -328,7 +342,8 @@ class BenchmarkActivity : Activity() {
                         if (firstTokenTime == 0L && partial.isNotEmpty()) {
                             firstTokenTime = System.currentTimeMillis()
                         }
-                    }
+                    },
+                    retrieveKOverride = retrieveKOverride,
                 )
             }
         } catch (e: Exception) {

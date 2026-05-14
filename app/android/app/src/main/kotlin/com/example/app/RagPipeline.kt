@@ -219,7 +219,12 @@ class RagPipeline(application: Application) {
         }
     }
 
-    /** Generates the response from the LLM with conversation history support. */
+    /** Generates the response from the LLM with conversation history support.
+     *
+     *  [retrieveKOverride] — when non-null, replaces `retrievalConfig.top_k`
+     *  for this call only. Used by [BenchmarkActivity] for the per-k latency
+     *  sweep; production callers leave it null and inherit the runtime config.
+     */
     suspend fun generateResponse(
         prompt: String,
         history: List<Map<String, String>>,
@@ -227,6 +232,7 @@ class RagPipeline(application: Application) {
         language: String = "en",
         retrievalListener: (docs: List<RetrievedDoc>) -> Unit,
         generationListener: (partial: String, done: Boolean) -> Unit,
+        retrieveKOverride: Int? = null,
     ): String =
         coroutineScope {
             awaitLlmReady()
@@ -235,10 +241,11 @@ class RagPipeline(application: Application) {
             val qStart = System.currentTimeMillis()
 
             val docs = if (useRetrieval) {
+                val effectiveTopK = retrieveKOverride ?: retrievalConfig.getInt("top_k")
                 val retrievalRequest = RetrievalRequest.create(
                     prompt,
                     RetrievalConfig.create(
-                        retrievalConfig.getInt("top_k"),
+                        effectiveTopK,
                         retrievalConfig.getDouble("similarity_threshold").toFloat(),
                         TaskType.RETRIEVAL_QUERY,
                     ),
