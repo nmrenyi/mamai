@@ -110,7 +110,8 @@ def clear_logcat(device_serial=None):
 
 
 def launch_benchmark(device_serial=None, repeats=3, cooldown_ms=5000,
-                     skip_retrieval=False, query_filter=None, retrieve_k=None):
+                     skip_retrieval=False, rag_only=False,
+                     query_filter=None, retrieve_k=None):
     """Launch BenchmarkActivity via ADB."""
     cmd = _adb(device_serial) + [
         "shell", "am", "start",
@@ -120,6 +121,8 @@ def launch_benchmark(device_serial=None, repeats=3, cooldown_ms=5000,
     ]
     if skip_retrieval:
         cmd += ["--ez", "skip_retrieval", "true"]
+    if rag_only:
+        cmd += ["--ez", "rag_only", "true"]
     if query_filter:
         cmd += ["--es", "query_filter", query_filter]
     if retrieve_k is not None:
@@ -467,6 +470,10 @@ Examples:
                         help="Cooldown between queries in ms (default: 5000)")
     parser.add_argument("--no-retrieval", action="store_true",
                         help="Skip RAG retrieval (generation only)")
+    parser.add_argument("--rag-only", action="store_true",
+                        help="Skip the No-RAG mode (only run with retrieval). "
+                             "Pair with --retrieve-k to do a k-sweep without "
+                             "re-running the No-RAG baseline at every k.")
     parser.add_argument("--filter", type=str, default=None,
                         help="Filter by category (short/medium/long) or query ID (e.g., long_01)")
     parser.add_argument("--retrieve-k", type=int, default=None,
@@ -514,6 +521,7 @@ Examples:
             repeats=args.repeats,
             cooldown_ms=args.cooldown,
             skip_retrieval=args.no_retrieval,
+            rag_only=args.rag_only,
             query_filter=args.filter,
             retrieve_k=args.retrieve_k,
         )

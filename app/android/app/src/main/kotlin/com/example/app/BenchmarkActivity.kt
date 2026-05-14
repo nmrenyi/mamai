@@ -31,6 +31,9 @@ import java.util.concurrent.Executors
  *
  * Optional extras:
  *   --ez skip_retrieval true     Skip RAG retrieval (generation only)
+ *   --ez rag_only true           Skip the No-RAG mode (useful for k-sweeps
+ *                                where the No-RAG baseline only needs to
+ *                                be captured once)
  *   --es query_filter short      Filter by category or specific query ID
  *   --ei retrieve_k N            Override retrieval top_k for this session
  *                                (default: use runtime_config.json's value).
@@ -70,13 +73,14 @@ class BenchmarkActivity : Activity() {
         val repeats = intent.getIntExtra("repeats", DEFAULT_REPEATS)
         val cooldownMs = intent.getLongExtra("cooldown_ms", DEFAULT_COOLDOWN_MS)
         val skipRetrieval = intent.getBooleanExtra("skip_retrieval", false)
+        val ragOnly = intent.getBooleanExtra("rag_only", false)
         val queryFilter = intent.getStringExtra("query_filter")
         // -1 sentinel = no override; any non-negative value overrides runtime_config's top_k.
         val retrieveKOverride: Int? = intent.getIntExtra("retrieve_k", -1).takeIf { it >= 0 }
 
         scope.launch {
             try {
-                runBenchmark(repeats, cooldownMs, skipRetrieval, queryFilter, retrieveKOverride)
+                runBenchmark(repeats, cooldownMs, skipRetrieval, ragOnly, queryFilter, retrieveKOverride)
             } catch (t: Throwable) {
                 Log.e(TAG, "[BENCHMARK] FATAL ERROR: ${t.message}", t)
                 Log.w(BENCH_TAG, "[BENCHMARK] FAILED")
@@ -100,6 +104,7 @@ class BenchmarkActivity : Activity() {
         repeats: Int,
         cooldownMs: Long,
         skipRetrieval: Boolean,
+        ragOnly: Boolean,
         queryFilter: String?,
         retrieveKOverride: Int?,
     ) {
@@ -183,7 +188,12 @@ class BenchmarkActivity : Activity() {
             return
         }
 
-        val retrievalModes = if (skipRetrieval) listOf(false) else listOf(true, false)
+        // skipRetrieval and ragOnly are mutually exclusive (skipRetrieval wins if both set).
+        val retrievalModes = when {
+            skipRetrieval -> listOf(false)
+            ragOnly -> listOf(true)
+            else -> listOf(true, false)
+        }
         val totalRuns = queries.size * retrievalModes.size * repeats
         Log.w(BENCH_TAG, "[BENCHMARK] Running ${queries.size} queries x ${retrievalModes.size} modes x $repeats repeats = $totalRuns total runs")
 
@@ -281,6 +291,7 @@ class BenchmarkActivity : Activity() {
                 put("repeats", repeats)
                 put("cooldown_ms", cooldownMs)
                 put("skip_retrieval", skipRetrieval)
+                put("rag_only", ragOnly)
                 put("query_filter", queryFilter ?: JSONObject.NULL)
                 // retrieval_top_k_override is null when the session uses runtime_config.json's
                 // value; non-null records the override value used for this whole session.
