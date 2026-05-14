@@ -69,9 +69,15 @@ def check_device(device_serial=None):
 
 
 def check_models_downloaded(device_serial=None):
-    """Check if model files exist on device."""
+    """Check if model files exist on device.
+
+    Filenames must match config/app_config.json — the app loads
+    "llm_model" / "embedding_model" / "tokenizer" from there. Updated
+    for the Gemma 4 E4B / LiteRT-LM 0.11.0 stack; the old Gemma 3n
+    .task name is no longer in production.
+    """
     required_files = [
-        "gemma-3n-E4B-it-int4.task",
+        "gemma-4-E4B-it.litertlm",
         "Gecko_1024_quant.tflite",
         "sentencepiece.model",
         "embeddings.sqlite",
