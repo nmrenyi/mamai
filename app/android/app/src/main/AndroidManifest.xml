@@ -49,6 +49,16 @@
             android:foregroundServiceType="dataSync"
             android:exported="false" />
 
+        <!-- Foreground service for the on-device latency benchmark. Holds a
+             PARTIAL_WAKE_LOCK + sticky notification so the work survives
+             screen-off and device-lock through hours-long k-sweeps. Runs
+             in its own :benchmark process to keep the main app isolated. -->
+        <service
+            android:name=".BenchmarkForegroundService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false"
+            android:process=":benchmark" />
+
         <!-- FileProvider for sharing PDF files from getExternalFilesDir with viewer apps -->
         <provider
             android:name="androidx.core.content.FileProvider"
