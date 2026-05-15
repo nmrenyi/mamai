@@ -40,6 +40,20 @@ import java.util.concurrent.Executors
  * Launched via [BenchmarkActivity] which forwards Intent extras from `am
  * start`. All benchmark logic lives here; the Activity is a thin shim.
  *
+ * **Process model.** Both this service and [BenchmarkActivity] declare
+ * `android:process=":benchmark"` in the manifest, so they run in a
+ * separate process from the main MAM-AI app. That process is fresh on
+ * each `am start`: this service constructs its own [RagPipeline]
+ * (Gecko + SQLite + LLM load) on entry, independent of any pipeline
+ * already loaded in the main app process. Two consequences worth
+ * knowing about:
+ *
+ *  1. The application's `Application` subclass initializes once per
+ *     process — anything in your custom Application.onCreate() will
+ *     run a second time when the benchmark process spawns.
+ *  2. If the main app is also running with the LLM loaded, two LLM
+ *     instances may briefly contend for GPU/memory during init.
+ *
  * Intent extras (forwarded from the Activity):
  *   repeats:Int                Repetitions per query
  *   cooldown_ms:Long           Sleep between runs
