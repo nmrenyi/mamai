@@ -265,7 +265,13 @@ class BenchmarkForegroundService : Service() {
             return
         }
 
-        // skipRetrieval and ragOnly are mutually exclusive (skipRetrieval wins).
+        // skipRetrieval and ragOnly are mutually exclusive. The Python wrapper
+        // (benchmark_latency.py) rejects this combination upfront via
+        // parser.error(); a direct `am start` could still pass both, so log a
+        // visible warning in logcat instead of silently picking one.
+        if (skipRetrieval && ragOnly) {
+            Log.w(BENCH_TAG, "[BENCHMARK] WARNING: skip_retrieval AND rag_only both set; skip_retrieval wins (No-RAG only).")
+        }
         val retrievalModes = when {
             skipRetrieval -> listOf(false)
             ragOnly -> listOf(true)
