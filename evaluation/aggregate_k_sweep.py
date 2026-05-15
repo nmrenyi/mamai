@@ -192,9 +192,9 @@ def write_report(runs: list[dict], out_path: Path) -> None:
         # ratio
         ratio = ""
         if gpu_run and cpu_run:
-            gov = aggregate_overall(gpu_run["data"], "total_query_ms")["median"]
-            cov = aggregate_overall(cpu_run["data"], "total_query_ms")["median"]
-            if gov is not None and gov > 0:
+            gov = aggregate_overall(gpu_run["data"], "total_query_ms").get("median")
+            cov = aggregate_overall(cpu_run["data"], "total_query_ms").get("median")
+            if gov is not None and cov is not None and gov > 0:
                 ratio = f"{cov / gov:.2f}×"
         label = "**0 (no-RAG)**" if k == 0 else str(k)
         md.append(f"| {label} | {doc_chars} | {gpu_cells} | {cpu_cells} | {ratio} |")
@@ -208,8 +208,8 @@ def write_report(runs: list[dict], out_path: Path) -> None:
         gpu_run = matrix.get(("GPU", k))
         cpu_run = matrix.get(("CPU", k))
         doc_chars = median_doc_chars(gpu_run["data"] if gpu_run else cpu_run["data"]) if (gpu_run or cpu_run) else 0
-        gv = aggregate_overall(gpu_run["data"], "ttft_ms")["median"] if gpu_run else None
-        cv = aggregate_overall(cpu_run["data"], "ttft_ms")["median"] if cpu_run else None
+        gv = aggregate_overall(gpu_run["data"], "ttft_ms").get("median") if gpu_run else None
+        cv = aggregate_overall(cpu_run["data"], "ttft_ms").get("median") if cpu_run else None
         # Explicit None checks; also guard against div-by-zero on a 0 median.
         ratio = f"{cv / gv:.1f}×" if (gv is not None and cv is not None and gv > 0) else ""
         label = "**0 (no-RAG)**" if k == 0 else str(k)
@@ -226,8 +226,8 @@ def write_report(runs: list[dict], out_path: Path) -> None:
     for k in all_ks:
         gpu_run = matrix.get(("GPU", k))
         cpu_run = matrix.get(("CPU", k))
-        gv = aggregate_overall(gpu_run["data"], "decode_ms")["median"] if gpu_run else None
-        cv = aggregate_overall(cpu_run["data"], "decode_ms")["median"] if cpu_run else None
+        gv = aggregate_overall(gpu_run["data"], "decode_ms").get("median") if gpu_run else None
+        cv = aggregate_overall(cpu_run["data"], "decode_ms").get("median") if cpu_run else None
         ratio = f"{cv / gv:.2f}×" if (gv is not None and cv is not None and gv > 0) else ""
         label = "**0 (no-RAG)**" if k == 0 else str(k)
         md.append(f"| {label} | {fmt_ms(gv)} | {fmt_ms(cv)} | {ratio} |")
@@ -240,8 +240,8 @@ def write_report(runs: list[dict], out_path: Path) -> None:
     for k in all_ks:
         gpu_run = matrix.get(("GPU", k))
         cpu_run = matrix.get(("CPU", k))
-        gv = aggregate_overall(gpu_run["data"], "total_query_ms")["p95"] if gpu_run else None
-        cv = aggregate_overall(cpu_run["data"], "total_query_ms")["p95"] if cpu_run else None
+        gv = aggregate_overall(gpu_run["data"], "total_query_ms").get("p95") if gpu_run else None
+        cv = aggregate_overall(cpu_run["data"], "total_query_ms").get("p95") if cpu_run else None
         label = "**0 (no-RAG)**" if k == 0 else str(k)
         md.append(f"| {label} | {fmt_s(gv)} | {fmt_s(cv)} |")
     md.append("")
