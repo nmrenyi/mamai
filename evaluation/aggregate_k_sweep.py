@@ -190,7 +190,7 @@ def write_report(runs: list[dict], out_path: Path) -> None:
         if gpu_run and cpu_run:
             gov = aggregate_overall(gpu_run["data"], "total_query_ms")["median"]
             cov = aggregate_overall(cpu_run["data"], "total_query_ms")["median"]
-            if gov:
+            if gov is not None and gov > 0:
                 ratio = f"{cov / gov:.2f}×"
         label = "**0 (no-RAG)**" if k == 0 else str(k)
         md.append(f"| {label} | {doc_chars} | {gpu_cells} | {cpu_cells} | {ratio} |")
@@ -206,7 +206,8 @@ def write_report(runs: list[dict], out_path: Path) -> None:
         doc_chars = median_doc_chars(gpu_run["data"] if gpu_run else cpu_run["data"]) if (gpu_run or cpu_run) else 0
         gv = aggregate_overall(gpu_run["data"], "ttft_ms")["median"] if gpu_run else None
         cv = aggregate_overall(cpu_run["data"], "ttft_ms")["median"] if cpu_run else None
-        ratio = f"{cv / gv:.1f}×" if gv and cv else ""
+        # Explicit None checks; also guard against div-by-zero on a 0 median.
+        ratio = f"{cv / gv:.1f}×" if (gv is not None and cv is not None and gv > 0) else ""
         label = "**0 (no-RAG)**" if k == 0 else str(k)
         md.append(f"| {label} | {doc_chars} | {fmt_ms(gv)} | {fmt_ms(cv)} | {ratio} |")
     md.append("")
@@ -223,7 +224,7 @@ def write_report(runs: list[dict], out_path: Path) -> None:
         cpu_run = matrix.get(("CPU", k))
         gv = aggregate_overall(gpu_run["data"], "decode_ms")["median"] if gpu_run else None
         cv = aggregate_overall(cpu_run["data"], "decode_ms")["median"] if cpu_run else None
-        ratio = f"{cv / gv:.2f}×" if gv and cv else ""
+        ratio = f"{cv / gv:.2f}×" if (gv is not None and cv is not None and gv > 0) else ""
         label = "**0 (no-RAG)**" if k == 0 else str(k)
         md.append(f"| {label} | {fmt_ms(gv)} | {fmt_ms(cv)} | {ratio} |")
     md.append("")
@@ -273,9 +274,9 @@ def write_report(runs: list[dict], out_path: Path) -> None:
         cpu_run = matrix.get(("CPU", k))
         gw = gpu_run["data"]["total_benchmark_time_ms"] / 60000 if gpu_run else None
         cw = cpu_run["data"]["total_benchmark_time_ms"] / 60000 if cpu_run else None
-        gw_s = f"{gw:.1f}" if gw else "—"
-        cw_s = f"{cw:.1f}" if cw else "—"
-        ratio = f"{cw / gw:.2f}×" if gw and cw else ""
+        gw_s = f"{gw:.1f}" if gw is not None else "—"
+        cw_s = f"{cw:.1f}" if cw is not None else "—"
+        ratio = f"{cw / gw:.2f}×" if (gw is not None and cw is not None and gw > 0) else ""
         label = "**0 (no-RAG)**" if k == 0 else str(k)
         md.append(f"| {label} | {gw_s} | {cw_s} | {ratio} |")
 
