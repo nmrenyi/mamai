@@ -490,6 +490,11 @@ Examples:
 
     if args.no_retrieval and args.rag_only:
         parser.error("--no-retrieval and --rag-only are mutually exclusive")
+    if args.retrieve_k is not None and args.retrieve_k < 1:
+        # The service treats any value >= 0 as an explicit override. Passing 0
+        # would call RetrievalConfig.create(0, …), which is a silent footgun
+        # — use --no-retrieval if you actually want to disable retrieval.
+        parser.error("--retrieve-k must be >= 1; use --no-retrieval to disable retrieval entirely")
 
     print("=" * 60)
     print("MAM-AI On-Device Latency Benchmark")
