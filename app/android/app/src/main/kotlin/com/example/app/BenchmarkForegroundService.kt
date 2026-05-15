@@ -151,9 +151,21 @@ class BenchmarkForegroundService : Service() {
         wakeLock = null
         scope.cancel()
         // Shut down the single-thread executor that ferries pipeline calls off
-        // the coroutine dispatchers. Otherwise its worker thread keeps the
-        // :benchmark process alive after the service stops.
-        executor.shutdown()
+        // the coroutine dispatchers. We use shutdownNow() to interrupt the
+        // worker thread: scope.cancel() does not propagate cancellation into
+        // a blocking native call (e.g. mid-flight LiteRT-LM generation),
+        // and a plain shutdown() would return immediately and leave the
+        // thread running until the call finishes naturally — keeping the
+        // :benchmark process alive after stopForeground.
+        executor.shutdownNow()
+        // Brief best-effort await so we don't yank the rug if the worker is
+        // tearing down cleanly. If it doesn't finish in 2 s we move on; the
+        // OS will eventually kill the process anyway.
+        try {
+            executor.awaitTermination(2, java.util.concurrent.TimeUnit.SECONDS)
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
         @Suppress("DEPRECATION")
         stopForeground(true)
     }
