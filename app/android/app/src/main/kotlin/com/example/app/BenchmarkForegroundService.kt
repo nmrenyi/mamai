@@ -381,7 +381,12 @@ class BenchmarkForegroundService : Service() {
                 put("rag_only", ragOnly)
                 put("query_filter", queryFilter ?: JSONObject.NULL)
                 put("retrieval_top_k_override", retrieveKOverride ?: JSONObject.NULL)
-                put("model", "gemma-4-E4B-it.litertlm")
+                // Read model name from the same app_config.json asset the RagPipeline uses,
+                // so the JSON metadata reflects whatever model is actually loaded rather than
+                // a hardcoded string that goes stale when we switch model artifacts.
+                put("model", JSONObject(
+                    application.assets.open("app_config.json").bufferedReader().use { it.readText() }
+                ).getString("llm_model"))
                 // Read backend from BuildConfig at compile time. Older builds
                 // hard-coded "CPU" here even when GPU was active — fixed so the
                 // JSON metadata matches reality.
