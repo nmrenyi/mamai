@@ -1,6 +1,6 @@
 # MAM-AI On-Device Latency Sweep — GPU vs CPU
 
-_Generated: 2026-05-15T07:56:55_
+_Generated: 2026-05-15T10:22:29_
 
 
 ## Device & stack
@@ -96,7 +96,7 @@ Exceeding the maximum number of tokens allowed: …>= 4096`. The **exact same 8 
 backends** (`long_01, long_03, medium_02, medium_04, short_01, short_03, short_04, short_05`) — 
 the same 24 (query × rep) pairs. This is direct evidence that the 4096-token cap is a property of 
 the Gemma 4 E4B `.litertlm` artifact itself, not a runtime configuration, not a backend choice. 
-The 8 surviving queries on either side were the ones whose retrieved chunks happened to be shorter.
+The other 10 queries (10 × 3 reps = 30 successful runs) were the ones whose retrieved chunks happened to be shorter.
 
 Successful-run timing at CPU k=20: TTFT 65–73 s, total 89–96 s — confirming CPU is well past any 
 deployment budget at this depth even when the request fits in the context window.
