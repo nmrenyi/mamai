@@ -7,8 +7,9 @@ evaluation/reports/latency_report_v2.md.
 
 Notes on backend identification: post-fix benchmark JSONs (commit ef96538
 onward) record `backend` correctly and are trusted as-is. Pre-fix GPU sweep
-JSONs hard-code `backend="CPU"`; we backfill those using a one-time timestamp
-threshold (see `backend_of`). Future runs of any backend are unaffected.
+JSONs hard-code `backend="CPU"` even though they were measured on GPU; we
+backfill those using an explicit filename allowlist (see `backend_of`).
+Future runs of any backend are unaffected.
 """
 from __future__ import annotations
 
@@ -20,24 +21,27 @@ import statistics
 from collections import defaultdict
 from pathlib import Path
 
-# One-time backfill: GPU sweep JSONs from before commit ef96538 ("fix(benchmark):
-# record actual backend (GPU/CPU) in config metadata") have config.backend="CPU"
-# hard-coded. For just those files, the timestamp identifies them as the GPU
-# sweep we ran before the rebuild at ~21:34 on 2026-05-14. Files with a
-# timestamp at or after the threshold have correct metadata and are trusted.
-THRESHOLD_TS = "20260514T2130"
+# Backfill for the specific historical GPU sweep files that predate the
+# metadata-recording fix in commit ef96538. Those JSONs hard-code
+# config.backend="CPU" even though they were measured on GPU. We use an
+# explicit filename allowlist (rather than a timestamp threshold) so the
+# rewrite cannot accidentally fire on anyone else's pre-threshold *genuine
+# CPU* JSONs that happen to share latency_results/.
+PRE_FIX_GPU_FILES = frozenset({
+    "benchmark_20260514T174502_k1.json",
+    "benchmark_20260514T180830_k3.json",
+    "benchmark_20260514T183604_k5.json",
+    "benchmark_20260514T190438_k7.json",
+    "benchmark_20260514T193453_k10.json",
+    "benchmark_20260514T200414_k15.json",
+    "benchmark_20260514T203653_k20.json",
+    "benchmark_20260514T210522.json",
+})
 
 
-def backend_of(timestamp: str, recorded: str) -> str:
-    """Trust the recorded backend, but backfill pre-fix GPU runs.
-
-    Pre-fix files always say "CPU" in metadata even when GPU was active.
-    We override only when (a) the recorded value is "CPU" AND (b) the
-    timestamp predates the metadata fix. New GPU runs (which write
-    backend="GPU" correctly) and any CPU run from any time are trusted
-    as-is.
-    """
-    if recorded == "CPU" and timestamp < THRESHOLD_TS:
+def backend_of(filename: str, recorded: str) -> str:
+    """Trust the recorded backend except for the listed pre-fix GPU files."""
+    if filename in PRE_FIX_GPU_FILES:
         return "GPU"
     return recorded
 
@@ -64,7 +68,7 @@ def load_runs() -> list[dict]:
         k_label = 0 if skip_retrieval else (k_override if k_override is not None else None)
         if k_label is None:
             continue
-        backend = backend_of(ts, d["config"].get("backend", "CPU"))
+        backend = backend_of(os.path.basename(f), d["config"].get("backend", "CPU"))
         runs.append({
             "file": os.path.basename(f),
             "timestamp": ts,
