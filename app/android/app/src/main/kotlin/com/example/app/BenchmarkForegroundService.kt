@@ -85,6 +85,11 @@ class BenchmarkForegroundService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val executor = Executors.newSingleThreadExecutor()
     private var wakeLock: PowerManager.WakeLock? = null
+    // Set once when the first onStartCommand fires runBenchmark. Subsequent
+    // intent re-deliveries (e.g. another `am start` before stopSelf() runs)
+    // see this true and are no-ops, so we never end up with two concurrent
+    // coroutines sharing the executor and the same output JSON.
+    @Volatile private var benchmarkStarted = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -122,6 +127,16 @@ class BenchmarkForegroundService : Service() {
             }
             Log.w(BENCH_TAG, "[BENCHMARK] Foreground started, PARTIAL_WAKE_LOCK acquired")
         }
+
+        // Reject re-deliveries before the benchmark coroutine completes. A
+        // second am start while the first is in flight would otherwise spawn
+        // a parallel coroutine and clobber the shared RagPipeline / output
+        // JSON.
+        if (benchmarkStarted) {
+            Log.w(BENCH_TAG, "[BENCHMARK] WARNING: ignoring re-delivery; benchmark is already running.")
+            return START_NOT_STICKY
+        }
+        benchmarkStarted = true
 
         val repeats = intent?.getIntExtra("repeats", DEFAULT_REPEATS) ?: DEFAULT_REPEATS
         val cooldownMs = intent?.getLongExtra("cooldown_ms", DEFAULT_COOLDOWN_MS) ?: DEFAULT_COOLDOWN_MS
