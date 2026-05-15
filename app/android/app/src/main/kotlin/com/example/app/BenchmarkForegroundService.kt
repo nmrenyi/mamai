@@ -460,7 +460,7 @@ class BenchmarkForegroundService : Service() {
             }
         } catch (e: Exception) {
             error = e.message
-            Log.e(TAG, "[BENCHMARK] Query failed: ${e.message}", e)
+            Log.e(BENCH_TAG, "[BENCHMARK] Query failed: ${e.message}", e)
         }
 
         val qEnd = System.currentTimeMillis()
