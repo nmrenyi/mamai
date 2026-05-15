@@ -1,6 +1,6 @@
 # MAM-AI On-Device Latency Sweep — GPU vs CPU
 
-_Generated: 2026-05-15T10:50:22_
+_Generated: 2026-05-15T10:51:06_
 
 
 ## Device & stack
@@ -68,11 +68,11 @@ the model writing *longer answers* when given more context (more material to dra
 |---:|---:|---:|
 | **0 (no-RAG)** | 26.1 | 38.4 |
 | 1 | 26.1 | 37.1 |
-| 3 | 30.2 | 64.3 |
+| 3 | 30.3 | 64.3 |
 | 5 | 30.7 | 74.6 |
-| 7 | 35.1 | 81.7 |
+| 7 | 35.1 | 81.8 |
 | 10 | 29.0 | 84.5 |
-| 15 | 30.6 | 112.6 |
+| 15 | 30.6 | 112.7 |
 | 20 | 35.3 | 104.9 |
 
 ## Errors and the 4096-token context wall

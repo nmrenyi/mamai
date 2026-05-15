@@ -105,6 +105,23 @@ def load_runs() -> list[dict]:
     return runs
 
 
+def _p95(values: list[float]) -> int | None:
+    """95th percentile via linear-interpolation 20-quantile partition.
+
+    `statistics.quantiles(data, n=20)` returns 19 cut points dividing the
+    data into 20 equal-frequency groups; index 18 is the 95th percentile.
+    For very small samples (n < 2), there are no cut points to compute,
+    so we fall back to max — same behaviour as the previous
+    `int(len(s)*0.95)` formula but without the off-by-one that made p95
+    collapse to max for any n < 20.
+    """
+    if not values:
+        return None
+    if len(values) < 2:
+        return int(values[0])
+    return int(statistics.quantiles(values, n=20, method="exclusive")[18])
+
+
 def aggregate_per_category(d: dict, key: str) -> dict[str, dict]:
     """Per-category {median, p95, n} for the given timing field."""
     cat_vals: dict[str, list] = defaultdict(list)
@@ -116,11 +133,10 @@ def aggregate_per_category(d: dict, key: str) -> dict[str, dict]:
     for c, vs in cat_vals.items():
         if not vs:
             continue
-        s = sorted(vs)
         out[c] = {
             "n": len(vs),
             "median": int(statistics.median(vs)),
-            "p95": int(s[min(len(s) - 1, int(len(s) * 0.95))]),
+            "p95": _p95(vs),
         }
     return out
 
@@ -129,11 +145,10 @@ def aggregate_overall(d: dict, key: str) -> dict:
     vs = [r[key] for r in d["results"] if not r.get("error")]
     if not vs:
         return {}
-    s = sorted(vs)
     return {
         "n": len(vs),
         "median": int(statistics.median(vs)),
-        "p95": int(s[min(len(s) - 1, int(len(s) * 0.95))]),
+        "p95": _p95(vs),
     }
 
 
