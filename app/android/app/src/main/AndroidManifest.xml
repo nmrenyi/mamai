@@ -54,7 +54,17 @@
         <!-- Foreground service for the on-device latency benchmark. Holds a
              PARTIAL_WAKE_LOCK + sticky notification so the work survives
              screen-off and device-lock through hours-long k-sweeps. Runs
-             in its own :benchmark process to keep the main app isolated. -->
+             in its own :benchmark process to keep the main app isolated.
+             DEV-ONLY: foregroundServiceType="dataSync" is technically a
+             misuse here (no actual data sync) — Google Play would reject
+             this declaration. Acceptable because BenchmarkForegroundService
+             is launched only via `adb shell am start` for in-house
+             benchmarking; it never appears in any user-facing flow and
+             this manifest entry should be stripped from any Play Store
+             build. If we ever need to ship benchmark capabilities, switch
+             to foregroundServiceType="specialUse" and add the corresponding
+             android.permission.FOREGROUND_SERVICE_SPECIAL_USE permission
+             plus the PROPERTY_SPECIAL_USE_FGS_SUBTYPE property. -->
         <service
             android:name=".BenchmarkForegroundService"
             android:foregroundServiceType="dataSync"
