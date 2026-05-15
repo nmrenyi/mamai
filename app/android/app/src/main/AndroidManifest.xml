@@ -4,6 +4,12 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <!-- Required on Android 14+ for network-data foreground services -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+    <!-- BenchmarkForegroundService acquires a PARTIAL_WAKE_LOCK so the CPU
+         keeps running when the screen is off or locked. Without this,
+         multi-hour benchmarks stall silently when the device idles.
+         (BenchmarkActivity is now a thin launcher that just starts the
+         service; the wake lock lives in the service.) -->
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
 
     <application
         android:label="MAM-AI"
@@ -44,6 +50,26 @@
             android:name=".DownloadForegroundService"
             android:foregroundServiceType="dataSync"
             android:exported="false" />
+
+        <!-- Foreground service for the on-device latency benchmark. Holds a
+             PARTIAL_WAKE_LOCK + sticky notification so the work survives
+             screen-off and device-lock through hours-long k-sweeps. Runs
+             in its own :benchmark process to keep the main app isolated.
+             DEV-ONLY: foregroundServiceType="dataSync" is technically a
+             misuse here (no actual data sync) — Google Play would reject
+             this declaration. Acceptable because BenchmarkForegroundService
+             is launched only via `adb shell am start` for in-house
+             benchmarking; it never appears in any user-facing flow and
+             this manifest entry should be stripped from any Play Store
+             build. If we ever need to ship benchmark capabilities, switch
+             to foregroundServiceType="specialUse" and add the corresponding
+             android.permission.FOREGROUND_SERVICE_SPECIAL_USE permission
+             plus the PROPERTY_SPECIAL_USE_FGS_SUBTYPE property. -->
+        <service
+            android:name=".BenchmarkForegroundService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false"
+            android:process=":benchmark" />
 
         <!-- FileProvider for sharing PDF files from getExternalFilesDir with viewer apps -->
         <provider

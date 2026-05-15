@@ -12,6 +12,7 @@ Usage:
     python evaluation/benchmark_latency.py --filter long_01         # Single specific query
     python evaluation/benchmark_latency.py --no-retrieval           # Skip RAG retrieval
     python evaluation/benchmark_latency.py --cooldown 10000         # Longer cooldown (thermal)
+    python evaluation/benchmark_latency.py --retrieve-k 5           # Override retrieval top_k for this session
 """
 
 import argparse
@@ -68,9 +69,15 @@ def check_device(device_serial=None):
 
 
 def check_models_downloaded(device_serial=None):
-    """Check if model files exist on device."""
+    """Check if model files exist on device.
+
+    Filenames must match config/app_config.json — the app loads
+    "llm_model" / "embedding_model" / "tokenizer" from there. Updated
+    for the Gemma 4 E4B / LiteRT-LM 0.11.0 stack; the old Gemma 3n
+    .task name is no longer in production.
+    """
     required_files = [
-        "gemma-3n-E4B-it-int4.task",
+        "gemma-4-E4B-it.litertlm",
         "Gecko_1024_quant.tflite",
         "sentencepiece.model",
         "embeddings.sqlite",
@@ -103,7 +110,8 @@ def clear_logcat(device_serial=None):
 
 
 def launch_benchmark(device_serial=None, repeats=3, cooldown_ms=5000,
-                     skip_retrieval=False, query_filter=None):
+                     skip_retrieval=False, rag_only=False,
+                     query_filter=None, retrieve_k=None):
     """Launch BenchmarkActivity via ADB."""
     cmd = _adb(device_serial) + [
         "shell", "am", "start",
@@ -113,8 +121,12 @@ def launch_benchmark(device_serial=None, repeats=3, cooldown_ms=5000,
     ]
     if skip_retrieval:
         cmd += ["--ez", "skip_retrieval", "true"]
+    if rag_only:
+        cmd += ["--ez", "rag_only", "true"]
     if query_filter:
         cmd += ["--es", "query_filter", query_filter]
+    if retrieve_k is not None:
+        cmd += ["--ei", "retrieve_k", str(retrieve_k)]
 
     result = subprocess.run(cmd, capture_output=True, text=True)
     if "Error" in result.stderr:
@@ -458,8 +470,16 @@ Examples:
                         help="Cooldown between queries in ms (default: 5000)")
     parser.add_argument("--no-retrieval", action="store_true",
                         help="Skip RAG retrieval (generation only)")
+    parser.add_argument("--rag-only", action="store_true",
+                        help="Skip the No-RAG mode (only run with retrieval). "
+                             "Pair with --retrieve-k to do a k-sweep without "
+                             "re-running the No-RAG baseline at every k.")
     parser.add_argument("--filter", type=str, default=None,
                         help="Filter by category (short/medium/long) or query ID (e.g., long_01)")
+    parser.add_argument("--retrieve-k", type=int, default=None,
+                        help="Override retrieval top_k for this session "
+                             "(default: use runtime_config.json's value, currently 3). "
+                             "Used for the per-k latency sweep.")
     parser.add_argument("--output-dir", type=str, default="evaluation/latency_results",
                         help="Directory for output files")
     parser.add_argument("--device", type=str, default=None,
@@ -467,6 +487,14 @@ Examples:
     parser.add_argument("--timeout", type=int, default=7200,
                         help="Timeout in seconds (default: 7200)")
     args = parser.parse_args()
+
+    if args.no_retrieval and args.rag_only:
+        parser.error("--no-retrieval and --rag-only are mutually exclusive")
+    if args.retrieve_k is not None and args.retrieve_k < 1:
+        # The service treats any value >= 0 as an explicit override. Passing 0
+        # would call RetrievalConfig.create(0, …), which is a silent footgun
+        # — use --no-retrieval if you actually want to disable retrieval.
+        parser.error("--retrieve-k must be >= 1; use --no-retrieval to disable retrieval entirely")
 
     print("=" * 60)
     print("MAM-AI On-Device Latency Benchmark")
@@ -494,13 +522,16 @@ Examples:
         clear_logcat(args.device)
 
         # Launch benchmark
-        print(f"Launching: {args.repeats} repeats, {args.cooldown}ms cooldown, filter={args.filter}")
+        k_msg = f", retrieve_k={args.retrieve_k}" if args.retrieve_k is not None else ""
+        print(f"Launching: {args.repeats} repeats, {args.cooldown}ms cooldown, filter={args.filter}{k_msg}")
         launch_benchmark(
             device_serial=args.device,
             repeats=args.repeats,
             cooldown_ms=args.cooldown,
             skip_retrieval=args.no_retrieval,
+            rag_only=args.rag_only,
             query_filter=args.filter,
+            retrieve_k=args.retrieve_k,
         )
 
         # Wait for completion
@@ -509,8 +540,9 @@ Examples:
             print("Benchmark did not complete successfully.")
             sys.exit(1)
 
-        # Pull results
-        json_path = os.path.join(args.output_dir, f"benchmark_{timestamp}.json")
+        # Pull results — include k in the filename so a sweep across k values is legible.
+        k_suffix = f"_k{args.retrieve_k}" if args.retrieve_k is not None else ""
+        json_path = os.path.join(args.output_dir, f"benchmark_{timestamp}{k_suffix}.json")
         pull_results(args.device, json_path)
 
     # Load and analyze
