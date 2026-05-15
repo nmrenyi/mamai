@@ -60,9 +60,19 @@ def load_runs() -> list[dict]:
         except (json.JSONDecodeError, OSError):
             continue
         if "config" not in d or "results" not in d:
+            print(f"SKIP: {os.path.basename(f)} — missing config or results key", file=sys.stderr)
             continue
         if len(d["results"]) < 30:
-            continue  # skip ad-hoc smoke tests; the canonical sweep is 54 runs
+            # Skip ad-hoc smoke tests (the canonical sweep is 54 runs). Log so
+            # that a legitimate narrow sweep (--filter long_01, single-category)
+            # isn't silently dropped from the report.
+            print(
+                f"SKIP: {os.path.basename(f)} — {len(d['results'])} results "
+                "(< 30 threshold for canonical sweeps; pass it through if it "
+                "should appear in the matrix)",
+                file=sys.stderr,
+            )
+            continue
         ts = os.path.basename(f).replace("benchmark_", "").split(".")[0].split("_")[0]
         k_override = d["config"].get("retrieval_top_k_override")
         skip_retrieval = d["config"].get("skip_retrieval", False)
