@@ -186,8 +186,14 @@ class BenchmarkForegroundService : Service() {
         } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
         }
-        @Suppress("DEPRECATION")
-        stopForeground(true)
+        // Use the non-deprecated overload on API 24+ (where it was introduced).
+        // The boolean variant has been deprecated since Android 13.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
     }
 
     // ── Notification plumbing ────────────────────────────────────────────
