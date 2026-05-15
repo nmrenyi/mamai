@@ -113,7 +113,12 @@ class BenchmarkForegroundService : Service() {
                 "mam-ai:benchmark"
             ).apply {
                 setReferenceCounted(false)
-                acquire(6L * 60L * 60L * 1000L)  // 6 h failsafe
+                // 24 h failsafe. Long CPU sweeps (full series × repeats × all k)
+                // have already run ~7 h end-to-end; pushing to 24 h leaves
+                // plenty of slack so the lock can't silently expire mid-run.
+                // If we ever start running sweeps longer than this, switch
+                // to a periodic re-acquire instead of bumping further.
+                acquire(24L * 60L * 60L * 1000L)
             }
             Log.w(BENCH_TAG, "[BENCHMARK] Foreground started, PARTIAL_WAKE_LOCK acquired")
         }
