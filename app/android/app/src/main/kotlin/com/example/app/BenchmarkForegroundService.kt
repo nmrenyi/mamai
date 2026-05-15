@@ -91,24 +91,32 @@ class BenchmarkForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         ensureChannel(this)
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Promote to foreground FIRST so the wake lock is always paired with
+        // a visible notification (Android 12+ enforces this pairing for new
+        // foreground-service starts). Acquiring the wake lock in onCreate
+        // before startForeground would briefly hold the CPU awake without a
+        // notification — and would leak if onStartCommand never ran (e.g.
+        // bind-only path or framework deferral).
+        startForegroundCompat("MAM-AI benchmark starting…", -1, 0)
 
         // PARTIAL_WAKE_LOCK lets the CPU keep running through screen-off.
         // Vendor power managers (OPPO ColorOS, Xiaomi MIUI, etc.) respect
         // wake locks held by foreground services — they aggressively
         // release locks held by background activities.
-        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-        wakeLock = powerManager.newWakeLock(
-            PowerManager.PARTIAL_WAKE_LOCK,
-            "mam-ai:benchmark"
-        ).apply {
-            setReferenceCounted(false)
-            acquire(6L * 60L * 60L * 1000L)  // 6 h failsafe
+        if (wakeLock == null) {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+            wakeLock = powerManager.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "mam-ai:benchmark"
+            ).apply {
+                setReferenceCounted(false)
+                acquire(6L * 60L * 60L * 1000L)  // 6 h failsafe
+            }
+            Log.w(BENCH_TAG, "[BENCHMARK] Foreground started, PARTIAL_WAKE_LOCK acquired")
         }
-        Log.w(BENCH_TAG, "[BENCHMARK] Service onCreate, PARTIAL_WAKE_LOCK acquired")
-    }
-
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForegroundCompat("MAM-AI benchmark starting…", -1, 0)
 
         val repeats = intent?.getIntExtra("repeats", DEFAULT_REPEATS) ?: DEFAULT_REPEATS
         val cooldownMs = intent?.getLongExtra("cooldown_ms", DEFAULT_COOLDOWN_MS) ?: DEFAULT_COOLDOWN_MS
