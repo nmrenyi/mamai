@@ -1,6 +1,6 @@
 # MAM-AI On-Device Latency Sweep — GPU vs CPU
 
-_Generated: 2026-05-15T10:22:29_
+_Generated: 2026-05-15T10:50:22_
 
 
 ## Device & stack
@@ -13,10 +13,7 @@ _Generated: 2026-05-15T10:22:29_
 
 ## Methodology
 
-Per backend × k configuration: 18 queries × 1 mode (RAG-only) × 3 repeats = 54 timed runs. 
-Plus a No-RAG baseline per backend (k=0 via `--no-retrieval`). 10-second cooldown between runs 
-for thermal stability. Activity → ForegroundService with PARTIAL_WAKE_LOCK so the run survives 
-screen-off and device-lock; OPPO Hans whitelist set manually.
+Per backend × k configuration: 18 (query × mode) cells × 3 repeats = 54 timed runs. Plus a No-RAG baseline per backend (k=0 via `--no-retrieval`). 10-second cooldown between runs for thermal stability. Activity → ForegroundService with PARTIAL_WAKE_LOCK so the run survives screen-off and device-lock; OPPO Hans whitelist set manually.
 
 - `TTFT` excludes retrieval — measured from end-of-retrieval to first generated token.
 - `decode` is first-token to last-token.

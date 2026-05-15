@@ -186,16 +186,34 @@ def write_report(runs: list[dict], out_path: Path) -> None:
     md.append(f"- **Backends tested**: GPU (OpenCL, via `useGpuForLlm=true`) and CPU")
     md.append(f"- **Sampling**: temp=1.0, top_p=0.95, top_k=64, max_tokens=32000")
     md.append("")
+    # Pull the actual values from the sample run's config instead of hard-coding
+    # text that can lie. If different runs used different settings, this won't
+    # catch that — but we'd rather report the sample's truth than fabricate a
+    # round-number claim.
+    sample_cfg = sample["data"].get("config", {})
+    sample_repeats = sample_cfg.get("repeats", "?")
+    sample_cooldown_s = (sample_cfg.get("cooldown_ms") or 0) / 1000.0
+    sample_n_results = len(sample["data"]["results"])
+    # Infer queries × modes from total runs / repeats. Default to "?" if the
+    # math doesn't divide evenly.
+    queries_x_modes: object = "?"
+    if isinstance(sample_repeats, int) and sample_repeats > 0 and sample_n_results % sample_repeats == 0:
+        queries_x_modes = sample_n_results // sample_repeats
     md.append("## Methodology\n")
-    md.append("Per backend × k configuration: 18 queries × 1 mode (RAG-only) × 3 repeats = 54 timed runs. ")
-    md.append("Plus a No-RAG baseline per backend (k=0 via `--no-retrieval`). 10-second cooldown between runs ")
-    md.append("for thermal stability. Activity → ForegroundService with PARTIAL_WAKE_LOCK so the run survives ")
-    md.append("screen-off and device-lock; OPPO Hans whitelist set manually.")
+    md.append(
+        f"Per backend × k configuration: {queries_x_modes} (query × mode) cells "
+        f"× {sample_repeats} repeats = {sample_n_results} timed runs. Plus a "
+        f"No-RAG baseline per backend (k=0 via `--no-retrieval`). "
+        f"{sample_cooldown_s:g}-second cooldown between runs for thermal "
+        "stability. Activity → ForegroundService with PARTIAL_WAKE_LOCK so "
+        "the run survives screen-off and device-lock; OPPO Hans whitelist set "
+        "manually."
+    )
     md.append("")
     md.append("- `TTFT` excludes retrieval — measured from end-of-retrieval to first generated token.")
     md.append("- `decode` is first-token to last-token.")
     md.append("- `total_query` is everything: `retrieval + TTFT + decode`.")
-    md.append("- Reported as median across the 54 runs unless noted (p95 in tables marked `p95`).")
+    md.append(f"- Reported as median across the {sample_n_results} runs unless noted (p95 in tables marked `p95`).")
     md.append("")
 
     # ─────────── Headline table: total_query_ms by (backend, k) ───────────
