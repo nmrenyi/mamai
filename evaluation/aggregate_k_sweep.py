@@ -18,6 +18,7 @@ import glob
 import json
 import os
 import statistics
+import sys
 from collections import defaultdict
 from pathlib import Path
 
@@ -68,7 +69,22 @@ def load_runs() -> list[dict]:
         k_label = 0 if skip_retrieval else (k_override if k_override is not None else None)
         if k_label is None:
             continue
-        backend = backend_of(os.path.basename(f), d["config"].get("backend", "CPU"))
+        # The metadata fix in commit ef96538 ensures post-fix runs record
+        # config.backend. If it's missing, the JSON predates that fix — only
+        # safe if the filename is on the allowlist; otherwise warn loudly
+        # rather than silently defaulting (which would mask future GPU runs
+        # written by a regressed BenchmarkForegroundService).
+        recorded_backend = d["config"].get("backend")
+        if recorded_backend is None:
+            if os.path.basename(f) not in PRE_FIX_GPU_FILES:
+                print(
+                    f"WARN: {os.path.basename(f)} has no config.backend "
+                    "field and is not on the pre-fix allowlist; defaulting "
+                    "to CPU. If this was actually a GPU run, fix the source.",
+                    file=sys.stderr,
+                )
+            recorded_backend = "CPU"
+        backend = backend_of(os.path.basename(f), recorded_backend)
         runs.append({
             "file": os.path.basename(f),
             "timestamp": ts,
