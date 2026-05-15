@@ -22,10 +22,15 @@ import android.util.Log
  *
  * Optional extras:
  *   --ez skip_retrieval true     Skip RAG retrieval (generation only)
- *   --ez rag_only true           Skip the No-RAG mode (k-sweep helper)
+ *   --ez rag_only true           Skip the No-RAG mode (k-sweep helper).
+ *                                Mutually exclusive with skip_retrieval —
+ *                                if both are set, skip_retrieval wins.
  *   --es query_filter short      Filter by category or specific query ID
- *   --ei retrieve_k N            Override retrieval top_k for this session
- *                                (default: use runtime_config.json's value).
+ *   --ei retrieve_k N            Override retrieval top_k for this session.
+ *                                Pass any value >= 0 to override; pass -1
+ *                                (or omit) to use runtime_config.json's
+ *                                value. The activity normalises -1 to null
+ *                                before forwarding to the service.
  */
 class BenchmarkActivity : Activity() {
 

@@ -55,12 +55,17 @@ import java.util.concurrent.Executors
  *     instances may briefly contend for GPU/memory during init.
  *
  * Intent extras (forwarded from the Activity):
- *   repeats:Int                Repetitions per query
- *   cooldown_ms:Long           Sleep between runs
+ *   repeats:Int                Repetitions per query (default 3)
+ *   cooldown_ms:Long           Sleep between runs in ms (default 5000)
  *   skip_retrieval:Boolean     Run No-RAG mode only
  *   rag_only:Boolean           Run RAG mode only
- *   query_filter:String?       Category or query ID filter
- *   retrieve_k:Int (>=0)       Override retrieval top_k; -1 = use config
+ *                              (skip_retrieval and rag_only are mutually
+ *                              exclusive; skip_retrieval wins if both set)
+ *   query_filter:String?       Category or specific query ID filter
+ *   retrieve_k:Int             Override retrieval top_k for this session.
+ *                              Pass -1 (or omit) to use the value from
+ *                              runtime_config.json. Any value >= 0 takes
+ *                              effect for every query in this run.
  */
 class BenchmarkForegroundService : Service() {
 
