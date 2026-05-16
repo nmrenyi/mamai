@@ -2,6 +2,8 @@
 
 _Last updated: 2026-05-16. Companion to `latency_report_v2.md` (timing data) and the NPU feasibility report (`mamaretrieval/notes/npu_feasibility_report.md`)._
 
+**On the Snapdragon 8 Elite test device under a 60 s latency budget, E4B (6 GB RAM floor) deploys only on GPU across all RAG depths k ≤ 15 or on CPU at k ≤ 3, while E2B (4 GB RAM floor) deploys on both GPU and CPU across all k ≤ 15 — with k = 20 ruled out for both models by the 4096-token context wall, regardless of backend.**
+
 ## TL;DR — four load-bearing rules
 
 1. **E4B minimum RAM: 6 GB** total. 4 GB phones cannot run E4B reliably (model alone needs ~3.3 GB at runtime; Android + bundled apps eat 1.5–2 GB).
