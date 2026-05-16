@@ -2,6 +2,15 @@
 
 Self-contained instructions for finishing the E2B latency sweep started by another session. **Phase 1 (setup) is already complete on branch `feat/e2b-latency-sweep`.** Your job is Phase 2 (GPU sweep), Phase 3 (CPU sweep), and Phase 4 (analysis + local commits, **no push**). Expected wall-clock: **~5 hours**.
 
+> **Reading this after PR #59 merged into main?** PR #59 intentionally **reverted** the production `llm_model` in `config/app_config.json` back to `gemma-4-E4B-it.litertlm` — the latency sweep does not authorize a deployment swap (the kenya_vignettes / AfriMed-QA SAQ safety eval is the gate for that). To re-run this benchmark on a future branch:
+>
+> 1. Edit `config/app_config.json` and set `"llm_model": "gemma-4-E2B-it.litertlm"`.
+> 2. Rebuild and install: `flutter build apk --release && adb install -r app/build/app/outputs/flutter-apk/app-release.apk`.
+> 3. Run the sweep (Phase 2 + Phase 3 below).
+> 4. **Revert** the `config/app_config.json` change before opening any PR.
+>
+> With the config flipped, the new benchmark JSONs will record `config.model == "gemma-4-E2B-it.litertlm"` as expected by the Phase 1 verification step in §1. Phase 1's commit-log check (looking for `3042d38 config: switch llm_model to Gemma 4 E2B`) was written when that commit was the tip; on a post-merge replay the same SHA will still be reachable, just deeper in the log.
+
 ## 0. Context — read this first
 
 - This work mirrors the E4B latency sweep that landed in PR #57 (commit `1be0a55` on `main`). The E4B results are in `evaluation/reports/latency_report_v2.md` and the device-compatibility analysis is in `evaluation/reports/device_compatibility_notes.md`.
