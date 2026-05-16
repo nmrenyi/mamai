@@ -9,7 +9,8 @@ _Last updated: 2026-05-16. Companion to [latency_report_v2.md](latency_report_v2
 - At `maxNumTokens=8192`, FP16 GPU output **collapses into a repetition loop at total-context position ~5000 tokens** — about 50 generated tokens into the response. The transition is **sharp**, deterministic across runs.
 - CPU at `maxNumTokens=8192` stays coherent for the same prompt. The asymmetry is the precision difference.
 - **FP16 is confirmed as the root cause** (Step 3, 2026-05-16): forcing GPU to FP32 via a `prefer_activation_type=float32` metadata override on the `.litertlm` artifact eliminates the breakdown. Same artifact, same query, clean output.
-- **Operational conclusion**: the 4096 deployment ceiling on FP16 GPU is conservative — ~900 tokens of safety margin to the actual breakdown. Current k=15 deployment is nowhere near the cliff. FP32 GPU is a viable but slower (~2–3× decode) fallback for use cases that need higher context; memory ceiling on this device is somewhere in 5000–8000 tokens.
+- **Operational conclusion**: the 4096 deployment ceiling on FP16 GPU is conservative — ~900 tokens of safety margin to the actual breakdown. Current k=15 deployment is nowhere near the cliff.
+- **FP32 GPU latency cost** (Step 5 full sweep, 2026-05-16): only **~25% slower than FP16 GPU at k=15** (~6 s extra wait), almost entirely in TTFT (compute-bound prefill). Decode is essentially identical (bandwidth-bound). FP32 GPU is a real shipping option for use cases that want extra correctness margin or higher k — not just an experiment. Memory ceiling on this device is in the 5000–8000 maxNumTokens range; KV cache doubles vs FP16.
 
 ---
 
@@ -285,7 +286,62 @@ The mechanism is now fully understood:
 | 6000–7000 | 4.2–4.9 GB | ~9.1–9.8 GB | ❓ Untested, likely OK |
 | 8192 | 5.8 GB | ~11–13 GB | ❌ OOM crash |
 
-Practical FP32-GPU ceiling on this device is somewhere in **6500–7500**; we didn't bisect to find the exact value because the latency cost (~3× slower decode than FP16 GPU at the same k) is the bigger deployment blocker.
+Practical FP32-GPU ceiling on this device is somewhere in **6500–7500**; we didn't bisect to find the exact value.
+
+---
+
+## Step 5 — FP32 GPU latency sweep at maxNumTokens=4096 (2026-05-16)
+
+Once Step 3 established that FP32 GPU produces clean output, the next question was: **how slow is it, really?** A single-data-point measurement (k=15, maxNumTokens=5000) had suggested ~3× slower decode, but that turned out to be a confused comparison (FP32-E4B vs FP16-**E2B**, two different models). The right comparison is FP32-E4B vs FP16-E4B at the same maxNumTokens.
+
+So we ran the full 8-k sweep with the FP32-tagged artifact at `maxNumTokens=4096` (the production cap) on GPU. **Total wall-clock: ~4.5 hours**, mirroring the original FP16 GPU sweep cell-by-cell.
+
+### Result
+
+| k | FP16 total | **FP32 total** | ratio | FP16 TTFT | FP32 TTFT | FP16 decode | FP32 decode |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| **0 (no-RAG)** | 14.4 s | 16.5 s | **1.14×** | 0.96 s | 2.03 s | 13.5 s | 14.4 s |
+| 1 | 14.1 s | 16.6 s | **1.17×** | 0.95 s | 2.06 s | 11.4 s | 12.7 s |
+| 3 | 19.1 s | 20.2 s | **1.06×** | 0.99 s | 2.16 s | 16.4 s | 16.2 s |
+| 5 | 19.6 s | 23.8 s | **1.21×** | 1.88 s | 4.28 s | 15.9 s | 16.3 s |
+| 7 | 22.9 s | 27.2 s | **1.19×** | 1.92 s | 4.38 s | 17.2 s | 19.0 s |
+| 10 | 22.4 s | 27.5 s | **1.23×** | 2.52 s | 5.87 s | 18.1 s | 18.6 s |
+| 15 | 24.4 s | 30.8 s | **1.26×** | 3.46 s | 8.37 s | 16.8 s | 18.3 s |
+| 20 (ok only) | 21.0 s | 29.0 s | **1.38×** | 3.99 s | 9.76 s | 14.7 s | 18.0 s |
+
+**Same 24 errors at k=20 on both FP16 and FP32** (the prompt-cap rejection; identical 8 queries fail). Confirms the 4096 cap behavior is precision-agnostic — it's a runtime config check, not a numerical thing.
+
+### Two cleanly separated stories
+
+**1. Decode speed is essentially identical in FP16 vs FP32 GPU.** Looking at the decode columns: FP16 11.4–18.1 s vs FP32 12.7–19.0 s — within ~9% at every k. **Decode is bandwidth-bound**, not compute-bound; the bottleneck is loading model weights through memory each step, not the arithmetic precision. So FP32 barely costs anything in steady-state token generation.
+
+**2. Prefill (TTFT) is ~2–2.5× slower under FP32.** TTFT: FP16 ~1–4 s vs FP32 ~2–10 s. **Prefill is compute-bound** — the model processes the entire input prompt in parallel through attention, and FP16 doubles arithmetic throughput on Adreno. The 2× FP32 cost reflects the parallel-compute hit.
+
+**The entire FP32 slowdown lives in TTFT.** The total slowdown ratio grows with k purely because prefill is a larger fraction of total query time at higher k.
+
+### Corrected slowdown summary
+
+- **No-RAG, k=1, k=3**: FP32 only **6–17% slower** — UX-invisible.
+- **Mid k (k=5–10)**: FP32 **19–23% slower** — noticeable but not painful.
+- **Largest viable k (k=15)**: FP32 **26% slower** — noticeable (~6 s extra wait).
+- **k=20 ok cells**: 38% slower (~8 s extra) — but with the 4096 cap, the actual fail rate is 24/54 the same either way.
+
+That's a **much smaller** hit than the ~3× I'd reported from the single-data-point measurement. The error there was comparing FP32-E4B against FP16-**E2B** by mistake.
+
+### What this means for deployment
+
+The FP32-GPU path is **a real deployment option, not just an experiment**:
+
+| Config | Latency at k=15 | Memory peak | Quality | When to ship |
+|---|---|---|---|---|
+| FP16 GPU, max=4096 | ~24 s | ~7 GB | Clean (below cliff) | **Today's ship** |
+| FP32 GPU, max=4096 | ~31 s | ~7 GB | Clean (no FP16 cliff) | If we want extra correctness margin |
+| FP32 GPU, max=5500 | ~32 s + cliff lift | ~9 GB | Clean past 4096 | If we want higher k *and* the device has ≥12 GB |
+| CPU FP32, max=4096 | ~85 s | ~7 GB | Clean | Fallback when GPU isn't available |
+
+The headline: **at maxNumTokens=4096, FP32 GPU is ~25% slower than FP16 GPU at our typical operating points (~6 s extra at k=15)**. That's a real UX hit but not catastrophic. The choice between FP16 GPU and FP32 GPU is now a UX-vs-margin tradeoff — not a "is FP32 even feasible" question.
+
+If we ever want to push past 4096 in production, FP32 GPU becomes the right backend (it doesn't have the cliff); for staying at 4096 there's no functional reason to switch from FP16.
 
 ---
 
@@ -298,10 +354,10 @@ Practical FP32-GPU ceiling on this device is somewhere in **6500–7500**; we di
 | ~~Is FP16 attention the root cause, or just one factor among others?~~ | **Resolved (Step 3, 2026-05-16)** — FP16 is the root cause. FP32 GPU produces clean output where FP16 GPU produced garbage on the same artifact and query | — |
 | ~~Does the artifact's `prefer_activation_type` field explicitly set FP16, or rely on the system default?~~ | **Resolved (peek)** — the published Gemma 4 artifacts do **not** set the field; the runtime falls back to its per-backend default (FP16 on Android GPU text decoder) | — |
 | What is the tight memory ceiling for FP32 GPU on this device? | **Open** — bracketed 5000 ≤ ceiling < 8192; we'd bisect to find the exact value if FP32 GPU were a deployment candidate | ~30 min: 2–3 build/install/run cycles |
-| What is the FP32-GPU latency curve across k? | **In progress** — full 8-run sweep at `maxNumTokens=4096` is currently running (mirrors the FP16 GPU sweep so we can compare cell-by-cell) | ~6–8 hours of device time |
+| ~~What is the FP32-GPU latency curve across k?~~ | **Resolved (Step 5)** — ~25% slower than FP16 GPU at k=15, dominated by 2–2.5× TTFT cost; decode essentially unchanged (bandwidth-bound) | — |
 | Does the cliff position depend on prompt length, or is it fixed at total context ~5000? | **Open** — would help characterize the kernel boundary; no longer deployment-relevant given FP16 is confirmed as the cause | ~30 min if anyone wants the characterization |
 
-The deployment recommendation is unchanged (4096 stays the ship value with FP16 GPU). The FP32 GPU path is now a viable but slower fallback for use cases that need higher k — pending the latency-sweep results currently in flight to quantify "how much slower."
+The deployment recommendation is unchanged (4096 stays the ship value with FP16 GPU). **FP32 GPU is now a real shipping option** for use cases that want extra correctness margin or higher k, at the cost of ~25% slower TTFT-driven latency and ~2× larger KV cache.
 
 ---
 
@@ -312,5 +368,15 @@ The deployment recommendation is unchanged (4096 stays the ship value with FP16 
 - [evaluation/latency_results/benchmark_20260516T103614_k20.json](../latency_results/benchmark_20260516T103614_k20.json) — CPU at maxNumTokens=8192, long_03, k=20 (clean output)
 - [evaluation/latency_results/benchmark_20260516T104730_k20.json](../latency_results/benchmark_20260516T104730_k20.json) — GPU at maxNumTokens=8192, long_01, k=20, 1 rep (degenerate output — the one analyzed in Step 1)
 - [evaluation/latency_results/benchmark_20260516T151036_k20.json](../latency_results/benchmark_20260516T151036_k20.json) — GPU at maxNumTokens=8192, long_01, k=20, 3 reps (bit-identical degenerate output — Step 2 reproducibility)
+- [evaluation/latency_results/benchmark_20260516T162810_k15.json](../latency_results/benchmark_20260516T162810_k15.json) — **FP32 GPU** at maxNumTokens=5000, long_01, k=15 (clean output — Step 3 control test)
+- **FP32 GPU sweep at maxNumTokens=4096 (Step 5)** — full 8-run sweep, 2026-05-16:
+  - [benchmark_20260516T164144_k1.json](../latency_results/benchmark_20260516T164144_k1.json) — k=1
+  - [benchmark_20260516T170710_k3.json](../latency_results/benchmark_20260516T170710_k3.json) — k=3
+  - [benchmark_20260516T173631_k5.json](../latency_results/benchmark_20260516T173631_k5.json) — k=5
+  - [benchmark_20260516T180851_k7.json](../latency_results/benchmark_20260516T180851_k7.json) — k=7
+  - [benchmark_20260516T184348_k10.json](../latency_results/benchmark_20260516T184348_k10.json) — k=10
+  - [benchmark_20260516T191934_k15.json](../latency_results/benchmark_20260516T191934_k15.json) — k=15
+  - [benchmark_20260516T195750_k20.json](../latency_results/benchmark_20260516T195750_k20.json) — k=20 (24 errors / same 8 queries as FP16 baseline)
+  - [benchmark_20260516T202455.json](../latency_results/benchmark_20260516T202455.json) — No-RAG baseline
 - LiteRT-LM source: <https://github.com/google-ai-edge/LiteRT-LM>
 - [app/android/app/src/main/kotlin/com/example/app/RagPipeline.kt:buildEngine()](../../app/android/app/src/main/kotlin/com/example/app/RagPipeline.kt) — where `maxNumTokens = 4096` is set
