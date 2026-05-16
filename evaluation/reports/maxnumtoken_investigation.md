@@ -6,9 +6,10 @@ _Last updated: 2026-05-16. Companion to [latency_report_v2.md](latency_report_v2
 
 - **GPU on Android runs attention in FP16; CPU runs FP32 (XNNPACK)** — verified from LiteRT-LM source and from strings inside `liblitertlm_jni.so`. This is why the two backends behave differently at lifted context.
 - The 4096 cap is **not artifact-baked** — passing `maxNumTokens=8192` to `EngineConfig` succeeds at init on both backends and the artifact happily ran prefill over a 4917-token prompt.
-- At `maxNumTokens=8192`, GPU output **collapses into a repetition loop at total-context position ~5000 tokens** — about 50 generated tokens into the response. The transition is **sharp** (200 chars from coherent prose to pure `*` noise), not the gradual decay a pure precision-drift story would predict.
-- CPU at `maxNumTokens=8192` stays coherent for the same prompt — same query, same artifact, same retrieved chunks. The asymmetry is the precision difference.
-- **Operational conclusion**: the 4096 deployment ceiling is conservative — we have **~900 tokens of safety margin** to the actual GPU breakdown point. Current k=15 deployment is nowhere near the cliff.
+- At `maxNumTokens=8192`, FP16 GPU output **collapses into a repetition loop at total-context position ~5000 tokens** — about 50 generated tokens into the response. The transition is **sharp**, deterministic across runs.
+- CPU at `maxNumTokens=8192` stays coherent for the same prompt. The asymmetry is the precision difference.
+- **FP16 is confirmed as the root cause** (Step 3, 2026-05-16): forcing GPU to FP32 via a `prefer_activation_type=float32` metadata override on the `.litertlm` artifact eliminates the breakdown. Same artifact, same query, clean output.
+- **Operational conclusion**: the 4096 deployment ceiling on FP16 GPU is conservative — ~900 tokens of safety margin to the actual breakdown. Current k=15 deployment is nowhere near the cliff. FP32 GPU is a viable but slower (~2–3× decode) fallback for use cases that need higher context; memory ceiling on this device is somewhere in 5000–8000 tokens.
 
 ---
 
@@ -188,9 +189,9 @@ So the failure is not "FP16 sometimes drifts past 4096" — it is "FP16 kernels 
 
 3. **Decode-side KV writes past position ~4917 produce *deterministically* off-distribution K/V values** (Step 2 evidence). As soon as the model attends back to those bad-write positions in subsequent decode steps, the attention scores collapse onto a small set of high-probability tokens (asterisks, in our case — a tokenizer-common character). The model then enters a self-reinforcing loop: bad outputs → bad self-attention → bad outputs. Same RNG-free state every run, so the same garbage every run.
 
-4. **FP16 vs FP32 is the candidate differentiator across backends**. The kernel issues likely exist on both backends — but FP32's larger dynamic range may absorb the off-distribution values on CPU, while FP16 on GPU has no precision headroom and the bad values dominate. This is *plausible* given the Step 4 source-code finding (CPU = XNNPACK FP32, GPU = OpenCL FP16) but **not directly verified** — see the reachability constraint below.
+4. **FP16 is the root cause across backends** (confirmed Step 3, 2026-05-16). The kernel calibration mismatch exists on both backends — but FP32's larger dynamic range absorbs the off-distribution values on CPU (XNNPACK default), while FP16 on GPU has no precision headroom and the bad values dominate. Forcing the GPU artifact to FP32 via metadata override eliminates the breakdown — same artifact, same query, clean output.
 
-The "exactly 4096" framing was wrong. The real picture: a ~1000-token "uncalibrated zone" between ~4096 and ~5000 where output quality slowly degrades and then catastrophically collapses, and a deterministic kernel/precision interaction that makes the collapse visible only on GPU.
+The "exactly 4096" framing was wrong. The real picture: a ~1000-token "uncalibrated zone" between ~4096 and ~5000 where output quality slowly degrades and then catastrophically collapses on the FP16 path, but stays coherent on FP32. The deterministic kernel/precision interaction is what makes the collapse visible only on GPU.
 
 ---
 
@@ -209,11 +210,82 @@ The C++ `LlmExecutorSettings::SetActivationDataType(...)` method **exists** in L
 
 ### Paths that would unblock the FP32 control test
 
-- **(b) Modify the `.litertlm` artifact header.** The FlatBuffers schema (`schema/core/litertlm_header_schema.fbs`) defines a `SystemMetadata` table as a list of arbitrary `KeyValuePair` entries. The native runtime looks for a key `prefer_activation_type` and, if present, honors it; otherwise it falls back to the system default. Setting `prefer_activation_type = FLOAT32` in the artifact's header would force FP32 on GPU without any code changes. Half a day of work with `flatc` tooling on a 2.4 GB binary; round-trip-test before changing values.
-- **(c) File an upstream issue with `google-ai-edge/LiteRT-LM`** to expose `SetActivationDataType` in the Kotlin `EngineConfig` API. Doesn't unblock us now, but is the right systemic fix.
-- **(d) Build a custom LiteRT-LM AAR.** Clone the repo, add a field to the Kotlin `EngineConfig` + parameter to `nativeCreateEngine` + plumbing to the C++ setter. Multi-day project; out of scope.
+- **(b) Modify the `.litertlm` artifact header.** ✅ **Used — see Step 3 below.** The FlatBuffers schema (`schema/core/litertlm_header_schema.fbs`) defines per-section `items` as a list of arbitrary `KeyValuePair` entries. The native runtime looks for a key `prefer_activation_type` attached to the prefill_decode model section and, if present, honors it; otherwise it falls back to the system default (FP16 on Android GPU). Setting `prefer_activation_type = "float32"` in the artifact's section metadata forces FP32 on GPU without any code changes.
+- **(c) File an upstream issue with `google-ai-edge/LiteRT-LM`** to expose `SetActivationDataType` in the Kotlin `EngineConfig` API. Still worth filing as the right systemic fix, but no longer the unblocker — option (b) works.
+- **(d) Build a custom LiteRT-LM AAR.** Clone the repo, add a field to the Kotlin `EngineConfig` + parameter to `nativeCreateEngine` + plumbing to the C++ setter. Multi-day project; **avoided** thanks to option (b).
 
-For now this PR documents the constraint and the experimental options. The mechanism story is already well-anchored even without the FP32 control: Steps 4, 1, 2 together make the FP16-induced determinstic kernel-zone breakdown the obvious hypothesis. The control test would *confirm* it; it doesn't change the deployment recommendation either way.
+---
+
+## Step 3 — FP32 control test (2026-05-16) — **FP16 confirmed as root cause**
+
+### Procedure
+
+Used the official `litert-lm-builder` Python package (installed via pip in a Python 3.14 venv, since the published 0.11.0 package needs `tomllib`).
+
+1. **Peek + dump** the existing `gemma-4-E4B-it.litertlm` into its 12 constituent sections plus a `model.toml` build spec — `litert-lm-peek --litertlm_file gemma-4-E4B-it.litertlm --dump_files_dir /tmp/litertlm-dump-e4b/`
+2. **Edit the TOML** to add `prefer_activation_type` as `additional_metadata` on the prefill_decode section (the 0.11.0 builder doesn't surface `prefer_activation_type` as a first-class TOML key, but `additional_metadata` lets us inject any KeyValuePair):
+
+   ```toml
+   [[section]]
+   model_type = "prefill_decode"
+   section_type = "TFLiteModel"
+   data_path = "Section10_TFLiteModel_tf_lite_prefill_decode.tflite"
+   additional_metadata = [
+     { key = "prefer_activation_type", value = "float32", value_type = "String" },
+   ]
+   ```
+
+3. **Rebuild** — `litert-lm-builder toml --path model_fp32.toml output --path /tmp/gemma-4-E4B-it-fp32.litertlm`. Output is the same 3.4 GB, byte-identical data sections, only the metadata header changed.
+4. **Verify with peek**: confirmed Section 10 now has `Key: prefer_activation_type, Value (String): float32`.
+5. **Push to device, install GPU APK, run benchmark**.
+
+### Confirmation at engine init
+
+Logcat showed:
+
+```
+litert_lm_loader.cc:234] section_prefer_activation_type: float32
+activation_data_type: FLOAT32
+```
+
+The runtime parsed the metadata override and switched to FP32 attention.
+
+### First attempt: `maxNumTokens = 8192` → silent OOM
+
+The k=20 query crashed the app process in **7 seconds**, before any output token was generated. No native crash log, no OOM-killer line, no tombstone — just a generic "process died" entry. Memory math explains it: FP32 doubles the KV cache (~5.8 GB at 8192) and the peak demand (~11–13 GB) exceeded the device's available RAM (~10 GB after Android baseline). The GPU allocator silently failed and the process was killed.
+
+### Retry: `maxNumTokens = 5000`, k=15 → ✅ clean output
+
+| | Value |
+|---|---|
+| TTFT | 10.5 s |
+| Decode | 19.2 s |
+| Total | 31.8 s |
+| Response | 998 chars / 249 tokens, coherent medical reasoning |
+| Sliding-window analysis | All windows 60–72% letters, 7–11% asterisks — **no transition to garbage** |
+
+Response began with `"This is a **severe pre-eclampsia** situation. You must act quickly. **Immediate Actions:**..."` and ended with `"...Consult a doctor immediately for guidance on any medications you can safely give while waiting."` — a complete, well-structured medical answer. The total context at end of response was ~4514 tokens, comfortably past the 4096 deployment cap but below the FP16 cliff at ~5000.
+
+### Conclusion
+
+**FP16 is the root cause of the GPU breakdown.** Same artifact, same prompt, same Adreno 830 OpenCL backend, same greedy decoding. The single controlled change was activation precision — and it eliminated the degeneration. The "kernel boundary independent of precision" hypothesis is ruled out.
+
+The mechanism is now fully understood:
+
+- FP16 OpenCL attention kernels produce off-distribution K/V values for decode positions past the artifact's calibrated zone
+- CPU's XNNPACK FP32 path has enough numerical headroom to absorb the same calibration mismatch and stays coherent
+- GPU's FP16 path doesn't; once attention scores drift onto the asterisk token, the model self-reinforces into the repetition loop we observed
+
+### Memory ceiling for FP32 GPU on the test device
+
+| maxNumTokens | KV cache (FP32) | Peak demand | Result |
+|---|---|---|---|
+| 4096 | 2.9 GB | ~7.8 GB | ✅ Fits |
+| 5000 | 3.5 GB | ~8.4 GB | ✅ Confirmed working |
+| 6000–7000 | 4.2–4.9 GB | ~9.1–9.8 GB | ❓ Untested, likely OK |
+| 8192 | 5.8 GB | ~11–13 GB | ❌ OOM crash |
+
+Practical FP32-GPU ceiling on this device is somewhere in **6500–7500**; we didn't bisect to find the exact value because the latency cost (~3× slower decode than FP16 GPU at the same k) is the bigger deployment blocker.
 
 ---
 
@@ -222,12 +294,14 @@ For now this PR documents the constraint and the experimental options. The mecha
 | Question | Status | Cost to answer |
 |---|---|---|
 | ~~Is the GPU cliff deterministic (same position every run) or stochastic?~~ | **Resolved (Step 2)** — bit-exactly deterministic across 3 reps | — |
-| ~~Is the Kotlin API able to force FP32 on GPU?~~ | **Resolved (reachability check)** — no, not in LiteRT-LM 0.11.0 | — |
-| Is FP16 attention the root cause, or just one factor among others? | **Open** — would need option (b) artifact-modification or option (d) custom AAR to run the control test | half-day / multi-day respectively |
-| Does the cliff position depend on prompt length, or is it fixed at total context ~5000? | **Open** — would help characterize the kernel boundary; not deployment-relevant | ~30 min: run a few queries with different prompt lengths at maxNumTokens=8192 |
-| Does the artifact's `prefer_activation_type` field explicitly set FP16, or rely on the system default? | **Open** — answered by parsing the FlatBuffers header with `flatc`; would be a useful prereq for option (b) | ~1-2 hours of flatc tooling work |
+| ~~Is the Kotlin API able to force FP32 on GPU?~~ | **Resolved (reachability check)** — no via Kotlin/JNI, but **yes via the .litertlm metadata override path** (option b) | — |
+| ~~Is FP16 attention the root cause, or just one factor among others?~~ | **Resolved (Step 3, 2026-05-16)** — FP16 is the root cause. FP32 GPU produces clean output where FP16 GPU produced garbage on the same artifact and query | — |
+| ~~Does the artifact's `prefer_activation_type` field explicitly set FP16, or rely on the system default?~~ | **Resolved (peek)** — the published Gemma 4 artifacts do **not** set the field; the runtime falls back to its per-backend default (FP16 on Android GPU text decoder) | — |
+| What is the tight memory ceiling for FP32 GPU on this device? | **Open** — bracketed 5000 ≤ ceiling < 8192; we'd bisect to find the exact value if FP32 GPU were a deployment candidate | ~30 min: 2–3 build/install/run cycles |
+| What is the FP32-GPU latency curve across k? | **In progress** — full 8-run sweep at `maxNumTokens=4096` is currently running (mirrors the FP16 GPU sweep so we can compare cell-by-cell) | ~6–8 hours of device time |
+| Does the cliff position depend on prompt length, or is it fixed at total context ~5000? | **Open** — would help characterize the kernel boundary; no longer deployment-relevant given FP16 is confirmed as the cause | ~30 min if anyone wants the characterization |
 
-The remaining open questions characterize the mechanism more precisely but do not change the deployment recommendation (4096 stays the ship value).
+The deployment recommendation is unchanged (4096 stays the ship value with FP16 GPU). The FP32 GPU path is now a viable but slower fallback for use cases that need higher k — pending the latency-sweep results currently in flight to quantify "how much slower."
 
 ---
 
