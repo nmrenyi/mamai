@@ -139,7 +139,7 @@ Combining the SoC distribution data with the floor specs above:
 | $100–$150 low-mid | Tecno Camon, Infinix Hot Pro+, Redmi 13C | Helio G99, Dimensity 6080 | 6 GB | ✅ tight | ✅ comfortable | ⚠️ uncertain |
 | $150–$250 mid | Tecno Camon 30, Infinix Note 40, Redmi Note 13, Samsung A25 | Dimensity 7050/7200/8400 | 8 GB | ✅ | ✅ | ⚠️ uncertain (Mali) |
 | $250+ upper-mid | OnePlus Nord, Samsung A5x | Snapdragon 7+ Gen 3 | 8 GB | ✅ | ✅ | ✅ Adreno |
-| $400+ flagship | OPPO Find X8 (our test device), Pixel, Galaxy S | Snapdragon 8 Elite, Dimensity 9400, Tensor | 12+ GB | ✅ | ✅ | ✅ Adreno (Pixel ❌) |
+| $400+ flagship | OnePlus OPD2413 / OPPO Find X8 (our test device), Pixel, Galaxy S | Snapdragon 8 Elite, Dimensity 9400, Tensor | 12+ GB | ✅ | ✅ | ✅ Adreno (Pixel ❌) |
 
 **Effective deployment-viable hardware floor**: roughly **$120+ retail**, 6 GB RAM, 64 GB storage, any 64-bit chipset from 2022 or later. E2B lowers this to **~$100**, 4 GB RAM.
 

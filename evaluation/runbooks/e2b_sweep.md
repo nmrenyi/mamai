@@ -6,7 +6,7 @@ Self-contained instructions for finishing the E2B latency sweep started by anoth
 
 - This work mirrors the E4B latency sweep that landed in PR #57 (commit `1be0a55` on `main`). The E4B results are in `evaluation/reports/latency_report_v2.md` and the device-compatibility analysis is in `evaluation/reports/device_compatibility_notes.md`.
 - We're now measuring the **smaller** Gemma 4 E2B variant (~2 GB instead of E4B's 3.66 GB) to find out how much faster it is in real terms on the same hardware. Same 16 measurements as E4B: 8 GPU (k ∈ {1, 3, 5, 7, 10, 15, 20} + No-RAG) + 8 CPU.
-- Test device: **OPPO OPD2413 (Snapdragon 8 Elite, SM8750P)** connected via ADB. OPPO Hans battery-optimization whitelist is **already configured** by the user — don't re-do it.
+- Test device: **OnePlus OPD2413 (Snapdragon 8 Elite, SM8750P)** connected via ADB — that's the firmware-reported manufacturer (`device.manufacturer="OnePlus"` in the benchmark JSONs); the same OPD2413 hardware ships under the OPPO brand in some markets. The OPPO/OnePlus Hans battery-optimization whitelist is **already configured** by the user — don't re-do it.
 - The benchmark infrastructure is in `evaluation/benchmark_latency.py`; the aggregator is `evaluation/aggregate_k_sweep.py`. Both are already correct for this work, with one expected exception in Phase 4 (the aggregator needs a `model` dimension added).
 
 ### Why this is a runbook and not a single Bash command
