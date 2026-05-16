@@ -1,6 +1,6 @@
 # MAM-AI On-Device Latency Sweep — Model × Backend × k
 
-_Generated: 2026-05-16T14:51:07_
+_Generated: 2026-05-16T15:31:11_
 
 
 ## Device & stack
@@ -245,6 +245,8 @@ The Kotlin `EngineConfig` constructor exposes a `maxNumTokens` parameter; leavin
 - GPU attention runs FP16 by default on Android (Adreno OpenCL); CPU runs FP32 (XNNPACK). Verified from LiteRT-LM source and from a string in the native lib that reads *"System's default activation type for Text decoder is fp16"*.
 - At `maxNumTokens=8192`, GPU output stays coherent for ~50 generated tokens past the prompt end (total context ~4967), then collapses sharply into a repetition loop at total context ~5000.
 - The collapse is a **decode-side** failure, not a prefill failure — prefill over the 4917-token prompt works fine; what breaks is writing new K/V entries to positions ≥ 4917. Most consistent with a kernel-level boundary that FP16 has no precision headroom to absorb.
+- **3-rep reproducibility test (2026-05-16) returned bit-identical output** — same chars, same transition position, same head, same tail. GPU uses greedy decoding by default, so this is the FP16/kernel pipeline failing in exactly the same way every run. Rules out stochastic precision noise; the breakdown is deterministic.
+- The FP32-on-GPU control test would directly confirm or refute FP16 as the root cause, but **the Kotlin API in LiteRT-LM 0.11.0 does not expose `SetActivationDataType`** — the JNI bridge has no precision parameter. The hypothesis is well-anchored without the control; verification requires either modifying the `.litertlm` artifact's metadata header or upstreaming a Kotlin API exposure.
 - 4096 has **~900 tokens of safety margin** to the actual GPU cliff. Current k=15 deployment is nowhere near the breakdown zone — this rules out the concern that we might be silently shipping degraded output at the deployed cap.
 
 ## Key findings
