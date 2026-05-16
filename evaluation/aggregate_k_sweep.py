@@ -463,10 +463,37 @@ def write_report(runs: list[dict], out_path: Path) -> None:
               "(model × backend) combination tested: ")
     md.append("`long_01, long_03, medium_02, medium_04, short_01, short_03, short_04, short_05`. ")
     md.append("Each failure reports `Input token ids are too long. Exceeding the maximum "
-              "number of tokens allowed: …>= 4096`. ")
-    md.append("Both Gemma 4 E4B and Gemma 4 E2B ship the same 4096-token context window; "
-              "the wall is a property of the `.litertlm` artifact format, not the "
-              "parameter count or backend. **k_max ≈ 17–18** for both models.")
+              "number of tokens allowed: …>= 4096`. The cap is enforced by LiteRT-LM's "
+              "native runtime (verified by extracting `liblitertlm_jni.so` from the AAR "
+              "and locating the literal error template).")
+    md.append("")
+    md.append("### Where the 4096 comes from — and why we set it explicitly\n")
+    md.append("The Kotlin `EngineConfig` constructor exposes a `maxNumTokens` parameter; "
+              "leaving it `null` falls back to whatever the engine's default is for the "
+              "loaded artifact. The original `RagPipeline.kt` left it null, so the 4096 "
+              "ceiling was an inferred property of *somewhere* in the stack rather than a "
+              "stated choice. **A 2026-05-16 experiment on the test device pinned this "
+              "down** — see commit log for `feat/explicit-max-num-tokens`:")
+    md.append("")
+    md.append("- **Lower-bound test (`maxNumTokens = 2048`)**: queries with prompts "
+              "between 2048–4096 tokens that previously succeeded now fail, with the "
+              "error message reporting the new ceiling verbatim (`>= 2048`). Both GPU "
+              "and CPU clamp identically. **The knob is wired through to the native "
+              "runtime as-advertised.**")
+    md.append("- **Upper-bound test (`maxNumTokens = 8192`)**: `Engine.initialize()` "
+              "succeeds on both backends; the artifact is *not* hard-bounded at 4096. "
+              "Previously-failing k=20 queries now run end-to-end on both backends. "
+              "**However:** on CPU the output stays coherent (real medical reasoning, "
+              "ends with reference numbers); on GPU the output degenerates into a long "
+              "repetition loop (`*   *   *   *   ...`) past the 4096-token mark. "
+              "Same artifact, same query — output diverges by backend at lifted context.")
+    md.append("")
+    md.append("**Operational conclusion:** 4096 is the highest value that produces clean "
+              "generations across both backends for this artifact family, and is "
+              "therefore the right value to ship. `RagPipeline.kt:buildEngine()` now "
+              "passes it explicitly so the ceiling is visible at the call site rather "
+              "than left implicit. **k_max ≈ 17–18** for both models — a deployment "
+              "ceiling driven by output quality on GPU, not by a runtime hard cap.")
     md.append("")
 
     md.append("## Key findings\n")
@@ -495,11 +522,16 @@ def write_report(runs: list[dict], out_path: Path) -> None:
               "(mid-tier MediaTek, older Snapdragon without OpenCL) now have a realistic path: "
               "ship E2B on CPU, restrict k to small values.")
     md.append("")
-    md.append("### 5. 4096-token context wall is the binding ceiling at high k")
+    md.append("### 5. 4096-token context wall is the binding ceiling at high k — and the right one")
     md.append("k=15 works cleanly on all four (model × backend) combinations. k=20 fails identically "
-              "across all four: same 8 queries, same 24 (query × rep) failures. The cap is in the "
-              "model artifact, not the runtime, and is **shared between E4B and E2B**. "
-              "**Latency is not the constraint at the upper end of k — context window is.**")
+              "across all four: same 8 queries, same 24 (query × rep) failures, same `>= 4096` "
+              "error. Phase B/C experiments on 2026-05-16 (see §context wall above) show the cap "
+              "is **liftable** — passing `maxNumTokens = 8192` makes the runtime accept larger "
+              "prompts — but the lift produces **quality degradation on GPU** (response loops "
+              "into repetition past 4096 tokens) while CPU output stays clean. 4096 is therefore "
+              "the right deployment ceiling for cross-backend safety, not just a memory or "
+              "runtime constraint. **Latency is not the constraint at the upper end of k — "
+              "output quality is.**")
     md.append("")
     md.append("### 6. TTFT scales linearly with retrieved-doc content past k=3")
     md.append("On both backends and both models, TTFT-per-doc-char is roughly constant past k=3, so "
