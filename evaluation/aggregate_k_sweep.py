@@ -417,15 +417,21 @@ def write_report(runs: list[dict], out_path: Path) -> None:
         _write_per_model_section(md, matrix, m, all_ks)
 
     # ─────────── Cross-model comparison ───────────
-    # Use E4B as baseline when present; ratio is E4B/E2B so >1 means E2B is faster.
+    # Use E4B as baseline when present; ratio is baseline/other so >1 means
+    # the (smaller) comparator model is faster on that cell.
     if len(models) > 1:
         baseline = "gemma-4-E4B-it.litertlm" if "gemma-4-E4B-it.litertlm" in models else models[0]
         others = [m for m in models if m != baseline]
+        others_label = ", ".join(_short_model_label(m) for m in others)
         md.append("## Cross-model comparison\n")
         md.append(
-            f"Ratios below are **{_short_model_label(baseline)} ÷ {_short_model_label(others[0])}**, "
-            "so values **> 1.0× mean the smaller model is faster** at the same backend×k. "
-            "GPU compares prefill bandwidth-dominance; CPU exposes raw compute-cost scaling with parameter count."
+            f"Each table below compares **{_short_model_label(baseline)}** "
+            f"(baseline) against each comparator model ({others_label}). "
+            "Ratios are reported as **baseline ÷ comparator** at the same "
+            "backend × k cell, so values **> 1.0× mean the comparator is faster**. "
+            "Reading the columns: GPU prefill (TTFT) is compute-bound and tracks "
+            "parameter count closely; GPU decode is bandwidth-bound and gains less "
+            "from model shrinkage; CPU is compute-bound throughout."
         )
         md.append("")
         for other in others:

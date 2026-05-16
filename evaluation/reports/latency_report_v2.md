@@ -1,6 +1,6 @@
 # MAM-AI On-Device Latency Sweep — Model × Backend × k
 
-_Generated: 2026-05-16T08:02:21_
+_Generated: 2026-05-16T09:00:40_
 
 
 ## Device & stack
@@ -182,7 +182,7 @@ Per (model × backend × k) configuration: 18 (query × mode) cells × 3 repeats
 
 ## Cross-model comparison
 
-Ratios below are **Gemma 4 E4B ÷ Gemma 4 E2B**, so values **> 1.0× mean the smaller model is faster** at the same backend×k. GPU compares prefill bandwidth-dominance; CPU exposes raw compute-cost scaling with parameter count.
+Each table below compares **Gemma 4 E4B** (baseline) against each comparator model (Gemma 4 E2B). Ratios are reported as **baseline ÷ comparator** at the same backend × k cell, so values **> 1.0× mean the comparator is faster**. Reading the columns: GPU prefill (TTFT) is compute-bound and tracks parameter count closely; GPU decode is bandwidth-bound and gains less from model shrinkage; CPU is compute-bound throughout.
 
 ### Gemma 4 E4B vs Gemma 4 E2B
 
