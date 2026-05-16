@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
-"""Aggregate per-k latency-sweep JSONs into a single GPU↔CPU comparison report.
+"""Aggregate per-k latency-sweep JSONs into a single model × backend × k report.
 
 Reads all benchmark_*.json files produced by benchmark_latency.py, groups them
-by (backend, k_override), and writes a markdown report at
+by (model, backend, k_override), and writes a markdown report at
 evaluation/reports/latency_report_v2.md.
 
 Notes on backend identification: post-fix benchmark JSONs (commit ef96538
 onward) record `backend` correctly and are trusted as-is. Pre-fix GPU sweep
 JSONs hard-code `backend="CPU"` even though they were measured on GPU; we
 backfill those using an explicit filename allowlist (see `backend_of`).
-Future runs of any backend are unaffected.
+
+Notes on model identification: post-fix JSONs (commit 976a8ac onward) record
+`config.model` from the app asset; earlier runs do not. For any JSON missing
+`config.model` we default to `gemma-4-E4B-it.litertlm` since the only sweeps
+that predate the fix were E4B. Future runs of any model are unaffected.
 """
 from __future__ import annotations
 
@@ -45,6 +49,19 @@ def backend_of(filename: str, recorded: str) -> str:
     if filename in PRE_FIX_GPU_FILES:
         return "GPU"
     return recorded
+
+
+# Default model for any pre-fix JSON missing config.model. All such files in
+# the current repo are E4B; this default is purely defensive in case an old
+# JSON resurfaces. New runs always record their own model.
+LEGACY_DEFAULT_MODEL = "gemma-4-E4B-it.litertlm"
+
+
+def model_of(filename: str, recorded: str | None) -> str:
+    """Trust the recorded model; default to E4B for legacy JSONs that lack it."""
+    if recorded is not None:
+        return recorded
+    return LEGACY_DEFAULT_MODEL
 
 
 def load_runs() -> list[dict]:
@@ -95,9 +112,19 @@ def load_runs() -> list[dict]:
                 )
             recorded_backend = "CPU"
         backend = backend_of(os.path.basename(f), recorded_backend)
+        recorded_model = d["config"].get("model")
+        if recorded_model is None:
+            print(
+                f"WARN: {os.path.basename(f)} has no config.model field; "
+                f"defaulting to {LEGACY_DEFAULT_MODEL}. If this was a "
+                "different model, the JSON predates the model-recording fix.",
+                file=sys.stderr,
+            )
+        model = model_of(os.path.basename(f), recorded_model)
         runs.append({
             "file": os.path.basename(f),
             "timestamp": ts,
+            "model": model,
             "backend": backend,
             "k": k_label,
             "data": d,
@@ -167,13 +194,175 @@ def fmt_s(v: int | None) -> str:
     return f"{v / 1000:.1f}" if v is not None else "—"
 
 
+def _short_model_label(model: str) -> str:
+    """Human-friendly short label, e.g. 'Gemma 4 E4B' for 'gemma-4-E4B-it.litertlm'."""
+    if "E4B" in model:
+        return "Gemma 4 E4B"
+    if "E2B" in model:
+        return "Gemma 4 E2B"
+    return model
+
+
+def _write_per_model_section(
+    md: list[str], matrix: dict, model: str, all_ks: list[int]
+) -> None:
+    """Emit the six per-model tables (headline / TTFT / decode / p95 / errors / wall-clock).
+
+    Each table follows the same `(GPU, CPU, ratio)` shape as the original
+    single-model report; we just scope to one model at a time.
+    """
+    label = _short_model_label(model)
+    md.append(f"## {label} (`{model}`)\n")
+
+    md.append("### Median total query latency (seconds)\n")
+    md.append("| k | doc_chars med | GPU short / med / long | CPU short / med / long | CPU÷GPU |")
+    md.append("|---:|---:|---:|---:|---:|")
+    for k in all_ks:
+        gpu_run = matrix.get((model, "GPU", k))
+        cpu_run = matrix.get((model, "CPU", k))
+        if not gpu_run and not cpu_run:
+            continue
+        doc_chars = median_doc_chars(gpu_run["data"] if gpu_run else cpu_run["data"])
+        gpu_cells = "—"
+        cpu_cells = "—"
+        if gpu_run:
+            g = aggregate_per_category(gpu_run["data"], "total_query_ms")
+            gpu_cells = " / ".join(fmt_s(g.get(c, {}).get("median")) for c in ["short", "medium", "long"])
+        if cpu_run:
+            c_ = aggregate_per_category(cpu_run["data"], "total_query_ms")
+            cpu_cells = " / ".join(fmt_s(c_.get(c, {}).get("median")) for c in ["short", "medium", "long"])
+        ratio = ""
+        if gpu_run and cpu_run:
+            gov = aggregate_overall(gpu_run["data"], "total_query_ms").get("median")
+            cov = aggregate_overall(cpu_run["data"], "total_query_ms").get("median")
+            if gov is not None and cov is not None and gov > 0:
+                ratio = f"{cov / gov:.2f}×"
+        k_label = "**0 (no-RAG)**" if k == 0 else str(k)
+        md.append(f"| {k_label} | {doc_chars} | {gpu_cells} | {cpu_cells} | {ratio} |")
+    md.append("")
+
+    md.append("### TTFT (ms, median)\n")
+    md.append("| k | doc_chars med | GPU TTFT | CPU TTFT | CPU÷GPU |")
+    md.append("|---:|---:|---:|---:|---:|")
+    for k in all_ks:
+        gpu_run = matrix.get((model, "GPU", k))
+        cpu_run = matrix.get((model, "CPU", k))
+        if not gpu_run and not cpu_run:
+            continue
+        doc_chars = median_doc_chars(gpu_run["data"] if gpu_run else cpu_run["data"])
+        gv = aggregate_overall(gpu_run["data"], "ttft_ms").get("median") if gpu_run else None
+        cv = aggregate_overall(cpu_run["data"], "ttft_ms").get("median") if cpu_run else None
+        ratio = f"{cv / gv:.1f}×" if (gv is not None and cv is not None and gv > 0) else ""
+        k_label = "**0 (no-RAG)**" if k == 0 else str(k)
+        md.append(f"| {k_label} | {doc_chars} | {fmt_ms(gv)} | {fmt_ms(cv)} | {ratio} |")
+    md.append("")
+
+    md.append("### Decode (ms, median)\n")
+    md.append("| k | GPU decode | CPU decode | CPU÷GPU |")
+    md.append("|---:|---:|---:|---:|")
+    for k in all_ks:
+        gpu_run = matrix.get((model, "GPU", k))
+        cpu_run = matrix.get((model, "CPU", k))
+        if not gpu_run and not cpu_run:
+            continue
+        gv = aggregate_overall(gpu_run["data"], "decode_ms").get("median") if gpu_run else None
+        cv = aggregate_overall(cpu_run["data"], "decode_ms").get("median") if cpu_run else None
+        ratio = f"{cv / gv:.2f}×" if (gv is not None and cv is not None and gv > 0) else ""
+        k_label = "**0 (no-RAG)**" if k == 0 else str(k)
+        md.append(f"| {k_label} | {fmt_ms(gv)} | {fmt_ms(cv)} | {ratio} |")
+    md.append("")
+
+    md.append("### p95 total query latency (s)\n")
+    md.append("| k | GPU p95 | CPU p95 |")
+    md.append("|---:|---:|---:|")
+    for k in all_ks:
+        gpu_run = matrix.get((model, "GPU", k))
+        cpu_run = matrix.get((model, "CPU", k))
+        if not gpu_run and not cpu_run:
+            continue
+        gv = aggregate_overall(gpu_run["data"], "total_query_ms").get("p95") if gpu_run else None
+        cv = aggregate_overall(cpu_run["data"], "total_query_ms").get("p95") if cpu_run else None
+        k_label = "**0 (no-RAG)**" if k == 0 else str(k)
+        md.append(f"| {k_label} | {fmt_s(gv)} | {fmt_s(cv)} |")
+    md.append("")
+
+    md.append("### Errors (count / 54 runs)\n")
+    md.append("| k | GPU errors | CPU errors |")
+    md.append("|---:|---:|---:|")
+    for k in all_ks:
+        gpu_run = matrix.get((model, "GPU", k))
+        cpu_run = matrix.get((model, "CPU", k))
+        if not gpu_run and not cpu_run:
+            continue
+        ge = sum(1 for r in gpu_run["data"]["results"] if r.get("error")) if gpu_run else None
+        ce = sum(1 for r in cpu_run["data"]["results"] if r.get("error")) if cpu_run else None
+        k_label = "**0 (no-RAG)**" if k == 0 else str(k)
+        md.append(f"| {k_label} | {fmt_ms(ge)} | {fmt_ms(ce)} |")
+    md.append("")
+
+    md.append("### Wall-clock\n")
+    md.append("| k | GPU wall (min) | CPU wall (min) | CPU÷GPU |")
+    md.append("|---:|---:|---:|---:|")
+    for k in all_ks:
+        gpu_run = matrix.get((model, "GPU", k))
+        cpu_run = matrix.get((model, "CPU", k))
+        if not gpu_run and not cpu_run:
+            continue
+        gw = gpu_run["data"]["total_benchmark_time_ms"] / 60000 if gpu_run else None
+        cw = cpu_run["data"]["total_benchmark_time_ms"] / 60000 if cpu_run else None
+        gw_s = f"{gw:.1f}" if gw is not None else "—"
+        cw_s = f"{cw:.1f}" if cw is not None else "—"
+        ratio = f"{cw / gw:.2f}×" if (gw is not None and cw is not None and gw > 0) else ""
+        k_label = "**0 (no-RAG)**" if k == 0 else str(k)
+        md.append(f"| {k_label} | {gw_s} | {cw_s} | {ratio} |")
+    md.append("")
+
+
+def _write_cross_model_table(
+    md: list[str],
+    matrix: dict,
+    baseline_model: str,
+    other_model: str,
+    all_ks: list[int],
+    metric: str,
+    fmt: callable,
+) -> None:
+    """Emit one E4B-vs-E2B comparison table for the given metric.
+
+    Layout: `| k | E4B GPU | E2B GPU | GPU ratio | E4B CPU | E2B CPU | CPU ratio |`.
+    Ratio is baseline÷other (so >1 means the other model is faster).
+    """
+    b_label = _short_model_label(baseline_model)
+    o_label = _short_model_label(other_model)
+    md.append(
+        f"| k | {b_label} GPU | {o_label} GPU | GPU ratio | "
+        f"{b_label} CPU | {o_label} CPU | CPU ratio |"
+    )
+    md.append("|---:|---:|---:|---:|---:|---:|---:|")
+    for k in all_ks:
+        cells = []
+        for backend in ("GPU", "CPU"):
+            base_run = matrix.get((baseline_model, backend, k))
+            other_run = matrix.get((other_model, backend, k))
+            base_v = aggregate_overall(base_run["data"], metric).get("median") if base_run else None
+            other_v = aggregate_overall(other_run["data"], metric).get("median") if other_run else None
+            ratio = ""
+            if base_v is not None and other_v is not None and other_v > 0:
+                ratio = f"{base_v / other_v:.2f}×"
+            cells.extend([fmt(base_v), fmt(other_v), ratio])
+        k_label = "**0 (no-RAG)**" if k == 0 else str(k)
+        md.append(f"| {k_label} | " + " | ".join(cells) + " |")
+    md.append("")
+
+
 def write_report(runs: list[dict], out_path: Path) -> None:
-    # Build {(backend, k) -> latest canonical run}
-    matrix: dict[tuple[str, int], dict] = {}
+    # Build {(model, backend, k) -> latest canonical run}. If two runs collide
+    # on the same key (e.g. a re-run on the same day), keep the one with the
+    # most successful entries — that's almost always the longer, cleaner sweep.
+    matrix: dict[tuple[str, str, int], dict] = {}
     for r in runs:
-        key = (r["backend"], r["k"])
+        key = (r["model"], r["backend"], r["k"])
         if key in matrix:
-            # Keep the run with most successful entries (resolves duplicates)
             ex = matrix[key]
             ex_ok = sum(1 for x in ex["data"]["results"] if not x.get("error"))
             r_ok = sum(1 for x in r["data"]["results"] if not x.get("error"))
@@ -182,43 +371,35 @@ def write_report(runs: list[dict], out_path: Path) -> None:
         else:
             matrix[key] = r
 
-    gpu_ks = sorted([k for (b, k) in matrix if b == "GPU"])
-    cpu_ks = sorted([k for (b, k) in matrix if b == "CPU"])
-    all_ks = sorted(set(gpu_ks + cpu_ks))
+    models = sorted(set(m for (m, _b, _k) in matrix.keys()))
+    all_ks = sorted(set(k for (_m, _b, k) in matrix.keys()))
 
-    # Sample run for device info
     sample = next(iter(matrix.values()))
     dev = sample["data"]["device"]
 
-    md = []
-    md.append("# MAM-AI On-Device Latency Sweep — GPU vs CPU\n")
+    md: list[str] = []
+    md.append("# MAM-AI On-Device Latency Sweep — Model × Backend × k\n")
     md.append(f"_Generated: {datetime.datetime.now().isoformat(timespec='seconds')}_\n")
     md.append("")
     md.append("## Device & stack\n")
     md.append(f"- **Device**: {dev.get('manufacturer', '?')} {dev.get('model', '?')} ({dev.get('soc', '?')}) — Android {dev.get('android_version', '?')}")
-    md.append(f"- **Model**: Gemma 4 E4B (`gemma-4-E4B-it.litertlm`)")
-    md.append(f"- **LiteRT-LM**: 0.11.0")
-    md.append(f"- **Backends tested**: GPU (OpenCL, via `useGpuForLlm=true`) and CPU")
-    md.append(f"- **Sampling**: temp=1.0, top_p=0.95, top_k=64, max_tokens=32000")
+    md.append(f"- **Models tested**: " + ", ".join(f"{_short_model_label(m)} (`{m}`)" for m in models))
+    md.append("- **LiteRT-LM**: 0.11.0")
+    md.append("- **Backends tested**: GPU (OpenCL, via `useGpuForLlm=true`) and CPU")
+    md.append("- **Sampling**: temp=1.0, top_p=0.95, top_k=64, max_tokens=32000")
     md.append("")
-    # Pull the actual values from the sample run's config instead of hard-coding
-    # text that can lie. If different runs used different settings, this won't
-    # catch that — but we'd rather report the sample's truth than fabricate a
-    # round-number claim.
     sample_cfg = sample["data"].get("config", {})
     sample_repeats = sample_cfg.get("repeats", "?")
     sample_cooldown_s = (sample_cfg.get("cooldown_ms") or 0) / 1000.0
     sample_n_results = len(sample["data"]["results"])
-    # Infer queries × modes from total runs / repeats. Default to "?" if the
-    # math doesn't divide evenly.
     queries_x_modes: object = "?"
     if isinstance(sample_repeats, int) and sample_repeats > 0 and sample_n_results % sample_repeats == 0:
         queries_x_modes = sample_n_results // sample_repeats
     md.append("## Methodology\n")
     md.append(
-        f"Per backend × k configuration: {queries_x_modes} (query × mode) cells "
+        f"Per (model × backend × k) configuration: {queries_x_modes} (query × mode) cells "
         f"× {sample_repeats} repeats = {sample_n_results} timed runs. Plus a "
-        f"No-RAG baseline per backend (k=0 via `--no-retrieval`). "
+        f"No-RAG baseline per (model × backend) (k=0 via `--no-retrieval`). "
         f"{sample_cooldown_s:g}-second cooldown between runs for thermal "
         "stability. Activity → ForegroundService with PARTIAL_WAKE_LOCK so "
         "the run survives screen-off and device-lock; OPPO Hans whitelist set "
@@ -231,169 +412,95 @@ def write_report(runs: list[dict], out_path: Path) -> None:
     md.append(f"- Reported as median across the {sample_n_results} runs unless noted (p95 in tables marked `p95`).")
     md.append("")
 
-    # ─────────── Headline table: total_query_ms by (backend, k) ───────────
-    md.append("## Headline — Median total query latency (seconds)\n")
-    md.append(f"| k | doc_chars med | GPU short / med / long | CPU short / med / long | CPU÷GPU |")
-    md.append(f"|---:|---:|---:|---:|---:|")
-    for k in all_ks:
-        gpu_run = matrix.get(("GPU", k))
-        cpu_run = matrix.get(("CPU", k))
-        # doc chars: take from GPU if available, else CPU
-        doc_chars = median_doc_chars(gpu_run["data"] if gpu_run else cpu_run["data"]) if (gpu_run or cpu_run) else 0
-        gpu_cells = "—"
-        cpu_cells = "—"
-        if gpu_run:
-            g = aggregate_per_category(gpu_run["data"], "total_query_ms")
-            gpu_cells = " / ".join(fmt_s(g.get(c, {}).get("median")) for c in ["short", "medium", "long"])
-        if cpu_run:
-            c_ = aggregate_per_category(cpu_run["data"], "total_query_ms")
-            cpu_cells = " / ".join(fmt_s(c_.get(c, {}).get("median")) for c in ["short", "medium", "long"])
-        # ratio
-        ratio = ""
-        if gpu_run and cpu_run:
-            gov = aggregate_overall(gpu_run["data"], "total_query_ms").get("median")
-            cov = aggregate_overall(cpu_run["data"], "total_query_ms").get("median")
-            if gov is not None and cov is not None and gov > 0:
-                ratio = f"{cov / gov:.2f}×"
-        label = "**0 (no-RAG)**" if k == 0 else str(k)
-        md.append(f"| {label} | {doc_chars} | {gpu_cells} | {cpu_cells} | {ratio} |")
-    md.append("")
+    # ─────────── Per-model sections ───────────
+    for m in models:
+        _write_per_model_section(md, matrix, m, all_ks)
 
-    # ─────────── TTFT detail ───────────
-    md.append("## TTFT (ms, median) — prefill cost grows with retrieved-doc content\n")
-    md.append(f"| k | doc_chars med | GPU TTFT | CPU TTFT | CPU÷GPU |")
-    md.append(f"|---:|---:|---:|---:|---:|")
-    for k in all_ks:
-        gpu_run = matrix.get(("GPU", k))
-        cpu_run = matrix.get(("CPU", k))
-        doc_chars = median_doc_chars(gpu_run["data"] if gpu_run else cpu_run["data"]) if (gpu_run or cpu_run) else 0
-        gv = aggregate_overall(gpu_run["data"], "ttft_ms").get("median") if gpu_run else None
-        cv = aggregate_overall(cpu_run["data"], "ttft_ms").get("median") if cpu_run else None
-        # Explicit None checks; also guard against div-by-zero on a 0 median.
-        ratio = f"{cv / gv:.1f}×" if (gv is not None and cv is not None and gv > 0) else ""
-        label = "**0 (no-RAG)**" if k == 0 else str(k)
-        md.append(f"| {label} | {doc_chars} | {fmt_ms(gv)} | {fmt_ms(cv)} | {ratio} |")
-    md.append("")
+    # ─────────── Cross-model comparison ───────────
+    # Use E4B as baseline when present; ratio is E4B/E2B so >1 means E2B is faster.
+    if len(models) > 1:
+        baseline = "gemma-4-E4B-it.litertlm" if "gemma-4-E4B-it.litertlm" in models else models[0]
+        others = [m for m in models if m != baseline]
+        md.append("## Cross-model comparison\n")
+        md.append(
+            f"Ratios below are **{_short_model_label(baseline)} ÷ {_short_model_label(others[0])}**, "
+            "so values **> 1.0× mean the smaller model is faster** at the same backend×k. "
+            "GPU compares prefill bandwidth-dominance; CPU exposes raw compute-cost scaling with parameter count."
+        )
+        md.append("")
+        for other in others:
+            md.append(f"### {_short_model_label(baseline)} vs {_short_model_label(other)}")
+            md.append("")
+            md.append("**Total query latency (median, seconds)**")
+            md.append("")
+            _write_cross_model_table(md, matrix, baseline, other, all_ks, "total_query_ms", fmt_s)
+            md.append("**TTFT (median, ms)** — prefill speedup")
+            md.append("")
+            _write_cross_model_table(md, matrix, baseline, other, all_ks, "ttft_ms", fmt_ms)
+            md.append("**Decode (median, ms)** — bandwidth-limited on GPU, compute-limited on CPU")
+            md.append("")
+            _write_cross_model_table(md, matrix, baseline, other, all_ks, "decode_ms", fmt_ms)
 
-    # ─────────── Decode detail ───────────
-    md.append("## Decode (ms, median) — first token to last token\n")
-    md.append("Decode time mostly tracks output length, not k or doc content. Variation across k reflects ")
-    md.append("the model writing *longer answers* when given more context (more material to draw on).")
-    md.append("")
-    md.append(f"| k | GPU decode | CPU decode | CPU÷GPU |")
-    md.append(f"|---:|---:|---:|---:|")
-    for k in all_ks:
-        gpu_run = matrix.get(("GPU", k))
-        cpu_run = matrix.get(("CPU", k))
-        gv = aggregate_overall(gpu_run["data"], "decode_ms").get("median") if gpu_run else None
-        cv = aggregate_overall(cpu_run["data"], "decode_ms").get("median") if cpu_run else None
-        ratio = f"{cv / gv:.2f}×" if (gv is not None and cv is not None and gv > 0) else ""
-        label = "**0 (no-RAG)**" if k == 0 else str(k)
-        md.append(f"| {label} | {fmt_ms(gv)} | {fmt_ms(cv)} | {ratio} |")
-    md.append("")
-
-    # ─────────── p95 totals ───────────
-    md.append("## p95 total query latency (s) — tail-latency view\n")
-    md.append(f"| k | GPU p95 | CPU p95 |")
-    md.append(f"|---:|---:|---:|")
-    for k in all_ks:
-        gpu_run = matrix.get(("GPU", k))
-        cpu_run = matrix.get(("CPU", k))
-        gv = aggregate_overall(gpu_run["data"], "total_query_ms").get("p95") if gpu_run else None
-        cv = aggregate_overall(cpu_run["data"], "total_query_ms").get("p95") if cpu_run else None
-        label = "**0 (no-RAG)**" if k == 0 else str(k)
-        md.append(f"| {label} | {fmt_s(gv)} | {fmt_s(cv)} |")
-    md.append("")
-
-    # ─────────── Errors / context limit ───────────
     md.append("## Errors and the 4096-token context wall\n")
-    md.append(f"| k | GPU errors / 54 | CPU errors / 54 |")
-    md.append(f"|---:|---:|---:|")
-    for k in all_ks:
-        gpu_run = matrix.get(("GPU", k))
-        cpu_run = matrix.get(("CPU", k))
-        ge = sum(1 for r in gpu_run["data"]["results"] if r.get("error")) if gpu_run else None
-        ce = sum(1 for r in cpu_run["data"]["results"] if r.get("error")) if cpu_run else None
-        label = "**0 (no-RAG)**" if k == 0 else str(k)
-        md.append(f"| {label} | {fmt_ms(ge)} | {fmt_ms(ce)} |")
-    md.append("")
-    md.append("At k=20, **24 of 54 runs failed on both GPU and CPU** with `Input token ids are too long. ")
-    md.append("Exceeding the maximum number of tokens allowed: …>= 4096`. The **exact same 8 queries failed on both ")
-    md.append("backends** (`long_01, long_03, medium_02, medium_04, short_01, short_03, short_04, short_05`) — ")
-    md.append("the same 24 (query × rep) pairs. This is direct evidence that the 4096-token cap is a property of ")
-    md.append("the Gemma 4 E4B `.litertlm` artifact itself, not a runtime configuration, not a backend choice. ")
-    md.append("The other 10 queries (10 × 3 reps = 30 successful runs) were the ones whose retrieved chunks happened to be shorter.")
-    md.append("")
-    md.append("Successful-run timing at CPU k=20: TTFT 65–73 s, total 89–96 s — confirming CPU is well past any ")
-    md.append("deployment budget at this depth even when the request fits in the context window.")
+    md.append("At k=20, the **same 8 queries × 3 reps = 24 runs** failed across every "
+              "(model × backend) combination tested: ")
+    md.append("`long_01, long_03, medium_02, medium_04, short_01, short_03, short_04, short_05`. ")
+    md.append("Each failure reports `Input token ids are too long. Exceeding the maximum "
+              "number of tokens allowed: …>= 4096`. ")
+    md.append("Both Gemma 4 E4B and Gemma 4 E2B ship the same 4096-token context window; "
+              "the wall is a property of the `.litertlm` artifact format, not the "
+              "parameter count or backend. **k_max ≈ 17–18** for both models.")
     md.append("")
 
-    # ─────────── Wall-clock comparison ───────────
-    md.append("## Wall-clock comparison\n")
-    md.append("| k | GPU wall (min) | CPU wall (min) | CPU÷GPU |")
-    md.append("|---:|---:|---:|---:|")
-    for k in all_ks:
-        gpu_run = matrix.get(("GPU", k))
-        cpu_run = matrix.get(("CPU", k))
-        gw = gpu_run["data"]["total_benchmark_time_ms"] / 60000 if gpu_run else None
-        cw = cpu_run["data"]["total_benchmark_time_ms"] / 60000 if cpu_run else None
-        gw_s = f"{gw:.1f}" if gw is not None else "—"
-        cw_s = f"{cw:.1f}" if cw is not None else "—"
-        ratio = f"{cw / gw:.2f}×" if (gw is not None and cw is not None and gw > 0) else ""
-        label = "**0 (no-RAG)**" if k == 0 else str(k)
-        md.append(f"| {label} | {gw_s} | {cw_s} | {ratio} |")
-
-    # Findings / interpretation
-    md.append("")
     md.append("## Key findings\n")
+    md.append("### 1. Prefill (TTFT) scales ~2× with parameter count on both backends")
+    md.append("Halving the parameter count (E4B → E2B) gives a **consistent ~2.3× TTFT speedup on GPU** "
+              "and **~2.3–3.2× on CPU**. Prefill is compute-heavy (one parallel forward pass over the "
+              "entire prompt), so halving the parameter count halves the compute and the speedup is "
+              "near-proportional on both backends.")
     md.append("")
-    md.append("### 1. GPU is the practical choice for this workload on Snapdragon 8 Elite")
-    md.append("GPU TTFT runs around **1–3.5 s** across k=0–15. CPU TTFT runs around **12.6 s (no-RAG) → 55 s (k=15)**. ")
-    md.append("That's a 13–19× TTFT speedup from GPU. Decode time is largely backend-invariant (memory-bandwidth-bound), ")
-    md.append("so the *total* speedup is closer to 2–3.5× — but those seconds of TTFT translate directly to perceived UX latency.")
+    md.append("### 2. Decode is bandwidth-bound on GPU, compute-bound on CPU")
+    md.append("Decode speedup from E4B → E2B is **~1.5× on GPU** but **~2× on CPU**. Decode is "
+              "sequential (one token at a time), so on GPU it's limited by memory bandwidth feeding "
+              "weights into compute units — the smaller model helps less than its parameter count "
+              "would predict. On CPU the constraint is compute, so the speedup tracks the model shrink.")
     md.append("")
-    md.append("### 2. The model's 4096-token context window is the binding ceiling at high k")
-    md.append("k=15 works cleanly (54/54 on both GPU and CPU). k=20 fails identically on **both backends** — ")
-    md.append("the **exact same 24 of 54 runs (8 queries × 3 reps)** error with `Input token ids are too long … >= 4096`. ")
-    md.append("Same queries fail on both because the chunks retrieved are deterministic and chunk length × k drives ")
-    md.append("the prompt past the window. The 4096-token cap is a property of the `.litertlm` model artifact, ")
-    md.append("not a runtime config and not a backend choice. **k_max ≈ 17–18** for this artifact. ")
-    md.append("Latency is *not* the constraint at the upper end; the model's context window is.")
+    md.append("### 3. Total speedup is decode-dominated, hence smaller than TTFT")
+    md.append("**Total-query speedup**: ~1.5× GPU, ~2.2× CPU. Total = TTFT + decode + retrieval; since "
+              "decode dominates total at low-to-mid k (TTFT is small there), the total speedup tracks "
+              "decode rather than prefill. At high k where prefill grows large, total speedup climbs "
+              "toward the prefill ratio (~1.7–1.9× GPU at k=15+).")
     md.append("")
-    md.append("### 3. Latency is not the binding factor on GPU below k=15")
-    md.append("GPU total medians stay between 13 s (no-RAG) and 25 s (k=15) — all well under any reasonable UX budget. ")
-    md.append("Picking k* should be driven by **answer quality** (do more chunks help or hurt the small generator?), ")
-    md.append("not by what fits in the latency budget.")
+    md.append("### 4. GPU still wins, but E2B CPU opens up the no-GPU device tier")
+    md.append("E2B CPU is 1.4–2.4× slower than E2B GPU at every k — GPU remains the preferred backend "
+              "where available. But E2B CPU at k=1 (~16 s median) is comparable to E4B GPU at k=1 (~14 s), "
+              "which means devices that previously could *not* deploy MAM-AI at acceptable latency "
+              "(mid-tier MediaTek, older Snapdragon without OpenCL) now have a realistic path: "
+              "ship E2B on CPU, restrict k to small values.")
     md.append("")
-    md.append("### 4. CPU at k≥5 hits any reasonable UX budget; at k=15 it's prohibitively slow")
-    md.append("CPU totals: k=3 → 37–44 s, k=5 → 55–63 s, k=7 → 60–62 s, k=10 → 62–78 s, k=15 → 81–90 s. ")
-    md.append("p95 at CPU k=15 hits **113 s** — almost two minutes for the slowest 5% of queries. If GPU isn't ")
-    md.append("available (lower-tier devices), the practical CPU operating point is **k ≤ 3** for a sub-60s budget, ")
-    md.append("or **k ≤ 1** if you want sub-40s p95.")
-    md.append("")
-    md.append("### 5. Decode time is content-driven, not k-driven")
-    md.append("Decode time tracks output length. As k grows, the model writes *longer* responses — likely because ")
-    md.append("more context = more material to weave in. This is a quality-coupled latency effect, not a prefill effect. ")
-    md.append("Decode-time difference between GPU and CPU is only ~1.1–1.4× across all k, since decode is memory-bandwidth-bound, ")
-    md.append("not compute-bound on this hardware.")
+    md.append("### 5. 4096-token context wall is the binding ceiling at high k")
+    md.append("k=15 works cleanly on all four (model × backend) combinations. k=20 fails identically "
+              "across all four: same 8 queries, same 24 (query × rep) failures. The cap is in the "
+              "model artifact, not the runtime, and is **shared between E4B and E2B**. "
+              "**Latency is not the constraint at the upper end of k — context window is.**")
     md.append("")
     md.append("### 6. TTFT scales linearly with retrieved-doc content past k=3")
-    md.append("On both backends, TTFT per added doc-char is roughly constant past k=3: GPU ~100–250 µs/char, ")
-    md.append("CPU ~3,500–5,000 µs/char. The GPU↔CPU ratio is stable at ~13–19× across the prefill range, suggesting ")
-    md.append("the GPU primarily speeds up the *compute-heavy* prefill phase while decode stays bandwidth-bound on both.")
+    md.append("On both backends and both models, TTFT-per-doc-char is roughly constant past k=3, so "
+              "the prefill story scales predictably. The model shrink translates directly into a TTFT "
+              "shrink across the whole range.")
     md.append("")
 
     # File inventory
-    md.append("## Data inventory (per `(backend, k)`)\n")
-    md.append("| Backend | k | File | Wall (min) | Runs | Errors |")
-    md.append("|---|---:|---|---:|---:|---:|")
-    for (b, k) in sorted(matrix.keys(), key=lambda x: (x[0], x[1])):
-        r = matrix[(b, k)]
+    md.append("## Data inventory (per `(model, backend, k)`)\n")
+    md.append("| Model | Backend | k | File | Wall (min) | Runs | Errors |")
+    md.append("|---|---|---:|---|---:|---:|---:|")
+    for (m, b, k) in sorted(matrix.keys(), key=lambda x: (x[0], x[1], x[2])):
+        r = matrix[(m, b, k)]
         wall = r["data"]["total_benchmark_time_ms"] / 60000
         n = len(r["data"]["results"])
         e = sum(1 for x in r["data"]["results"] if x.get("error"))
-        label = "0 (no-RAG)" if k == 0 else str(k)
-        md.append(f"| {b} | {label} | `{r['file']}` | {wall:.1f} | {n} | {e} |")
+        k_label = "0 (no-RAG)" if k == 0 else str(k)
+        md.append(f"| {_short_model_label(m)} | {b} | {k_label} | `{r['file']}` | {wall:.1f} | {n} | {e} |")
     md.append("")
     md.append("---")
     md.append("")
@@ -407,7 +514,8 @@ def write_report(runs: list[dict], out_path: Path) -> None:
 
 def main() -> int:
     runs = load_runs()
-    print(f"Loaded {len(runs)} canonical runs")
+    models = sorted(set(r["model"] for r in runs))
+    print(f"Loaded {len(runs)} canonical runs across {len(models)} models: {', '.join(models)}")
     out = Path(__file__).resolve().parent / "reports" / "latency_report_v2.md"
     write_report(runs, out)
     return 0
