@@ -371,6 +371,17 @@ def write_report(runs: list[dict], out_path: Path) -> None:
         else:
             matrix[key] = r
 
+    if not matrix:
+        # latency_results/ is gitignored, so a fresh checkout can hit this. Exit
+        # with a directional error rather than crashing on StopIteration below.
+        results_dir = Path(__file__).resolve().parent / "latency_results"
+        raise SystemExit(
+            f"No canonical benchmark_*.json found under {results_dir}. "
+            "Run `python evaluation/benchmark_latency.py …` to produce JSONs "
+            "(see evaluation/runbooks/ for the sweep procedure), then re-run "
+            "this aggregator."
+        )
+
     models = sorted(set(m for (m, _b, _k) in matrix.keys()))
     all_ks = sorted(set(k for (_m, _b, k) in matrix.keys()))
 
