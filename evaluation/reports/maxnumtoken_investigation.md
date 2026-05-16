@@ -351,6 +351,38 @@ If we ever want to push past 4096 in production, FP32 GPU becomes the right back
 
 ---
 
+## Reference: artifact fingerprint mapping
+
+Benchmark JSONs from commit `52e11e9` onward record an `artifact_fingerprint` field in `config.artifact_fingerprint` — the SHA-256 of the first 64 KB of the loaded `.litertlm` file. This uniquely identifies which artifact variant was loaded at benchmark time, **since both the FP32-tagged rebuild and the original FP16 default share the same filename** (`gemma-4-E4B-it.litertlm`). Without this, a reviewer reading a JSON cold cannot tell which precision condition the run used.
+
+Cryptographically-verified mapping for the artifacts referenced in this investigation:
+
+| `artifact_fingerprint` | Artifact source | Activation precision used | Where it appears |
+|---|---|---|---|
+| **`9fdf9dd11f4e79507bc06df5ba0ddbf33eb12ed8524852d728dfec72d1aadabc`** | FP32-tagged Gemma 4 E4B `.litertlm`, rebuilt locally via `litert-lm-builder` with `additional_metadata = [{key="prefer_activation_type", value="float32", value_type="String"}]` injected on the `prefill_decode` section | **FP32** (runtime honors the override; verified via logcat `"activation_data_type: FLOAT32"`) | All FP32 GPU runs from Step 3 onward, including the full Step 5 sweep |
+| **`cfa067b69af3ccd147c234be3058525774379c1349bacf0b3e85d7a26a42b868`** | Default `litert-community/gemma-4-E4B-it-litert-lm` from HuggingFace, as published | **FP16** (runtime falls back to the system default for Android GPU text decoder, per Step 4) | All FP16 GPU runs in this PR's instrumented sweep and the earlier sweeps in PR #57/#59 (when re-fingerprinted) |
+
+Both files are exactly **3,654,467,584 bytes** — the `litert-lm-builder` preserves section-byte-offsets when rewriting the header, so only the metadata bytes differ between the two variants. Identical model weights, identical tokenizer, identical retrieval embeddings.
+
+### Reproducing the mapping locally
+
+```bash
+python3 -c "
+import hashlib
+for label, path in [
+    ('FP16 default', 'device_push/models/gemma-4-E4B-it.litertlm'),
+    ('FP32 tagged',  '/tmp/gemma-4-E4B-it-fp32.litertlm'),
+]:
+    with open(path, 'rb') as f:
+        sha = hashlib.sha256(f.read(65536)).hexdigest()
+    print(f'{sha}  {label}')
+"
+```
+
+If you produce a new `.litertlm` variant (e.g. an INT16-activations rebuild, or a higher-context build from upstream), compute and add its fingerprint to this table.
+
+---
+
 ## What's still open
 
 | Question | Status | Cost to answer |
