@@ -149,19 +149,71 @@ So **4096 remains the right ship value** for production. The new understanding i
 
 ---
 
-## Refined mechanism hypothesis
+## Step 2 — Reproducibility: bit-exact across 3 runs
 
-Combining the precision finding (Step 4) and the sharp-cliff finding (Step 1):
+### Setup
+
+- Same APK as Step 1 (GPU, `maxNumTokens = 8192`).
+- Same query: `long_01` at k=20, deterministic 4917-token prompt.
+- `--repeats 3`, `--cooldown 1000`.
+- File: [benchmark_20260516T151036_k20.json](../latency_results/benchmark_20260516T151036_k20.json)
+
+### Result
+
+| | Rep 1 | Rep 2 | Rep 3 |
+|---|---|---|---|
+| Response chars | 6027 | 6027 | 6027 |
+| Estimated tokens | 1506 | 1506 | 1506 |
+| Transition position (char) | 400 | 400 | 400 |
+| Total context at transition | ~5017 | ~5017 | ~5017 |
+| Response head (first 80 chars) | `This is a **medical emergency**. You must act immediately. **Escalate to a doct` | identical | identical |
+| Response tail (last 80 chars) | ` * * * * ********** * * * * * * * * ***************` | identical | identical |
+| Decode time (ms) | 263 158 | 263 223 | 263 185 |
+
+Decode-time variance is ~0.05% — pure system jitter. The **model outputs are bit-identical** across all three runs.
+
+### Interpretation
+
+This rules out stochastic FP16 noise as the proximate cause. The GPU backend defaults to greedy decoding (`max_top_k = 1`, the `GpuConfig` default we found in `LlmExecutorSettings::CreateDefault()`); with identical prompts, identical KV cache state, and identical numerical paths through deterministic FP16 OpenCL kernels, every decode step picks the same next token. There is no randomness in the system to mask whatever is going wrong.
+
+So the failure is not "FP16 sometimes drifts past 4096" — it is "FP16 kernels **deterministically produce broken K/V** at positions past the artifact's calibrated zone, in a way that always degenerates into the same output."
+
+---
+
+## Refined mechanism hypothesis (after Steps 4, 1, 2)
 
 1. The Gemma 4 `.litertlm` artifact has KV-cache and attention kernels **calibrated** for a 4096-token context. The OpenCL implementations of those kernels assume something about position layout (tile size, buffer dimension, position-embedding cache) that's accurate up to ~4096 and starts to misbehave past it.
 
 2. **Prefill is robust past 4096** — at engine init the KV cache is allocated to whatever `maxNumTokens` we pass (8192 in our test), and the prefill kernels appear to handle the longer prompt correctly (the model produces real medical content for ~50 decoded tokens).
 
-3. **Decode-side KV writes past position ~4917 start producing off-distribution K/V values**. As soon as the model attends back to those bad-write positions in subsequent decode steps, the attention scores collapse onto a small set of high-probability tokens (asterisks, in our case — a tokenizer-common character). The model then enters a self-reinforcing loop: bad outputs → bad self-attention → bad outputs.
+3. **Decode-side KV writes past position ~4917 produce *deterministically* off-distribution K/V values** (Step 2 evidence). As soon as the model attends back to those bad-write positions in subsequent decode steps, the attention scores collapse onto a small set of high-probability tokens (asterisks, in our case — a tokenizer-common character). The model then enters a self-reinforcing loop: bad outputs → bad self-attention → bad outputs. Same RNG-free state every run, so the same garbage every run.
 
-4. **FP16 vs FP32 is the differentiator across backends**. The kernel issues likely exist on both backends — but FP32's larger dynamic range absorbs the off-distribution values on CPU, while FP16 on GPU has no precision headroom and the bad values dominate.
+4. **FP16 vs FP32 is the candidate differentiator across backends**. The kernel issues likely exist on both backends — but FP32's larger dynamic range may absorb the off-distribution values on CPU, while FP16 on GPU has no precision headroom and the bad values dominate. This is *plausible* given the Step 4 source-code finding (CPU = XNNPACK FP32, GPU = OpenCL FP16) but **not directly verified** — see the reachability constraint below.
 
-The "exactly 4096" framing was wrong. The real picture: a ~1000-token "uncalibrated zone" between ~4096 and ~5000 where output quality slowly degrades and then catastrophically collapses, and a precision asymmetry that makes the collapse visible only on GPU.
+The "exactly 4096" framing was wrong. The real picture: a ~1000-token "uncalibrated zone" between ~4096 and ~5000 where output quality slowly degrades and then catastrophically collapses, and a deterministic kernel/precision interaction that makes the collapse visible only on GPU.
+
+---
+
+## Reachability constraint: cannot force FP32 on GPU from Kotlin in 0.11.0
+
+The natural follow-up — force the GPU backend to use FP32 instead of FP16 and re-run — turned out to be **not possible from the public Kotlin API** in LiteRT-LM 0.11.0. Verified across four sources:
+
+1. **`Config.kt`**: `EngineConfig` data class has 7 fields (`modelPath, backend, visionBackend, audioBackend, maxNumTokens, maxNumImages, cacheDir`). No precision field. `Backend.GPU()` is zero-arg.
+2. **`Engine.kt:initialize()`**: calls `LiteRtLmJni.nativeCreateEngine(...)` with 14 args. None of them is precision-related.
+3. **`LiteRtLmJni.kt`**: the JNI bridge declaration. The `nativeCreateEngine` signature takes exactly those 14 parameters — that is the entire JNI surface for engine creation. No `nativeSetActivationDataType` method anywhere in the bridge.
+4. **`llm_executor_settings.cc:CreateDefault()`**: doesn't set `activation_data_type_`, leaving it as `std::nullopt`. So when the JNI bridge constructs the engine, no activation type ever gets set, and the runtime falls back to its system default (FP16 for text decoder on Android GPU per the native-lib log string from Step 4).
+
+I also scanned the native lib for environment-variable overrides (`LITERTLM_*`, `LITERT_*`, `OPENCL_*`, `FORCE_FP32`) — none exist.
+
+The C++ `LlmExecutorSettings::SetActivationDataType(...)` method **exists** in LiteRT-LM source, but it is **not bridged** to the Kotlin/JNI layer in version 0.11.0. The hooks are there server-side but not wired to client-side.
+
+### Paths that would unblock the FP32 control test
+
+- **(b) Modify the `.litertlm` artifact header.** The FlatBuffers schema (`schema/core/litertlm_header_schema.fbs`) defines a `SystemMetadata` table as a list of arbitrary `KeyValuePair` entries. The native runtime looks for a key `prefer_activation_type` and, if present, honors it; otherwise it falls back to the system default. Setting `prefer_activation_type = FLOAT32` in the artifact's header would force FP32 on GPU without any code changes. Half a day of work with `flatc` tooling on a 2.4 GB binary; round-trip-test before changing values.
+- **(c) File an upstream issue with `google-ai-edge/LiteRT-LM`** to expose `SetActivationDataType` in the Kotlin `EngineConfig` API. Doesn't unblock us now, but is the right systemic fix.
+- **(d) Build a custom LiteRT-LM AAR.** Clone the repo, add a field to the Kotlin `EngineConfig` + parameter to `nativeCreateEngine` + plumbing to the C++ setter. Multi-day project; out of scope.
+
+For now this PR documents the constraint and the experimental options. The mechanism story is already well-anchored even without the FP32 control: Steps 4, 1, 2 together make the FP16-induced determinstic kernel-zone breakdown the obvious hypothesis. The control test would *confirm* it; it doesn't change the deployment recommendation either way.
 
 ---
 
@@ -169,13 +221,13 @@ The "exactly 4096" framing was wrong. The real picture: a ~1000-token "uncalibra
 
 | Question | Status | Cost to answer |
 |---|---|---|
-| Is the GPU cliff deterministic (same position every run) or stochastic? | **Open** — Step 2 | ~25 min on device: rebuild GPU APK at maxNumTokens=8192, run `long_01` k=20 ×5 reps, compare transition positions |
-| Does the cliff position depend on `maxNumTokens` allocation, or is it fixed at ~5000? | **Open** — Step 3 | ~30 min on device: 3 builds at maxNumTokens ∈ {5000, 6000, 7000}, run same query, observe cliff position |
-| Does the cliff position depend on prompt length, or is it fixed at total-context ~5000? | **Open** — companion to Step 3 | Could be combined: run several queries with prompts of 3000/4000/4500 tokens at maxNumTokens=8192 |
-| Does the artifact's `prefer_activation_type` field explicitly set FP16, or rely on the system default? | **Open** — requires parsing the FlatBuffers .litertlm header | Doesn't change operational conclusion |
-| Is FP16 attention the root cause, or just a symptom amplifier? | **Open** — would need to force GPU to FP32 via `SetActivationDataType(FLOAT32)` and re-test | Significant work, low deployment payoff |
+| ~~Is the GPU cliff deterministic (same position every run) or stochastic?~~ | **Resolved (Step 2)** — bit-exactly deterministic across 3 reps | — |
+| ~~Is the Kotlin API able to force FP32 on GPU?~~ | **Resolved (reachability check)** — no, not in LiteRT-LM 0.11.0 | — |
+| Is FP16 attention the root cause, or just one factor among others? | **Open** — would need option (b) artifact-modification or option (d) custom AAR to run the control test | half-day / multi-day respectively |
+| Does the cliff position depend on prompt length, or is it fixed at total context ~5000? | **Open** — would help characterize the kernel boundary; not deployment-relevant | ~30 min: run a few queries with different prompt lengths at maxNumTokens=8192 |
+| Does the artifact's `prefer_activation_type` field explicitly set FP16, or rely on the system default? | **Open** — answered by parsing the FlatBuffers header with `flatc`; would be a useful prereq for option (b) | ~1-2 hours of flatc tooling work |
 
-Steps 2 and 3 are the cheapest and would give us the cleanest characterization of the cliff. Neither changes the deployment recommendation (4096 stays the ship value either way), but they would let us write up the mechanism with confidence rather than the current "best hypothesis."
+The remaining open questions characterize the mechanism more precisely but do not change the deployment recommendation (4096 stays the ship value).
 
 ---
 
@@ -184,6 +236,7 @@ Steps 2 and 3 are the cheapest and would give us the cleanest characterization o
 - [latency_report_v2.md](latency_report_v2.md) §"Errors and the 4096-token context wall" — the high-level summary that points here
 - [evaluation/latency_results/benchmark_20260516T100105_k20.json](../latency_results/benchmark_20260516T100105_k20.json) — CPU at maxNumTokens=8192, long_01, k=20 (clean output)
 - [evaluation/latency_results/benchmark_20260516T103614_k20.json](../latency_results/benchmark_20260516T103614_k20.json) — CPU at maxNumTokens=8192, long_03, k=20 (clean output)
-- [evaluation/latency_results/benchmark_20260516T104730_k20.json](../latency_results/benchmark_20260516T104730_k20.json) — GPU at maxNumTokens=8192, long_01, k=20 (degenerate output — the one analyzed in Step 1)
+- [evaluation/latency_results/benchmark_20260516T104730_k20.json](../latency_results/benchmark_20260516T104730_k20.json) — GPU at maxNumTokens=8192, long_01, k=20, 1 rep (degenerate output — the one analyzed in Step 1)
+- [evaluation/latency_results/benchmark_20260516T151036_k20.json](../latency_results/benchmark_20260516T151036_k20.json) — GPU at maxNumTokens=8192, long_01, k=20, 3 reps (bit-identical degenerate output — Step 2 reproducibility)
 - LiteRT-LM source: <https://github.com/google-ai-edge/LiteRT-LM>
 - [app/android/app/src/main/kotlin/com/example/app/RagPipeline.kt:buildEngine()](../../app/android/app/src/main/kotlin/com/example/app/RagPipeline.kt) — where `maxNumTokens = 4096` is set
