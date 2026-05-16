@@ -1,26 +1,108 @@
-# MAM-AI On-Device Latency Sweep — GPU vs CPU
+# MAM-AI On-Device Latency Sweep — Model × Backend × k
 
-_Generated: 2026-05-15T10:51:06_
+_Generated: 2026-05-16T08:02:21_
 
 
 ## Device & stack
 
 - **Device**: OnePlus OPD2413 (SM8750P) — Android 15
-- **Model**: Gemma 4 E4B (`gemma-4-E4B-it.litertlm`)
+- **Models tested**: Gemma 4 E2B (`gemma-4-E2B-it.litertlm`), Gemma 4 E4B (`gemma-4-E4B-it.litertlm`)
 - **LiteRT-LM**: 0.11.0
 - **Backends tested**: GPU (OpenCL, via `useGpuForLlm=true`) and CPU
 - **Sampling**: temp=1.0, top_p=0.95, top_k=64, max_tokens=32000
 
 ## Methodology
 
-Per backend × k configuration: 18 (query × mode) cells × 3 repeats = 54 timed runs. Plus a No-RAG baseline per backend (k=0 via `--no-retrieval`). 10-second cooldown between runs for thermal stability. Activity → ForegroundService with PARTIAL_WAKE_LOCK so the run survives screen-off and device-lock; OPPO Hans whitelist set manually.
+Per (model × backend × k) configuration: 18 (query × mode) cells × 3 repeats = 54 timed runs. Plus a No-RAG baseline per (model × backend) (k=0 via `--no-retrieval`). 10-second cooldown between runs for thermal stability. Activity → ForegroundService with PARTIAL_WAKE_LOCK so the run survives screen-off and device-lock; OPPO Hans whitelist set manually.
 
 - `TTFT` excludes retrieval — measured from end-of-retrieval to first generated token.
 - `decode` is first-token to last-token.
 - `total_query` is everything: `retrieval + TTFT + decode`.
 - Reported as median across the 54 runs unless noted (p95 in tables marked `p95`).
 
-## Headline — Median total query latency (seconds)
+## Gemma 4 E2B (`gemma-4-E2B-it.litertlm`)
+
+### Median total query latency (seconds)
+
+| k | doc_chars med | GPU short / med / long | CPU short / med / long | CPU÷GPU |
+|---:|---:|---:|---:|---:|
+| **0 (no-RAG)** | 0 | 7.9 / 8.1 / 10.8 | 13.2 / 14.1 / 16.0 | 1.60× |
+| 1 | 561 | 11.4 / 11.8 / 12.8 | 13.0 / 16.3 / 17.5 | 1.35× |
+| 3 | 2098 | 12.8 / 13.8 / 16.5 | 19.1 / 22.0 / 22.5 | 1.44× |
+| 5 | 3547 | 9.9 / 14.2 / 14.0 | 26.3 / 27.6 / 28.6 | 2.36× |
+| 7 | 5139 | 12.8 / 14.3 / 17.6 | 23.5 / 32.0 / 33.2 | 1.87× |
+| 10 | 7482 | 15.2 / 14.6 / 17.9 | 23.4 / 26.2 / 27.7 | 1.68× |
+| 15 | 11297 | 13.0 / 12.4 / 14.8 | 31.0 / 38.2 / 40.7 | 2.80× |
+| 20 | 14520 | 19.3 / 15.8 / 14.3 | 33.4 / 39.8 / 44.5 | 2.28× |
+
+### TTFT (ms, median)
+
+| k | doc_chars med | GPU TTFT | CPU TTFT | CPU÷GPU |
+|---:|---:|---:|---:|---:|
+| **0 (no-RAG)** | 0 | 429 | 5564 | 13.0× |
+| 1 | 561 | 412 | 5355 | 13.0× |
+| 3 | 2098 | 445 | 7394 | 16.6× |
+| 5 | 3547 | 793 | 14604 | 18.4× |
+| 7 | 5139 | 819 | 14577 | 17.8× |
+| 10 | 7482 | 1074 | 13635 | 12.7× |
+| 15 | 11297 | 1479 | 21368 | 14.4× |
+| 20 | 14520 | 1722 | 22947 | 13.3× |
+
+### Decode (ms, median)
+
+| k | GPU decode | CPU decode | CPU÷GPU |
+|---:|---:|---:|---:|
+| **0 (no-RAG)** | 8263 | 8174 | 0.99× |
+| 1 | 7573 | 6764 | 0.89× |
+| 3 | 10223 | 9584 | 0.94× |
+| 5 | 9052 | 9571 | 1.06× |
+| 7 | 10723 | 13451 | 1.25× |
+| 10 | 10713 | 11870 | 1.11× |
+| 15 | 9664 | 9920 | 1.03× |
+| 20 | 11036 | 10697 | 0.97× |
+
+### p95 total query latency (s)
+
+| k | GPU p95 | CPU p95 |
+|---:|---:|---:|
+| **0 (no-RAG)** | 11.4 | 17.4 |
+| 1 | 17.7 | 19.1 |
+| 3 | 19.7 | 35.8 |
+| 5 | 21.2 | 35.1 |
+| 7 | 19.4 | 41.0 |
+| 10 | 23.8 | 37.9 |
+| 15 | 18.1 | 45.2 |
+| 20 | 22.2 | 50.4 |
+
+### Errors (count / 54 runs)
+
+| k | GPU errors | CPU errors |
+|---:|---:|---:|
+| **0 (no-RAG)** | 0 | 0 |
+| 1 | 0 | 0 |
+| 3 | 0 | 0 |
+| 5 | 0 | 0 |
+| 7 | 0 | 0 |
+| 10 | 0 | 0 |
+| 15 | 0 | 0 |
+| 20 | 24 | 24 |
+
+### Wall-clock
+
+| k | GPU wall (min) | CPU wall (min) | CPU÷GPU |
+|---:|---:|---:|---:|
+| **0 (no-RAG)** | 17.5 | 22.5 | 1.28× |
+| 1 | 20.9 | 23.9 | 1.14× |
+| 3 | 22.4 | 30.0 | 1.34× |
+| 5 | 21.1 | 34.2 | 1.62× |
+| 7 | 22.8 | 35.5 | 1.56× |
+| 10 | 23.3 | 33.9 | 1.46× |
+| 15 | 21.1 | 41.7 | 1.97× |
+| 20 | 19.1 | 30.4 | 1.59× |
+
+## Gemma 4 E4B (`gemma-4-E4B-it.litertlm`)
+
+### Median total query latency (seconds)
 
 | k | doc_chars med | GPU short / med / long | CPU short / med / long | CPU÷GPU |
 |---:|---:|---:|---:|---:|
@@ -33,7 +115,7 @@ Per backend × k configuration: 18 (query × mode) cells × 3 repeats = 54 timed
 | 15 | 11297 | 25.3 / 24.0 / 22.4 | 84.8 / 80.8 / 89.7 | 3.48× |
 | 20 | 14520 | 23.9 / 20.5 / 18.5 | 88.7 / 95.6 / 95.6 | 4.46× |
 
-## TTFT (ms, median) — prefill cost grows with retrieved-doc content
+### TTFT (ms, median)
 
 | k | doc_chars med | GPU TTFT | CPU TTFT | CPU÷GPU |
 |---:|---:|---:|---:|---:|
@@ -46,10 +128,7 @@ Per backend × k configuration: 18 (query × mode) cells × 3 repeats = 54 timed
 | 15 | 11297 | 3457 | 54748 | 15.8× |
 | 20 | 14520 | 3986 | 72881 | 18.3× |
 
-## Decode (ms, median) — first token to last token
-
-Decode time mostly tracks output length, not k or doc content. Variation across k reflects 
-the model writing *longer answers* when given more context (more material to draw on).
+### Decode (ms, median)
 
 | k | GPU decode | CPU decode | CPU÷GPU |
 |---:|---:|---:|---:|
@@ -62,7 +141,7 @@ the model writing *longer answers* when given more context (more material to dra
 | 15 | 16820 | 22497 | 1.34× |
 | 20 | 14688 | 22634 | 1.54× |
 
-## p95 total query latency (s) — tail-latency view
+### p95 total query latency (s)
 
 | k | GPU p95 | CPU p95 |
 |---:|---:|---:|
@@ -75,9 +154,9 @@ the model writing *longer answers* when given more context (more material to dra
 | 15 | 30.6 | 112.7 |
 | 20 | 35.3 | 104.9 |
 
-## Errors and the 4096-token context wall
+### Errors (count / 54 runs)
 
-| k | GPU errors / 54 | CPU errors / 54 |
+| k | GPU errors | CPU errors |
 |---:|---:|---:|
 | **0 (no-RAG)** | 0 | 0 |
 | 1 | 0 | 0 |
@@ -88,17 +167,7 @@ the model writing *longer answers* when given more context (more material to dra
 | 15 | 0 | 0 |
 | 20 | 24 | 24 |
 
-At k=20, **24 of 54 runs failed on both GPU and CPU** with `Input token ids are too long. 
-Exceeding the maximum number of tokens allowed: …>= 4096`. The **exact same 8 queries failed on both 
-backends** (`long_01, long_03, medium_02, medium_04, short_01, short_03, short_04, short_05`) — 
-the same 24 (query × rep) pairs. This is direct evidence that the 4096-token cap is a property of 
-the Gemma 4 E4B `.litertlm` artifact itself, not a runtime configuration, not a backend choice. 
-The other 10 queries (10 × 3 reps = 30 successful runs) were the ones whose retrieved chunks happened to be shorter.
-
-Successful-run timing at CPU k=20: TTFT 65–73 s, total 89–96 s — confirming CPU is well past any 
-deployment budget at this depth even when the request fits in the context window.
-
-## Wall-clock comparison
+### Wall-clock
 
 | k | GPU wall (min) | CPU wall (min) | CPU÷GPU |
 |---:|---:|---:|---:|
@@ -111,64 +180,114 @@ deployment budget at this depth even when the request fits in the context window
 | 15 | 32.4 | 90.8 | 2.80× |
 | 20 | 22.8 | 58.6 | 2.57× |
 
+## Cross-model comparison
+
+Ratios below are **Gemma 4 E4B ÷ Gemma 4 E2B**, so values **> 1.0× mean the smaller model is faster** at the same backend×k. GPU compares prefill bandwidth-dominance; CPU exposes raw compute-cost scaling with parameter count.
+
+### Gemma 4 E4B vs Gemma 4 E2B
+
+**Total query latency (median, seconds)**
+
+| k | Gemma 4 E4B GPU | Gemma 4 E2B GPU | GPU ratio | Gemma 4 E4B CPU | Gemma 4 E2B CPU | CPU ratio |
+|---:|---:|---:|---:|---:|---:|---:|
+| **0 (no-RAG)** | 14.4 | 8.7 | 1.66× | 28.0 | 13.9 | 2.01× |
+| 1 | 14.1 | 11.7 | 1.21× | 30.3 | 15.8 | 1.92× |
+| 3 | 19.1 | 14.3 | 1.33× | 42.7 | 20.6 | 2.07× |
+| 5 | 19.6 | 11.6 | 1.70× | 60.2 | 27.2 | 2.21× |
+| 7 | 22.9 | 15.2 | 1.50× | 62.3 | 28.5 | 2.18× |
+| 10 | 22.4 | 15.6 | 1.43× | 69.4 | 26.3 | 2.64× |
+| 15 | 24.4 | 13.1 | 1.86× | 84.9 | 36.8 | 2.31× |
+| 20 | 21.0 | 16.5 | 1.28× | 93.8 | 37.6 | 2.49× |
+
+**TTFT (median, ms)** — prefill speedup
+
+| k | Gemma 4 E4B GPU | Gemma 4 E2B GPU | GPU ratio | Gemma 4 E4B CPU | Gemma 4 E2B CPU | CPU ratio |
+|---:|---:|---:|---:|---:|---:|---:|
+| **0 (no-RAG)** | 962 | 429 | 2.24× | 12633 | 5564 | 2.27× |
+| 1 | 954 | 412 | 2.32× | 12649 | 5355 | 2.36× |
+| 3 | 989 | 445 | 2.22× | 18356 | 7394 | 2.48× |
+| 5 | 1884 | 793 | 2.38× | 36424 | 14604 | 2.49× |
+| 7 | 1920 | 819 | 2.34× | 36444 | 14577 | 2.50× |
+| 10 | 2523 | 1074 | 2.35× | 40013 | 13635 | 2.93× |
+| 15 | 3457 | 1479 | 2.34× | 54748 | 21368 | 2.56× |
+| 20 | 3986 | 1722 | 2.31× | 72881 | 22947 | 3.18× |
+
+**Decode (median, ms)** — bandwidth-limited on GPU, compute-limited on CPU
+
+| k | Gemma 4 E4B GPU | Gemma 4 E2B GPU | GPU ratio | Gemma 4 E4B CPU | Gemma 4 E2B CPU | CPU ratio |
+|---:|---:|---:|---:|---:|---:|---:|
+| **0 (no-RAG)** | 13470 | 8263 | 1.63× | 15345 | 8174 | 1.88× |
+| 1 | 11415 | 7573 | 1.51× | 13961 | 6764 | 2.06× |
+| 3 | 16364 | 10223 | 1.60× | 19110 | 9584 | 1.99× |
+| 5 | 15929 | 9052 | 1.76× | 21645 | 9571 | 2.26× |
+| 7 | 17215 | 10723 | 1.61× | 23473 | 13451 | 1.75× |
+| 10 | 18118 | 10713 | 1.69× | 21699 | 11870 | 1.83× |
+| 15 | 16820 | 9664 | 1.74× | 22497 | 9920 | 2.27× |
+| 20 | 14688 | 11036 | 1.33× | 22634 | 10697 | 2.12× |
+
+## Errors and the 4096-token context wall
+
+At k=20, the **same 8 queries × 3 reps = 24 runs** failed across every (model × backend) combination tested: 
+`long_01, long_03, medium_02, medium_04, short_01, short_03, short_04, short_05`. 
+Each failure reports `Input token ids are too long. Exceeding the maximum number of tokens allowed: …>= 4096`. 
+Both Gemma 4 E4B and Gemma 4 E2B ship the same 4096-token context window; the wall is a property of the `.litertlm` artifact format, not the parameter count or backend. **k_max ≈ 17–18** for both models.
+
 ## Key findings
 
+### 1. Prefill (TTFT) scales ~2× with parameter count on both backends
+Halving the parameter count (E4B → E2B) gives a **consistent ~2.3× TTFT speedup on GPU** and **~2.3–3.2× on CPU**. Prefill is compute-heavy (one parallel forward pass over the entire prompt), so halving the parameter count halves the compute and the speedup is near-proportional on both backends.
 
-### 1. GPU is the practical choice for this workload on Snapdragon 8 Elite
-GPU TTFT runs around **1–3.5 s** across k=0–15. CPU TTFT runs around **12.6 s (no-RAG) → 55 s (k=15)**. 
-That's a 13–19× TTFT speedup from GPU. Decode time is largely backend-invariant (memory-bandwidth-bound), 
-so the *total* speedup is closer to 2–3.5× — but those seconds of TTFT translate directly to perceived UX latency.
+### 2. Decode is bandwidth-bound on GPU, compute-bound on CPU
+Decode speedup from E4B → E2B is **~1.5× on GPU** but **~2× on CPU**. Decode is sequential (one token at a time), so on GPU it's limited by memory bandwidth feeding weights into compute units — the smaller model helps less than its parameter count would predict. On CPU the constraint is compute, so the speedup tracks the model shrink.
 
-### 2. The model's 4096-token context window is the binding ceiling at high k
-k=15 works cleanly (54/54 on both GPU and CPU). k=20 fails identically on **both backends** — 
-the **exact same 24 of 54 runs (8 queries × 3 reps)** error with `Input token ids are too long … >= 4096`. 
-Same queries fail on both because the chunks retrieved are deterministic and chunk length × k drives 
-the prompt past the window. The 4096-token cap is a property of the `.litertlm` model artifact, 
-not a runtime config and not a backend choice. **k_max ≈ 17–18** for this artifact. 
-Latency is *not* the constraint at the upper end; the model's context window is.
+### 3. Total speedup is decode-dominated, hence smaller than TTFT
+**Total-query speedup**: ~1.5× GPU, ~2.2× CPU. Total = TTFT + decode + retrieval; since decode dominates total at low-to-mid k (TTFT is small there), the total speedup tracks decode rather than prefill. At high k where prefill grows large, total speedup climbs toward the prefill ratio (~1.7–1.9× GPU at k=15+).
 
-### 3. Latency is not the binding factor on GPU below k=15
-GPU total medians stay between 13 s (no-RAG) and 25 s (k=15) — all well under any reasonable UX budget. 
-Picking k* should be driven by **answer quality** (do more chunks help or hurt the small generator?), 
-not by what fits in the latency budget.
+### 4. GPU still wins, but E2B CPU opens up the no-GPU device tier
+E2B CPU is 1.4–2.4× slower than E2B GPU at every k — GPU remains the preferred backend where available. But E2B CPU at k=1 (~16 s median) is comparable to E4B GPU at k=1 (~14 s), which means devices that previously could *not* deploy MAM-AI at acceptable latency (mid-tier MediaTek, older Snapdragon without OpenCL) now have a realistic path: ship E2B on CPU, restrict k to small values.
 
-### 4. CPU at k≥5 hits any reasonable UX budget; at k=15 it's prohibitively slow
-CPU totals: k=3 → 37–44 s, k=5 → 55–63 s, k=7 → 60–62 s, k=10 → 62–78 s, k=15 → 81–90 s. 
-p95 at CPU k=15 hits **113 s** — almost two minutes for the slowest 5% of queries. If GPU isn't 
-available (lower-tier devices), the practical CPU operating point is **k ≤ 3** for a sub-60s budget, 
-or **k ≤ 1** if you want sub-40s p95.
-
-### 5. Decode time is content-driven, not k-driven
-Decode time tracks output length. As k grows, the model writes *longer* responses — likely because 
-more context = more material to weave in. This is a quality-coupled latency effect, not a prefill effect. 
-Decode-time difference between GPU and CPU is only ~1.1–1.4× across all k, since decode is memory-bandwidth-bound, 
-not compute-bound on this hardware.
+### 5. 4096-token context wall is the binding ceiling at high k
+k=15 works cleanly on all four (model × backend) combinations. k=20 fails identically across all four: same 8 queries, same 24 (query × rep) failures. The cap is in the model artifact, not the runtime, and is **shared between E4B and E2B**. **Latency is not the constraint at the upper end of k — context window is.**
 
 ### 6. TTFT scales linearly with retrieved-doc content past k=3
-On both backends, TTFT per added doc-char is roughly constant past k=3: GPU ~100–250 µs/char, 
-CPU ~3,500–5,000 µs/char. The GPU↔CPU ratio is stable at ~13–19× across the prefill range, suggesting 
-the GPU primarily speeds up the *compute-heavy* prefill phase while decode stays bandwidth-bound on both.
+On both backends and both models, TTFT-per-doc-char is roughly constant past k=3, so the prefill story scales predictably. The model shrink translates directly into a TTFT shrink across the whole range.
 
-## Data inventory (per `(backend, k)`)
+## Data inventory (per `(model, backend, k)`)
 
-| Backend | k | File | Wall (min) | Runs | Errors |
-|---|---:|---|---:|---:|---:|
-| CPU | 0 (no-RAG) | `benchmark_20260515T022647.json` | 36.9 | 54 | 0 |
-| CPU | 1 | `benchmark_20260514T213337_k1.json` | 38.7 | 54 | 0 |
-| CPU | 3 | `benchmark_20260514T221238_k3.json` | 50.2 | 54 | 0 |
-| CPU | 5 | `benchmark_20260514T230309_k5.json` | 63.0 | 54 | 0 |
-| CPU | 7 | `benchmark_20260515T000622_k7.json` | 66.5 | 54 | 0 |
-| CPU | 10 | `benchmark_20260515T011307_k10.json` | 73.2 | 54 | 0 |
-| CPU | 15 | `benchmark_20260515T030401_k15.json` | 90.8 | 54 | 0 |
-| CPU | 20 | `benchmark_20260515T064042_k20.json` | 58.6 | 54 | 24 |
-| GPU | 0 (no-RAG) | `benchmark_20260514T210522.json` | 23.5 | 54 | 0 |
-| GPU | 1 | `benchmark_20260514T174502_k1.json` | 23.0 | 54 | 0 |
-| GPU | 3 | `benchmark_20260514T180830_k3.json` | 27.3 | 54 | 0 |
-| GPU | 5 | `benchmark_20260514T183604_k5.json` | 28.2 | 54 | 0 |
-| GPU | 7 | `benchmark_20260514T190438_k7.json` | 30.0 | 54 | 0 |
-| GPU | 10 | `benchmark_20260514T193453_k10.json` | 29.1 | 54 | 0 |
-| GPU | 15 | `benchmark_20260514T200414_k15.json` | 32.4 | 54 | 0 |
-| GPU | 20 | `benchmark_20260514T203653_k20.json` | 22.8 | 54 | 24 |
+| Model | Backend | k | File | Wall (min) | Runs | Errors |
+|---|---|---:|---|---:|---:|---:|
+| Gemma 4 E2B | CPU | 0 (no-RAG) | `benchmark_20260515T223100.json` | 22.5 | 54 | 0 |
+| Gemma 4 E2B | CPU | 1 | `benchmark_20260515T183910_k1.json` | 23.9 | 54 | 0 |
+| Gemma 4 E2B | CPU | 3 | `benchmark_20260515T190320_k3.json` | 30.0 | 54 | 0 |
+| Gemma 4 E2B | CPU | 5 | `benchmark_20260515T193337_k5.json` | 34.2 | 54 | 0 |
+| Gemma 4 E2B | CPU | 7 | `benchmark_20260515T200805_k7.json` | 35.5 | 54 | 0 |
+| Gemma 4 E2B | CPU | 10 | `benchmark_20260515T204358_k10.json` | 33.9 | 54 | 0 |
+| Gemma 4 E2B | CPU | 15 | `benchmark_20260515T211813_k15.json` | 41.7 | 54 | 0 |
+| Gemma 4 E2B | CPU | 20 | `benchmark_20260515T220014_k20.json` | 30.4 | 54 | 24 |
+| Gemma 4 E2B | GPU | 0 (no-RAG) | `benchmark_20260515T175744.json` | 17.5 | 54 | 0 |
+| Gemma 4 E2B | GPU | 1 | `benchmark_20260515T152447_k1.json` | 20.9 | 54 | 0 |
+| Gemma 4 E2B | GPU | 3 | `benchmark_20260515T154608_k3.json` | 22.4 | 54 | 0 |
+| Gemma 4 E2B | GPU | 5 | `benchmark_20260515T160846_k5.json` | 21.1 | 54 | 0 |
+| Gemma 4 E2B | GPU | 7 | `benchmark_20260515T163011_k7.json` | 22.8 | 54 | 0 |
+| Gemma 4 E2B | GPU | 10 | `benchmark_20260515T165316_k10.json` | 23.3 | 54 | 0 |
+| Gemma 4 E2B | GPU | 15 | `benchmark_20260515T171649_k15.json` | 21.1 | 54 | 0 |
+| Gemma 4 E2B | GPU | 20 | `benchmark_20260515T173816_k20.json` | 19.1 | 54 | 24 |
+| Gemma 4 E4B | CPU | 0 (no-RAG) | `benchmark_20260515T022647.json` | 36.9 | 54 | 0 |
+| Gemma 4 E4B | CPU | 1 | `benchmark_20260514T213337_k1.json` | 38.7 | 54 | 0 |
+| Gemma 4 E4B | CPU | 3 | `benchmark_20260514T221238_k3.json` | 50.2 | 54 | 0 |
+| Gemma 4 E4B | CPU | 5 | `benchmark_20260514T230309_k5.json` | 63.0 | 54 | 0 |
+| Gemma 4 E4B | CPU | 7 | `benchmark_20260515T000622_k7.json` | 66.5 | 54 | 0 |
+| Gemma 4 E4B | CPU | 10 | `benchmark_20260515T011307_k10.json` | 73.2 | 54 | 0 |
+| Gemma 4 E4B | CPU | 15 | `benchmark_20260515T030401_k15.json` | 90.8 | 54 | 0 |
+| Gemma 4 E4B | CPU | 20 | `benchmark_20260515T064042_k20.json` | 58.6 | 54 | 24 |
+| Gemma 4 E4B | GPU | 0 (no-RAG) | `benchmark_20260514T210522.json` | 23.5 | 54 | 0 |
+| Gemma 4 E4B | GPU | 1 | `benchmark_20260514T174502_k1.json` | 23.0 | 54 | 0 |
+| Gemma 4 E4B | GPU | 3 | `benchmark_20260514T180830_k3.json` | 27.3 | 54 | 0 |
+| Gemma 4 E4B | GPU | 5 | `benchmark_20260514T183604_k5.json` | 28.2 | 54 | 0 |
+| Gemma 4 E4B | GPU | 7 | `benchmark_20260514T190438_k7.json` | 30.0 | 54 | 0 |
+| Gemma 4 E4B | GPU | 10 | `benchmark_20260514T193453_k10.json` | 29.1 | 54 | 0 |
+| Gemma 4 E4B | GPU | 15 | `benchmark_20260514T200414_k15.json` | 32.4 | 54 | 0 |
+| Gemma 4 E4B | GPU | 20 | `benchmark_20260514T203653_k20.json` | 22.8 | 54 | 24 |
 
 ---
 
