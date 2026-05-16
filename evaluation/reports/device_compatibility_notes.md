@@ -1,12 +1,15 @@
 # MAM-AI Device Compatibility — On Which Phones the Model Can Run
 
-_Last updated: 2026-05-15. Companion to `latency_report_v2.md` (timing data) and the NPU feasibility report (`mamaretrieval/notes/npu_feasibility_report.md`)._
+_Last updated: 2026-05-16. Companion to `latency_report_v2.md` (timing data) and the NPU feasibility report (`mamaretrieval/notes/npu_feasibility_report.md`)._
 
-## TL;DR — three load-bearing rules
+**On the Snapdragon 8 Elite test device under a 60 s latency budget, E4B (6 GB RAM floor) deploys only on GPU across all RAG depths k ≤ 15 or on CPU at k ≤ 3, while E2B (4 GB RAM floor) deploys on both GPU and CPU across all k ≤ 15 — with k = 20 ruled out for both models by the 4096-token context wall, regardless of backend.**
+
+## TL;DR — four load-bearing rules
 
 1. **E4B minimum RAM: 6 GB** total. 4 GB phones cannot run E4B reliably (model alone needs ~3.3 GB at runtime; Android + bundled apps eat 1.5–2 GB).
 2. **E2B minimum RAM: 4 GB** total. The smaller model halves the runtime memory footprint (~1.7 GB), opening up the $100–$150 device tier that's the largest slice of the African market.
 3. **E4B on CPU: k=3 is the borderline.** Beyond k=3, CPU totals exceed the 60 s budget on most mid-tier silicon. **E4B on GPU: no latency worry** — totals stay 13–25 s across k=0–15 on Snapdragon 8 Elite + Adreno.
+4. **E2B on CPU: k=10 is comfortable on flagship CPU; k=3–5 on mid-tier MediaTek.** Measured E2B CPU at k=10 on Snapdragon 8 Elite is 26 s median; extrapolating ~2× slower for mid-tier MediaTek gives ~50 s at k=5–7 (borderline). The original notes projected a uniform ~2× speedup across backends; measurements show **CPU matches that projection (~2× total speedup)** but **GPU total speedup is closer to ~1.5×** because decode is bandwidth-bound and gains less from the parameter-count shrink. Either way, CPU-only deployment is finally viable up to mid-range k on the no-GPU device tier — that's the deployment-relevant change from the May 2026 sweep.
 
 The catch — covered in §3 below — is that **GPU only works reliably on Adreno** (Snapdragon). For the bulk of the African deployment fleet (MediaTek + Mali GPUs), **plan as CPU-only** and treat any GPU acceleration as a bonus, not a guarantee.
 
@@ -63,27 +66,29 @@ At hard minimum, the app will install and run but will be vulnerable to OOM kill
 
 ## 2. Backend × model × k feasibility (UX at 60 s budget)
 
-Median total query latency targets, measured on Snapdragon 8 Elite (test device) and extrapolated for mid-tier MediaTek (~2× slower CPU than 8 Elite). E2B numbers are projections (~2× faster than E4B on the same hardware) until we collect actual measurements.
+Median total query latency. Snapdragon 8 Elite rows are measured (see `latency_report_v2.md`). Mid-tier MediaTek rows are extrapolated by scaling CPU latency ~2× slower than Snapdragon 8 Elite — anchored on the published Geekbench gap between Dimensity 8400 / Helio G99 and the Snapdragon 8 Elite, not on an in-house measurement. **Empirical measurement on real MediaTek hardware is the next open question; see §6.**
 
-### Gemma 4 E4B
+### Gemma 4 E4B (measured)
 
 | Backend × hardware tier | k=0 (no-RAG) | k=3 | k=5 | k=10 | k=15 |
 |---|---|---|---|---|---|
 | **GPU, Snapdragon 8 Elite (Adreno 830)** | 13 s ✅ | 19 s ✅ | 20 s ✅ | 21 s ✅ | 24 s ✅ — **no worry at any k ≤ 15** |
-| **CPU, Snapdragon 8 Elite** | 27 s ✅ | 41 s ✅ | 60 s 🟡 | 70 s ❌ | 85 s ❌ |
-| CPU, mid-tier MediaTek (~2× slower) | ~50 s 🟡 | ~80 s ❌ | — | — | — |
+| **CPU, Snapdragon 8 Elite** | 28 s ✅ | 43 s ✅ | 60 s 🟡 | 69 s ❌ | 85 s ❌ |
+| CPU, mid-tier MediaTek (~2× slower) | ~56 s 🟡 | ~85 s ❌ | — | — | — |
 
 → For E4B: **CPU is unsafe past k=3** on flagship hardware, and unsafe at any k > 0 on mid-tier. GPU works at all k tested.
 
-### Gemma 4 E2B (projected, halve E4B numbers)
+### Gemma 4 E2B (measured 2026-05-16)
 
-| Backend × hardware tier | k=0 | k=3 | k=5 | k=10 | k=15 |
+Measured E2B is **~1.5× faster than E4B on GPU** (decode is bandwidth-bound, limits the win) and **~2× faster on CPU** (compute-bound — the smaller model's compute reduction translates more directly). See `latency_report_v2.md` for the per-k speedup ratios.
+
+| Backend × hardware tier | k=0 (no-RAG) | k=3 | k=5 | k=10 | k=15 |
 |---|---|---|---|---|---|
-| GPU, Snapdragon 8 Elite | ~6 s ✅ | ~10 s ✅ | ~10 s ✅ | ~11 s ✅ | ~12 s ✅ |
-| CPU, Snapdragon 8 Elite | ~13 s ✅ | ~20 s ✅ | ~30 s ✅ | ~35 s ✅ | ~42 s ✅ |
-| **CPU, mid-tier MediaTek** | ~25 s ✅ | ~40 s ✅ | ~55 s 🟡 | ~70 s ❌ | — |
+| **GPU, Snapdragon 8 Elite (Adreno 830)** | 9 s ✅ | 14 s ✅ | 12 s ✅ | 16 s ✅ | 13 s ✅ — **no worry at any k ≤ 15** |
+| **CPU, Snapdragon 8 Elite** | 14 s ✅ | 21 s ✅ | 27 s ✅ | 26 s ✅ | 37 s ✅ |
+| **CPU, mid-tier MediaTek (~2× slower)** | ~28 s ✅ | ~41 s ✅ | ~54 s 🟡 | ~53 s 🟡 | ~74 s ❌ |
 
-→ For E2B on mid-tier MediaTek CPU, k≤3 is comfortable; k≤5 is borderline. **Empirical measurement still pending.**
+→ For E2B on flagship CPU, **all k ≤ 15 fit a 60 s budget**. On mid-tier MediaTek CPU, **k ≤ 3 is comfortable, k=5–10 is borderline, k=15 exceeds budget.** This is the key deployment unlock: the no-GPU, mid-tier-CPU path is finally viable for typical k.
 
 ---
 
@@ -134,7 +139,7 @@ Combining the SoC distribution data with the floor specs above:
 | $100–$150 low-mid | Tecno Camon, Infinix Hot Pro+, Redmi 13C | Helio G99, Dimensity 6080 | 6 GB | ✅ tight | ✅ comfortable | ⚠️ uncertain |
 | $150–$250 mid | Tecno Camon 30, Infinix Note 40, Redmi Note 13, Samsung A25 | Dimensity 7050/7200/8400 | 8 GB | ✅ | ✅ | ⚠️ uncertain (Mali) |
 | $250+ upper-mid | OnePlus Nord, Samsung A5x | Snapdragon 7+ Gen 3 | 8 GB | ✅ | ✅ | ✅ Adreno |
-| $400+ flagship | OPPO Find X8 (our test device), Pixel, Galaxy S | Snapdragon 8 Elite, Dimensity 9400, Tensor | 12+ GB | ✅ | ✅ | ✅ Adreno (Pixel ❌) |
+| $400+ flagship | OnePlus OPD2413 / OPPO Find X8 (our test device), Pixel, Galaxy S | Snapdragon 8 Elite, Dimensity 9400, Tensor | 12+ GB | ✅ | ✅ | ✅ Adreno (Pixel ❌) |
 
 **Effective deployment-viable hardware floor**: roughly **$120+ retail**, 6 GB RAM, 64 GB storage, any 64-bit chipset from 2022 or later. E2B lowers this to **~$100**, 4 GB RAM.
 
@@ -144,8 +149,9 @@ Combining the SoC distribution data with the floor specs above:
 
 | Question | How to answer | Priority |
 |---|---|---|
-| Actual E2B CPU latency at k=0/3/5/7/10/15 on Snapdragon 8 Elite | Same `benchmark_latency.py` sweep run we did for E4B, with the E2B model swapped in | High — unblocks the E2B-vs-E4B deployment decision |
+| ~~Actual E2B CPU latency at k=0/3/5/7/10/15 on Snapdragon 8 Elite~~ | **Resolved 2026-05-16** — measured E2B CPU is ~2× faster than E4B CPU at every k; see `latency_report_v2.md` cross-model tables. E2B CPU at k=10 = 26 s; k=15 = 37 s; both under 60 s budget on flagship. | ~~High~~ ✅ Done |
 | Does GPU backend engage on real Transsion / MediaTek mid-tier devices? | Borrow / buy a Tecno Camon 30 or Infinix Note 40 and run benchmark with `useGpuForLlm=true`; check `[BACKEND]` log line | High — answers whether GPU is realistic for the deployment majority |
+| Does the mid-tier MediaTek CPU 2× slowdown extrapolation hold in practice? | Once a Tecno/Infinix mid-tier is in hand, run the full k-sweep on CPU and compare to the projected `~2× slower` table in §2 | High — anchors the deployment recommendation on real numbers, not Geekbench-based extrapolation |
 | E2B answer-quality regression vs E4B on safety-critical medical-advice metrics | Re-run `eval_report_app_parity_v1.md` apparatus with E2B model | Critical before any model swap decision |
 | Does Exynos Xclipse driver bug get fixed upstream | Watch LiteRT-LM Issue #2114 | Low — affects ~5% of African market |
 | When does E4B Qualcomm SM8750 NPU artifact ship | Watch `litert-community/` HF repo monthly per Issue #58 | Medium — perf upgrade, not a deployment unblocker |

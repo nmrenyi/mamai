@@ -381,7 +381,21 @@ class BenchmarkForegroundService : Service() {
                 put("rag_only", ragOnly)
                 put("query_filter", queryFilter ?: JSONObject.NULL)
                 put("retrieval_top_k_override", retrieveKOverride ?: JSONObject.NULL)
-                put("model", "gemma-4-E4B-it.litertlm")
+                // Read model name from the same app_config.json asset the RagPipeline uses,
+                // so the JSON metadata reflects whatever model is actually loaded rather than
+                // a hardcoded string that goes stale when we switch model artifacts.
+                // Wrapped in try/catch: this read runs at the END of the benchmark when we
+                // serialize all results — an asset/parse error here would discard 20+ minutes
+                // of completed runs that are still in-memory. Better to ship an "unknown" tag
+                // and preserve the timing data than lose the whole sweep.
+                put("model", try {
+                    JSONObject(
+                        application.assets.open("app_config.json").bufferedReader().use { it.readText() }
+                    ).getString("llm_model")
+                } catch (e: Exception) {
+                    Log.w("mam-ai-bench", "[BENCHMARK] Failed to read llm_model from app_config.json — recording 'unknown': $e")
+                    "unknown"
+                })
                 // Read backend from BuildConfig at compile time. Older builds
                 // hard-coded "CPU" here even when GPU was active — fixed so the
                 // JSON metadata matches reality.
