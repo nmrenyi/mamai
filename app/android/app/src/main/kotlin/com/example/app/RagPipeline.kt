@@ -332,7 +332,19 @@ class RagPipeline(application: Application) {
         }
 
     private fun buildEngine(modelPath: String, backend: Backend, cacheDir: String) {
-        val e = Engine(EngineConfig(modelPath = modelPath, backend = backend, cacheDir = cacheDir))
+        // Set the prompt-budget ceiling explicitly so the limit is visible at the
+        // call site rather than inferred from runtime errors at high k. Empirical
+        // testing on Gemma 4 E4B/E2B .litertlm (see latency_report_v2.md §context
+        // wall): the engine accepts higher values (8192 init OK on both backends),
+        // but on GPU the output degenerates into a repetition loop past 4096 even
+        // when no error is thrown. 4096 is the highest value that produces clean
+        // generations across both backends for this artifact family.
+        val e = Engine(EngineConfig(
+            modelPath = modelPath,
+            backend = backend,
+            maxNumTokens = 4096,
+            cacheDir = cacheDir,
+        ))
         e.initialize()
         engine = e
     }
