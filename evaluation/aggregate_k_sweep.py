@@ -500,6 +500,14 @@ def write_report(runs: list[dict], out_path: Path) -> None:
               "[`maxnumtoken_investigation.md`](maxnumtoken_investigation.md). Headline "
               "findings:")
     md.append("")
+    md.append("- ⚠️ **The default Android GPU activation precision is FP16, and FP16 attention "
+              "causes a silent, deterministic decoding failure** (response collapses into "
+              "a `*` repetition loop) once total context exceeds ~5000 tokens. No error "
+              "is raised — output just becomes garbage. Example captured in "
+              "[`benchmark_20260516T104730_k20.json`](../latency_results/benchmark_20260516T104730_k20.json) "
+              "(long_01, k=20, FP16 GPU, maxNumTokens=8192). Today's 4096 cap stays "
+              "well below the breakdown; lifting the cap on FP16 GPU is unsafe without "
+              "switching to FP32.")
     md.append("- GPU attention runs FP16 by default on Android (Adreno OpenCL); CPU runs "
               "FP32 (XNNPACK). Verified from LiteRT-LM source and from a string in the "
               "native lib that reads *\"System's default activation type for Text decoder "
@@ -521,9 +529,15 @@ def write_report(runs: list[dict], out_path: Path) -> None:
               "`.litertlm` artifact's section metadata accepts a "
               "`prefer_activation_type=float32` key that the runtime honors. With "
               "that override applied, the same query that previously degenerated "
-              "on GPU produced clean medical reasoning past total context 4500. "
-              "Mechanism story is complete. FP32 GPU is a viable but slower "
-              "(~2–3× decode) and memory-hungrier (KV cache doubles) fallback.")
+              "on GPU produced clean medical reasoning past total context 4500.")
+    md.append("- **FP32 GPU latency cost** (full 8-run sweep, 2026-05-16): only "
+              "**~25% slower than FP16 GPU at k=15** (~6 s extra wait per query), "
+              "dominated by 2–2.5× TTFT cost. Decode is essentially identical "
+              "(bandwidth-bound, so precision barely matters in steady state). "
+              "Memory: KV cache doubles vs FP16, capping practical FP32 GPU "
+              "maxNumTokens around 6500–7500 on this 16 GB device. FP32 GPU is "
+              "therefore a **real shipping option** for use cases that want extra "
+              "correctness margin or higher k — not just an experiment.")
     md.append("- 4096 has **~900 tokens of safety margin** to the actual GPU cliff. "
               "Current k=15 deployment is nowhere near the breakdown zone — this rules "
               "out the concern that we might be silently shipping degraded output at "

@@ -2,6 +2,12 @@
 
 _Last updated: 2026-05-16. Companion to [latency_report_v2.md](latency_report_v2.md) §"Errors and the 4096-token context wall"._
 
+> ⚠️ **Critical for anyone shipping on-device Gemma 4 with LiteRT-LM**: **the default activation precision on Android GPU is FP16**, and **FP16 attention causes a deterministic decoding failure** (repetition loop into `*   *   *   *   ...`) once the total context length exceeds the artifact's calibrated zone (around total context ~5000 tokens on the Gemma 4 E4B/E2B `.litertlm` artifacts we tested). The breakdown is **silent** — no error, no warning, just garbage tokens — and it's **bit-exactly reproducible** across runs because GPU uses greedy decoding by default.
+>
+> A concrete example of this failure is captured in [`benchmark_20260516T104730_k20.json`](../latency_results/benchmark_20260516T104730_k20.json): query `long_01` at k=20, FP16 GPU, maxNumTokens=8192. The response opens with coherent medical reasoning for the first ~50 generated tokens, then deterministically collapses into an asterisk-repetition loop for the remaining ~1450 tokens. **Keep this file in the repo as the reference example of the failure mode.**
+>
+> The current MAM-AI deployment is safe because we ship `maxNumTokens=4096`, which is well below the breakdown point — but anyone lifting that cap on FP16 GPU will hit this wall. Force FP32 via the artifact-metadata override (see Step 3) if you need higher context on GPU.
+
 ## TL;DR
 
 - **GPU on Android runs attention in FP16; CPU runs FP32 (XNNPACK)** — verified from LiteRT-LM source and from strings inside `liblitertlm_jni.so`. This is why the two backends behave differently at lifted context.
