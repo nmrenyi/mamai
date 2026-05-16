@@ -53,6 +53,7 @@ class RagPipeline(application: Application) {
         JSONObject(application.assets.open("runtime_config.json").bufferedReader().use { it.readText() })
     private val appConfig: JSONObject =
         JSONObject(application.assets.open("app_config.json").bufferedReader().use { it.readText() })
+    private val engineRuntimeConfig    = runtimeConfig.getJSONObject("engine")
     private val generationConfig       = runtimeConfig.getJSONObject("generation")
     private val retrievalConfig        = runtimeConfig.getJSONObject("retrieval")
     private val contextInjectionConfig = runtimeConfig.getJSONObject("context_injection")
@@ -332,17 +333,22 @@ class RagPipeline(application: Application) {
         }
 
     private fun buildEngine(modelPath: String, backend: Backend, cacheDir: String) {
-        // Set the prompt-budget ceiling explicitly so the limit is visible at the
-        // call site rather than inferred from runtime errors at high k. Empirical
-        // testing on Gemma 4 E4B/E2B .litertlm (see latency_report_v2.md §context
-        // wall): the engine accepts higher values (8192 init OK on both backends),
-        // but on GPU the output degenerates into a repetition loop past 4096 even
-        // when no error is thrown. 4096 is the highest value that produces clean
-        // generations across both backends for this artifact family.
+        // maxNumTokens is the total context budget (prompt + generated response, equal
+        // to the KV-cache size). Sourced from runtime_config.json `engine.max_num_tokens`
+        // — single source of truth, also read by BenchmarkForegroundService for accurate
+        // metadata recording.
+        //
+        // Why the current value (4096): empirically, on Android GPU the FP16 attention
+        // kernels produce off-distribution K/V values past the artifact's calibrated
+        // zone, causing the response to deterministically collapse into a `*` repetition
+        // loop at total context ~5000 (see evaluation/reports/maxnumtoken_investigation.md).
+        // 4096 stays ~900 tokens below the cliff. To push higher on GPU, also force
+        // FP32 via the artifact's `prefer_activation_type=float32` metadata key.
+        val maxNumTokens = engineRuntimeConfig.getInt("max_num_tokens")
         val e = Engine(EngineConfig(
             modelPath = modelPath,
             backend = backend,
-            maxNumTokens = 4096,
+            maxNumTokens = maxNumTokens,
             cacheDir = cacheDir,
         ))
         e.initialize()
