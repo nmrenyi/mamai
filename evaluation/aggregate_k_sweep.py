@@ -495,6 +495,27 @@ def write_report(runs: list[dict], out_path: Path) -> None:
               "than left implicit. **k_max ≈ 17–18** for both models — a deployment "
               "ceiling driven by output quality on GPU, not by a runtime hard cap.")
     md.append("")
+    md.append("**Why the backends diverge and where exactly the GPU breakdown happens** "
+              "are answered in a follow-up investigation — see "
+              "[`maxnumtoken_investigation.md`](maxnumtoken_investigation.md). Headline "
+              "findings:")
+    md.append("")
+    md.append("- GPU attention runs FP16 by default on Android (Adreno OpenCL); CPU runs "
+              "FP32 (XNNPACK). Verified from LiteRT-LM source and from a string in the "
+              "native lib that reads *\"System's default activation type for Text decoder "
+              "is fp16\"*.")
+    md.append("- At `maxNumTokens=8192`, GPU output stays coherent for ~50 generated "
+              "tokens past the prompt end (total context ~4967), then collapses sharply "
+              "into a repetition loop at total context ~5000.")
+    md.append("- The collapse is a **decode-side** failure, not a prefill failure — "
+              "prefill over the 4917-token prompt works fine; what breaks is writing "
+              "new K/V entries to positions ≥ 4917. Most consistent with a "
+              "kernel-level boundary that FP16 has no precision headroom to absorb.")
+    md.append("- 4096 has **~900 tokens of safety margin** to the actual GPU cliff. "
+              "Current k=15 deployment is nowhere near the breakdown zone — this rules "
+              "out the concern that we might be silently shipping degraded output at "
+              "the deployed cap.")
+    md.append("")
 
     md.append("## Key findings\n")
     md.append("### 1. Prefill (TTFT) scales ~2× with parameter count on both backends")

@@ -1,6 +1,6 @@
 # MAM-AI On-Device Latency Sweep — Model × Backend × k
 
-_Generated: 2026-05-16T10:56:17_
+_Generated: 2026-05-16T14:51:07_
 
 
 ## Device & stack
@@ -239,6 +239,13 @@ The Kotlin `EngineConfig` constructor exposes a `maxNumTokens` parameter; leavin
 - **Upper-bound test (`maxNumTokens = 8192`)**: `Engine.initialize()` succeeds on both backends; the artifact is *not* hard-bounded at 4096. Previously-failing k=20 queries now run end-to-end on both backends. **However:** on CPU the output stays coherent (real medical reasoning, ends with reference numbers); on GPU the output degenerates into a long repetition loop (`*   *   *   *   ...`) past the 4096-token mark. Same artifact, same query — output diverges by backend at lifted context.
 
 **Operational conclusion:** 4096 is the highest value that produces clean generations across both backends for this artifact family, and is therefore the right value to ship. `RagPipeline.kt:buildEngine()` now passes it explicitly so the ceiling is visible at the call site rather than left implicit. **k_max ≈ 17–18** for both models — a deployment ceiling driven by output quality on GPU, not by a runtime hard cap.
+
+**Why the backends diverge and where exactly the GPU breakdown happens** are answered in a follow-up investigation — see [`maxnumtoken_investigation.md`](maxnumtoken_investigation.md). Headline findings:
+
+- GPU attention runs FP16 by default on Android (Adreno OpenCL); CPU runs FP32 (XNNPACK). Verified from LiteRT-LM source and from a string in the native lib that reads *"System's default activation type for Text decoder is fp16"*.
+- At `maxNumTokens=8192`, GPU output stays coherent for ~50 generated tokens past the prompt end (total context ~4967), then collapses sharply into a repetition loop at total context ~5000.
+- The collapse is a **decode-side** failure, not a prefill failure — prefill over the 4917-token prompt works fine; what breaks is writing new K/V entries to positions ≥ 4917. Most consistent with a kernel-level boundary that FP16 has no precision headroom to absorb.
+- 4096 has **~900 tokens of safety margin** to the actual GPU cliff. Current k=15 deployment is nowhere near the breakdown zone — this rules out the concern that we might be silently shipping degraded output at the deployed cap.
 
 ## Key findings
 
