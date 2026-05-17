@@ -1,6 +1,6 @@
 # MAM-AI On-Device Latency Sweep — Model × Backend × k
 
-_Generated: 2026-05-16T21:47:48_
+_Generated: 2026-05-17T14:18:00_
 
 
 ## Device & stack
@@ -248,7 +248,7 @@ The Kotlin `EngineConfig` constructor exposes a `maxNumTokens` parameter; leavin
 - The collapse is a **decode-side** failure, not a prefill failure — prefill over the 4917-token prompt works fine; what breaks is writing new K/V entries to positions ≥ 4917. Most consistent with a kernel-level boundary that FP16 has no precision headroom to absorb.
 - **3-rep reproducibility test (2026-05-16) returned bit-identical output** — same chars, same transition position, same head, same tail. GPU uses greedy decoding by default, so this is the FP16/kernel pipeline failing in exactly the same way every run. Rules out stochastic precision noise; the breakdown is deterministic.
 - **FP16 is confirmed as the root cause** (2026-05-16 control test): the Kotlin API doesn't expose `SetActivationDataType`, but the `.litertlm` artifact's section metadata accepts a `prefer_activation_type=float32` key that the runtime honors. With that override applied, the same query that previously degenerated on GPU produced clean medical reasoning past total context 4500.
-- **FP32 GPU latency cost** (full 8-run sweep, 2026-05-16): only **~25% slower than FP16 GPU at k=15** (~6 s extra wait per query), dominated by 2–2.5× TTFT cost. Decode is essentially identical (bandwidth-bound, so precision barely matters in steady state). Memory: KV cache doubles vs FP16, capping practical FP32 GPU maxNumTokens around 6500–7500 on this 16 GB device. FP32 GPU is therefore a **real shipping option** for use cases that want extra correctness margin or higher k — not just an experiment.
+- **FP32 GPU latency cost** (apples-to-apples FP32-vs-FP16 sweep 2026-05-17 with `artifact_fingerprint`-verified provenance, both at maxNumTokens=4096): FP32 is **~21–34% slower at total**, almost entirely from a **2.1–2.5× TTFT hit** (prefill is compute-bound; FP16 doubles arithmetic throughput on Adreno). **Decode is essentially identical** (1.0–1.2×) — bandwidth-bound, so precision barely matters in steady state. At k=15 the gap is ~8 s extra wait. Memory: KV cache doubles vs FP16, capping practical FP32 GPU maxNumTokens around 6500–7500 on this 16 GB device. FP32 GPU is therefore a **real shipping option** for use cases that want extra correctness margin or higher k — not just an experiment. See [`maxnumtoken_investigation.md`](maxnumtoken_investigation.md) Step 6 for the full 8×2 comparison table.
 - 4096 has **~900 tokens of safety margin** to the actual GPU cliff. Current k=15 deployment is nowhere near the breakdown zone — this rules out the concern that we might be silently shipping degraded output at the deployed cap.
 
 ## Key findings
