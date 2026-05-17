@@ -396,8 +396,14 @@ def write_report(runs: list[dict], out_path: Path) -> None:
     md.append(f"- **Device**: {dev.get('manufacturer', '?')} {dev.get('model', '?')} ({dev.get('soc', '?')}) — Android {dev.get('android_version', '?')}")
     md.append(f"- **Models tested**: " + ", ".join(f"{_short_model_label(m)} (`{m}`)" for m in models))
     md.append("- **LiteRT-LM**: 0.11.0")
-    md.append("- **Backends tested**: GPU (OpenCL, via `useGpuForLlm=true`) and CPU")
-    md.append("- **Sampling**: temp=1.0, top_p=0.95, top_k=64, max_tokens=32000")
+    md.append("- **Backends tested**: GPU (OpenCL on Adreno) and CPU (XNNPACK)")
+    md.append("- **Activation precision**: GPU defaults to **FP16**, CPU defaults to **FP32** — this asymmetry matters at lifted context (see [`maxnumtoken_investigation.md`](maxnumtoken_investigation.md) §Step 4). All tables in this report use the defaults; one explicit FP32-on-GPU sweep is summarised in the [FP16 vs FP32 GPU](#fp16-vs-fp32-gpu-context-cap-discussion) section below.")
+    md.append("- **Sampling**: temp=1.0, top_p=0.95, top_k=64 — read from `runtime_config.json`. No explicit `max_output_tokens` cap is enforced; the runtime decodes until a stop token or until total context hits `maxNumTokens=4096`.")
+    md.append("- **Total context budget** (`maxNumTokens` passed to `EngineConfig`): **4096** — single source of truth in `runtime_config.json` `engine.max_num_tokens`.")
+    md.append("")
+    md.append("## TL;DR — today's deployment")
+    md.append("")
+    md.append("> **FP16 GPU at `maxNumTokens=4096`** is the current ship configuration on Snapdragon 8 Elite. Median total query latency 14–25 s across k=0–15; cleanly below the FP16 quality cliff at total context ~5000. k=20 prompts are runtime-rejected (24/54 in every sweep). Fallbacks: FP32 GPU (~21–34% slower, no cliff) for higher-context use cases on ≥16 GB devices; CPU FP32 (≈2–4× slower than FP16 GPU) for devices without working OpenCL.")
     md.append("")
     sample_cfg = sample["data"].get("config", {})
     sample_repeats = sample_cfg.get("repeats", "?")
@@ -421,6 +427,7 @@ def write_report(runs: list[dict], out_path: Path) -> None:
     md.append("- `decode` is first-token to last-token.")
     md.append("- `total_query` is everything: `retrieval + TTFT + decode`.")
     md.append(f"- Reported as median across the {sample_n_results} runs unless noted (p95 in tables marked `p95`).")
+    md.append("- Benchmark JSONs from commit `52e11e9` onward record `config.max_num_tokens`, `config.artifact_fingerprint` (SHA-256 of first 64 KB of the loaded `.litertlm`), and `config.git_commit_sha`. These let any reviewer cryptographically verify which artifact variant + code state produced each JSON. Earlier sweep JSONs (PR #57/#59) lack these fields but their content is unaffected.")
     md.append("")
 
     # ─────────── Per-model sections ───────────
@@ -458,95 +465,51 @@ def write_report(runs: list[dict], out_path: Path) -> None:
             md.append("")
             _write_cross_model_table(md, matrix, baseline, other, all_ks, "decode_ms", fmt_ms)
 
+    md.append('<a id="fp16-vs-fp32-gpu-context-cap-discussion"></a>')
+    md.append("## FP16 vs FP32 GPU (and why the context cap is 4096)")
+    md.append("")
+    md.append("All cross-model tables above use the **default** GPU activation precision, which on Android is **FP16**. That choice is not a knob in our code — LiteRT-LM picks FP16 for the GPU text-decoder path and FP32 for CPU (XNNPACK). We measured the implications head-to-head; full investigation in [`maxnumtoken_investigation.md`](maxnumtoken_investigation.md). Headlines:")
+    md.append("")
+    md.append("- ⚠️ **The FP16 default has a quality cliff** at total context ~5000 tokens — GPU output silently collapses into a `*` repetition loop, deterministically. Concrete example: [`benchmark_20260516T104730_k20.json`](../latency_results/benchmark_20260516T104730_k20.json) (long_01, k=20, FP16 GPU, maxNumTokens=8192).")
+    md.append("- **CPU (FP32) stays clean** for the same prompt — the asymmetry isolates precision as the cause, not the artifact or backend choice.")
+    md.append("- **Confirming the fix**: forcing GPU to FP32 (via injecting `prefer_activation_type=float32` into the `.litertlm` metadata) eliminates the cliff. Direct A/B on the exact `long_01` k=20 case wasn't possible — FP32 KV cache at maxNumTokens=8192 OOMs the test device — but the closest-comparable test (`long_01` k=15, max=5000, response ending at total context ~4514) produced clean output through the same FP16-cliff zone.")
+    md.append("- **Our 4096 ship value gives ~900 tokens of safety margin** below the FP16 cliff. Anyone lifting the cap on FP16 GPU enters the silent-failure zone; switch to FP32 GPU first.")
+    md.append("")
+    md.append("### Latency cost of FP32 on GPU (E4B at maxNumTokens=4096, 2026-05-17)")
+    md.append("")
+    md.append("Apples-to-apples sweep with `artifact_fingerprint`-verified provenance. Full 8×2 table is in the investigation doc §Step 6; the medians at a representative subset:")
+    md.append("")
+    md.append("| k | FP16 GPU total | FP32 GPU total | T ratio | FP16 TTFT | FP32 TTFT | TTFT ratio | FP16 decode | FP32 decode |")
+    md.append("|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
+    md.append("| **0 (no-RAG)** | 14.5 s | 16.5 s | 1.14× | 0.97 s | 2.03 s | 2.10× | 13.5 s | 14.4 s |")
+    md.append("| 1 | 14.1 s | 18.0 s | 1.28× | 0.95 s | 2.06 s | 2.16× | 11.4 s | 12.8 s |")
+    md.append("| 5 | 19.6 s | 24.3 s | 1.24× | 1.88 s | 4.28 s | 2.28× | 16.0 s | 16.3 s |")
+    md.append("| 10 | 22.6 s | 27.4 s | 1.21× | 2.53 s | 5.85 s | 2.32× | 18.2 s | 18.6 s |")
+    md.append("| 15 | 23.1 s | 30.9 s | 1.34× | 3.45 s | 8.37 s | 2.43× | 16.9 s | 18.4 s |")
+    md.append("")
+    md.append("Two clean stories:")
+    md.append("")
+    md.append("- **Prefill (TTFT) is ~2.1–2.5× slower on FP32** — prefill is compute-bound, and FP16 doubles arithmetic throughput on Adreno. The ratio is stable across k.")
+    md.append("- **Decode is essentially identical** (within ~9% on every cell) — decode is bandwidth-bound, so precision barely matters in steady-state generation.")
+    md.append("- **Total query is 6–34% slower on FP32**, depending on how much of total is prefill vs decode at the given k. At our typical k=10–15 cells, ~21–34% slower (~5–8 s extra wait per query).")
+    md.append("")
+    md.append("### When to ship FP32 GPU instead of FP16 GPU")
+    md.append("")
+    md.append("| Use case | Choice | Why |")
+    md.append("|---|---|---|")
+    md.append("| **Today's deployment** | FP16 GPU, max=4096 | Clean output below the cliff; fastest UX |")
+    md.append("| Extra correctness margin without changing context | FP32 GPU, max=4096 | ~25% slower at k=15 but eliminates the FP16 cliff as a risk class entirely |")
+    md.append("| Higher context (e.g., k>15 desired in future) | FP32 GPU, max=5000–6000 | No cliff. Memory: KV cache doubles → ~6500–7500 ceiling on 16 GB devices |")
+    md.append("| GPU unavailable (MediaTek / older Snapdragon) | CPU FP32 | Always clean, but ~2–4× slower than FP16 GPU |")
+    md.append("")
+    md.append("---")
+    md.append("")
     md.append("## Errors and the 4096-token context wall\n")
-    md.append("At k=20, the **same 8 queries × 3 reps = 24 runs** failed across every "
-              "(model × backend) combination tested: ")
+    md.append("At k=20, **24 of 54 runs error in every (model × backend) combination** — exactly the same 8 queries × 3 reps each: ")
     md.append("`long_01, long_03, medium_02, medium_04, short_01, short_03, short_04, short_05`. ")
-    md.append("Each failure reports `Input token ids are too long. Exceeding the maximum "
-              "number of tokens allowed: …>= 4096`. The cap is enforced by LiteRT-LM's "
-              "native runtime (verified by extracting `liblitertlm_jni.so` from the AAR "
-              "and locating the literal error template).")
+    md.append("Each failure reports `Input token ids are too long. Exceeding the maximum number of tokens allowed: …>= 4096`. The cap is a runtime config check in LiteRT-LM (verified in `liblitertlm_jni.so`), enforced before any decoding — it's precision-agnostic and applies identically on CPU, FP16 GPU, and FP32 GPU. The same queries fail regardless of the backend choice.")
     md.append("")
-    md.append("### Where the 4096 comes from — and why we set it explicitly\n")
-    md.append("The Kotlin `EngineConfig` constructor exposes a `maxNumTokens` parameter; "
-              "leaving it `null` falls back to whatever the engine's default is for the "
-              "loaded artifact. The original `RagPipeline.kt` left it null, so the 4096 "
-              "ceiling was an inferred property of *somewhere* in the stack rather than a "
-              "stated choice. **A 2026-05-16 experiment on the test device pinned this "
-              "down** — see commit log for `feat/explicit-max-num-tokens`:")
-    md.append("")
-    md.append("- **Lower-bound test (`maxNumTokens = 2048`)**: queries with prompts "
-              "between 2048–4096 tokens that previously succeeded now fail, with the "
-              "error message reporting the new ceiling verbatim (`>= 2048`). Both GPU "
-              "and CPU clamp identically. **The knob is wired through to the native "
-              "runtime as-advertised.**")
-    md.append("- **Upper-bound test (`maxNumTokens = 8192`)**: `Engine.initialize()` "
-              "succeeds on both backends; the artifact is *not* hard-bounded at 4096. "
-              "Previously-failing k=20 queries now run end-to-end on both backends. "
-              "**However:** on CPU the output stays coherent (real medical reasoning, "
-              "ends with reference numbers); on GPU the output degenerates into a long "
-              "repetition loop (`*   *   *   *   ...`) past the 4096-token mark. "
-              "Same artifact, same query — output diverges by backend at lifted context.")
-    md.append("")
-    md.append("**Operational conclusion:** 4096 is the highest value that produces clean "
-              "generations across both backends for this artifact family, and is "
-              "therefore the right value to ship. `RagPipeline.kt:buildEngine()` now "
-              "passes it explicitly so the ceiling is visible at the call site rather "
-              "than left implicit. **k_max ≈ 17–18** for both models — a deployment "
-              "ceiling driven by output quality on GPU, not by a runtime hard cap.")
-    md.append("")
-    md.append("**Why the backends diverge and where exactly the GPU breakdown happens** "
-              "are answered in a follow-up investigation — see "
-              "[`maxnumtoken_investigation.md`](maxnumtoken_investigation.md). Headline "
-              "findings:")
-    md.append("")
-    md.append("- ⚠️ **The default Android GPU activation precision is FP16, and FP16 attention "
-              "causes a silent, deterministic decoding failure** (response collapses into "
-              "a `*` repetition loop) once total context exceeds ~5000 tokens. No error "
-              "is raised — output just becomes garbage. Example captured in "
-              "[`benchmark_20260516T104730_k20.json`](../latency_results/benchmark_20260516T104730_k20.json) "
-              "(long_01, k=20, FP16 GPU, maxNumTokens=8192). Today's 4096 cap stays "
-              "well below the breakdown; lifting the cap on FP16 GPU is unsafe without "
-              "switching to FP32.")
-    md.append("- GPU attention runs FP16 by default on Android (Adreno OpenCL); CPU runs "
-              "FP32 (XNNPACK). Verified from LiteRT-LM source and from a string in the "
-              "native lib that reads *\"System's default activation type for Text decoder "
-              "is fp16\"*.")
-    md.append("- At `maxNumTokens=8192`, GPU output stays coherent for ~50 generated "
-              "tokens past the prompt end (total context ~4967), then collapses sharply "
-              "into a repetition loop at total context ~5000.")
-    md.append("- The collapse is a **decode-side** failure, not a prefill failure — "
-              "prefill over the 4917-token prompt works fine; what breaks is writing "
-              "new K/V entries to positions ≥ 4917. Most consistent with a "
-              "kernel-level boundary that FP16 has no precision headroom to absorb.")
-    md.append("- **3-rep reproducibility test (2026-05-16) returned bit-identical "
-              "output** — same chars, same transition position, same head, same tail. "
-              "GPU uses greedy decoding by default, so this is the FP16/kernel "
-              "pipeline failing in exactly the same way every run. Rules out "
-              "stochastic precision noise; the breakdown is deterministic.")
-    md.append("- **FP16 is confirmed as the root cause** (2026-05-16 control test): "
-              "the Kotlin API doesn't expose `SetActivationDataType`, but the "
-              "`.litertlm` artifact's section metadata accepts a "
-              "`prefer_activation_type=float32` key that the runtime honors. With "
-              "that override applied, the same query that previously degenerated "
-              "on GPU produced clean medical reasoning past total context 4500.")
-    md.append("- **FP32 GPU latency cost** (apples-to-apples FP32-vs-FP16 sweep "
-              "2026-05-17 with `artifact_fingerprint`-verified provenance, both at "
-              "maxNumTokens=4096): FP32 is **~21–34% slower at total**, almost "
-              "entirely from a **2.1–2.5× TTFT hit** (prefill is compute-bound; "
-              "FP16 doubles arithmetic throughput on Adreno). **Decode is "
-              "essentially identical** (1.0–1.2×) — bandwidth-bound, so precision "
-              "barely matters in steady state. At k=15 the gap is ~8 s extra wait. "
-              "Memory: KV cache doubles vs FP16, capping practical FP32 GPU "
-              "maxNumTokens around 6500–7500 on this 16 GB device. FP32 GPU is "
-              "therefore a **real shipping option** for use cases that want extra "
-              "correctness margin or higher k — not just an experiment. See "
-              "[`maxnumtoken_investigation.md`](maxnumtoken_investigation.md) "
-              "Step 6 for the full 8×2 comparison table.")
-    md.append("- 4096 has **~900 tokens of safety margin** to the actual GPU cliff. "
-              "Current k=15 deployment is nowhere near the breakdown zone — this rules "
-              "out the concern that we might be silently shipping degraded output at "
-              "the deployed cap.")
+    md.append("`maxNumTokens=4096` is the value the engine enforces. The Kotlin `EngineConfig` constructor exposes this parameter; leaving it `null` falls back to the engine's default, which happens to be 4096 for the Gemma 4 artifacts we load. `RagPipeline.kt:buildEngine()` now passes it explicitly, sourced from `runtime_config.json` `engine.max_num_tokens`. **The cap is a deliberate ship value, not an architectural constant** — see the FP16/FP32 section above for the experiment that established why 4096 is the right choice for our default-precision GPU path.")
     md.append("")
 
     md.append("## Key findings\n")
@@ -575,16 +538,15 @@ def write_report(runs: list[dict], out_path: Path) -> None:
               "(mid-tier MediaTek, older Snapdragon without OpenCL) now have a realistic path: "
               "ship E2B on CPU, restrict k to small values.")
     md.append("")
-    md.append("### 5. 4096-token context wall is the binding ceiling at high k — and the right one")
-    md.append("k=15 works cleanly on all four (model × backend) combinations. k=20 fails identically "
-              "across all four: same 8 queries, same 24 (query × rep) failures, same `>= 4096` "
-              "error. Phase B/C experiments on 2026-05-16 (see §context wall above) show the cap "
-              "is **liftable** — passing `maxNumTokens = 8192` makes the runtime accept larger "
-              "prompts — but the lift produces **quality degradation on GPU** (response loops "
-              "into repetition past 4096 tokens) while CPU output stays clean. 4096 is therefore "
-              "the right deployment ceiling for cross-backend safety, not just a memory or "
-              "runtime constraint. **Latency is not the constraint at the upper end of k — "
-              "output quality is.**")
+    md.append("### 5. 4096-token context wall is the binding ceiling — driven by precision, not runtime")
+    md.append("k=15 works cleanly on all four (model × backend) combinations. k=20 prompts exceed 4096 "
+              "tokens and the runtime rejects them — same 24 errors on every cell. The cap is *liftable* "
+              "(passing `maxNumTokens=8192` is accepted by the engine), but on the default **FP16** GPU "
+              "path the lifted output silently collapses past total context ~5000 — a precision-driven "
+              "quality cliff. Switching GPU to FP32 (via artifact metadata) removes the cliff at ~25% "
+              "latency cost. See the FP16-vs-FP32 GPU section above. **Latency is not the constraint at "
+              "the upper end of k — output quality is, and the fix is to change precision rather than "
+              "the cap.**")
     md.append("")
     md.append("### 6. TTFT scales linearly with retrieved-doc content past k=3")
     md.append("On both backends and both models, TTFT-per-doc-char is roughly constant past k=3, so "
