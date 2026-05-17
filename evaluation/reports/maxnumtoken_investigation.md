@@ -1,6 +1,6 @@
 # Investigation: What the 4096 `maxNumTokens` Wall Actually Is
 
-_Last updated: 2026-05-16. Companion to [latency_report_v2.md](latency_report_v2.md) §"Errors and the 4096-token context wall"._
+_Last updated: 2026-05-17. Companion to [latency_report_v2.md](latency_report_v2.md) §"Errors and the 4096-token context wall"._
 
 > ⚠️ **Critical for anyone shipping on-device Gemma 4 with LiteRT-LM**: **the default activation precision on Android GPU is FP16**, and **FP16 attention causes a deterministic decoding failure** (repetition loop into `*   *   *   *   ...`) once the total context length exceeds the artifact's calibrated zone (around total context ~5000 tokens on the Gemma 4 E4B/E2B `.litertlm` artifacts we tested). The breakdown is **silent** — no error, no warning, just garbage tokens — and it's **bit-exactly reproducible** across runs because GPU uses greedy decoding by default.
 >
