@@ -351,6 +351,69 @@ If we ever want to push past 4096 in production, FP32 GPU becomes the right back
 
 ---
 
+## Step 6 — Apples-to-apples FP32 vs FP16 GPU sweep with instrumented JSONs (2026-05-17)
+
+Step 5's data was correct directionally, but its JSONs lacked the fields needed to self-verify which precision condition each run used. After landing the instrumentation commit (`52e11e9`) — which:
+
+- consolidates `max_num_tokens` to a single source of truth in `runtime_config.json`,
+- removes the hardcoded `max_tokens=32000` fiction the benchmark used to record,
+- adds `artifact_fingerprint`, `git_commit_sha`, and `litertlm_version` to every benchmark JSON's `config` block,
+
+…we re-ran both sweeps overnight at maxNumTokens=4096 GPU: 8 FP32 runs (k ∈ {0, 1, 3, 5, 7, 10, 15, 20}), then push original artifact, then 8 FP16 runs. Total wall-clock ~10 hours. All 16 JSONs carry `artifact_fingerprint`-verified provenance and the `git_commit_sha` of the instrumentation commit.
+
+### Result — full comparison
+
+| k | FP16 total | FP32 total | T ratio | FP16 TTFT | FP32 TTFT | TTFT ratio | FP16 decode | FP32 decode | dec ratio |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| **0 (no-RAG)** | 14.5 s | 16.5 s | **1.14×** | 0.97 s | 2.03 s | **2.10×** | 13.5 s | 14.4 s | 1.07× |
+| 1 | 14.1 s | 18.0 s | **1.28×** | 0.95 s | 2.06 s | **2.16×** | 11.4 s | 12.8 s | 1.12× |
+| 3 | 21.0 s | 22.2 s | **1.06×** | 0.99 s | 2.15 s | **2.17×** | 16.4 s | 16.2 s | 0.99× |
+| 5 | 19.6 s | 24.3 s | **1.24×** | 1.88 s | 4.28 s | **2.28×** | 16.0 s | 16.3 s | 1.02× |
+| 7 | 20.9 s | 27.3 s | **1.30×** | 1.91 s | 4.38 s | **2.29×** | 17.3 s | 19.0 s | 1.10× |
+| 10 | 22.6 s | 27.4 s | **1.21×** | 2.53 s | 5.85 s | **2.32×** | 18.2 s | 18.6 s | 1.02× |
+| 15 | 23.1 s | 30.9 s | **1.34×** | 3.45 s | 8.37 s | **2.43×** | 16.9 s | 18.4 s | 1.09× |
+| 20 (ok only) | 20.7 s | 27.3 s | **1.32×** | 3.99 s | 9.79 s | **2.46×** | 14.8 s | 18.0 s | 1.22× |
+
+Errors at k=20: 24 on **both** FP32 and FP16 (identical 8 queries — confirms the 4096 prompt-cap rejection is precision-agnostic, just a runtime config check).
+
+### Key findings — cleanly separated and confirmed
+
+**1. TTFT (prefill) is consistently ~2.1–2.5× slower on FP32.** Across every k, the ratio is narrow and predictable, growing modestly with prompt length. This is the compute-bound part: prefill processes the whole prompt in a parallel forward pass and FP16 doubles arithmetic throughput on Adreno. Halving precision halves the parallel-compute time; the ~2.2× ratio matches that prediction within noise.
+
+**2. Decode (generation) is essentially identical** between FP32 and FP16 — every ratio in the decode column is between 0.99× and 1.22×. **Decode is bandwidth-bound** (sequential token generation requires loading weights through memory each step), so the FP16/FP32 distinction barely matters in steady state.
+
+**3. Total query latency slowdown averages ~1.24×** (range 1.06×–1.34×), with the ratio mostly tracking how much of total query time is prefill vs decode. Smaller k → relatively more prefill → larger FP32 hit. The "worst case" we measured was k=15 at 1.34× (~8 s extra wait per query); typical k (k=1, 3, 5) sits around 1.06×–1.28×.
+
+### Confirmation — these numbers match Step 5
+
+The Step 5 data (yesterday, before instrumentation) gave ratios in the same range (1.06×–1.38×). The instrumented sweep confirms those numbers were genuine, not artifacts of timing variance. We now have JSON-level provenance for both sides of the comparison.
+
+### Verified-mapping at the data level
+
+Spot-checks of the JSONs verify the instrumentation matches reality:
+
+- FP32 sweep JSONs all carry `artifact_fingerprint = 9fdf9dd11f4e79507bc06df5ba0ddbf33eb12ed8524852d728dfec72d1aadabc` (FP32-tagged build)
+- FP16 sweep JSONs all carry `artifact_fingerprint = cfa067b69af3ccd147c234be3058525774379c1349bacf0b3e85d7a26a42b868` (FP16 default)
+- All 16 JSONs carry `git_commit_sha = 52e11e9` and `max_num_tokens = 4096`
+- TTFT-from-logcat is consistent with the recorded precision (FP16 ~1 s at k=1, FP32 ~2 s at k=1)
+
+A reviewer reading any one of these JSONs cold can cross-reference the fingerprint against the mapping table above and immediately know which precision condition the run used.
+
+### Deployment implications (refined from Step 5)
+
+The shipping decision matrix is now well-anchored:
+
+| Config | Median latency at k=15 | KV-cache memory | Quality | When to ship |
+|---|---|---|---|---|
+| **FP16 GPU, max=4096** | **23.1 s** | ~2.9 GB | Clean (below cliff) | **Today's deployment** |
+| FP32 GPU, max=4096 | 30.9 s (+34%) | ~2.9 GB | Clean (no FP16 cliff to worry about) | If we want extra correctness margin |
+| FP32 GPU, max=5500 | ~33 s + lift | ~3.5 GB | Clean past 4096 (FP16 would degenerate) | If we want higher k *and* device has ≥12 GB |
+| CPU FP32, max=4096 | ~85 s | ~2.9 GB | Clean | Fallback when GPU isn't available |
+
+The Step 5 narrative stands: **at maxNumTokens=4096, FP16 GPU is the right ship choice** (cleanest UX, no quality cost since we stay below the FP16 cliff at ~5000 total context); FP32 GPU is a real fallback option for either extra correctness margin or future higher-k use cases.
+
+---
+
 ## Reference: artifact fingerprint mapping
 
 Benchmark JSONs from commit `52e11e9` onward record an `artifact_fingerprint` field in `config.artifact_fingerprint` — the SHA-256 of the first 64 KB of the loaded `.litertlm` file. This uniquely identifies which artifact variant was loaded at benchmark time, **since both the FP32-tagged rebuild and the original FP16 default share the same filename** (`gemma-4-E4B-it.litertlm`). Without this, a reviewer reading a JSON cold cannot tell which precision condition the run used.
@@ -407,7 +470,7 @@ The deployment recommendation is unchanged (4096 stays the ship value with FP16 
 - [evaluation/latency_results/benchmark_20260516T104730_k20.json](../latency_results/benchmark_20260516T104730_k20.json) — GPU at maxNumTokens=8192, long_01, k=20, 1 rep (degenerate output — the one analyzed in Step 1)
 - [evaluation/latency_results/benchmark_20260516T151036_k20.json](../latency_results/benchmark_20260516T151036_k20.json) — GPU at maxNumTokens=8192, long_01, k=20, 3 reps (bit-identical degenerate output — Step 2 reproducibility)
 - [evaluation/latency_results/benchmark_20260516T162810_k15.json](../latency_results/benchmark_20260516T162810_k15.json) — **FP32 GPU** at maxNumTokens=5000, long_01, k=15 (clean output — Step 3 control test)
-- **FP32 GPU sweep at maxNumTokens=4096 (Step 5)** — full 8-run sweep, 2026-05-16:
+- **FP32 GPU sweep at maxNumTokens=4096 (Step 5)** — full 8-run sweep, 2026-05-16, pre-instrumentation:
   - [benchmark_20260516T164144_k1.json](../latency_results/benchmark_20260516T164144_k1.json) — k=1
   - [benchmark_20260516T170710_k3.json](../latency_results/benchmark_20260516T170710_k3.json) — k=3
   - [benchmark_20260516T173631_k5.json](../latency_results/benchmark_20260516T173631_k5.json) — k=5
@@ -416,5 +479,24 @@ The deployment recommendation is unchanged (4096 stays the ship value with FP16 
   - [benchmark_20260516T191934_k15.json](../latency_results/benchmark_20260516T191934_k15.json) — k=15
   - [benchmark_20260516T195750_k20.json](../latency_results/benchmark_20260516T195750_k20.json) — k=20 (24 errors / same 8 queries as FP16 baseline)
   - [benchmark_20260516T202455.json](../latency_results/benchmark_20260516T202455.json) — No-RAG baseline
+- **Step 6 instrumented sweeps (2026-05-17, all carry `git_commit_sha=52e11e9`)** — apples-to-apples FP32 vs FP16 with `artifact_fingerprint`-verified provenance:
+  - **FP32 GPU** (fingerprint `9fdf9dd1...`):
+    - [benchmark_20260516T222725_k1.json](../latency_results/benchmark_20260516T222725_k1.json) — k=1
+    - [benchmark_20260517T064848_k3.json](../latency_results/benchmark_20260517T064848_k3.json) — k=3
+    - [benchmark_20260517T071939_k5.json](../latency_results/benchmark_20260517T071939_k5.json) — k=5
+    - [benchmark_20260517T075203_k7.json](../latency_results/benchmark_20260517T075203_k7.json) — k=7
+    - [benchmark_20260517T082707_k10.json](../latency_results/benchmark_20260517T082707_k10.json) — k=10
+    - [benchmark_20260517T090233_k15.json](../latency_results/benchmark_20260517T090233_k15.json) — k=15
+    - [benchmark_20260517T094050_k20.json](../latency_results/benchmark_20260517T094050_k20.json) — k=20
+    - [benchmark_20260517T100654.json](../latency_results/benchmark_20260517T100654.json) — No-RAG
+  - **FP16 GPU** (fingerprint `cfa067b6...`):
+    - [benchmark_20260517T103622_k1.json](../latency_results/benchmark_20260517T103622_k1.json) — k=1
+    - [benchmark_20260517T105948_k3.json](../latency_results/benchmark_20260517T105948_k3.json) — k=3
+    - [benchmark_20260517T112913_k5.json](../latency_results/benchmark_20260517T112913_k5.json) — k=5
+    - [benchmark_20260517T115742_k7.json](../latency_results/benchmark_20260517T115742_k7.json) — k=7
+    - [benchmark_20260517T122632_k10.json](../latency_results/benchmark_20260517T122632_k10.json) — k=10
+    - [benchmark_20260517T125701_k15.json](../latency_results/benchmark_20260517T125701_k15.json) — k=15
+    - [benchmark_20260517T132844_k20.json](../latency_results/benchmark_20260517T132844_k20.json) — k=20
+    - [benchmark_20260517T135131.json](../latency_results/benchmark_20260517T135131.json) — No-RAG
 - LiteRT-LM source: <https://github.com/google-ai-edge/LiteRT-LM>
 - [app/android/app/src/main/kotlin/com/example/app/RagPipeline.kt:buildEngine()](../../app/android/app/src/main/kotlin/com/example/app/RagPipeline.kt) — where `maxNumTokens = 4096` is set
