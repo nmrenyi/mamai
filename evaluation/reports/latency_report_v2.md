@@ -1,12 +1,12 @@
 # MAM-AI On-Device Latency Sweep — Model × Backend × k
 
-_Generated: 2026-05-17T14:48:00_
+_Generated: 2026-05-17T14:50:22_
 
 
 ## Device & stack
 
 - **Device**: OnePlus OPD2413 (SM8750P) — Android 15
-- **Models tested**: Gemma 4 E2B (`gemma-4-E2B-it.litertlm`), Gemma 4 E4B (`gemma-4-E4B-it.litertlm`)
+- **Models tested**: Gemma 4 E4B (`gemma-4-E4B-it.litertlm`), Gemma 4 E2B (`gemma-4-E2B-it.litertlm`)
 - **LiteRT-LM**: 0.11.0
 - **Backends tested**: GPU (OpenCL on Adreno) and CPU (XNNPACK)
 - **Activation precision**: GPU defaults to **FP16**, CPU defaults to **FP32** — this asymmetry matters at lifted context (see [`maxnumtoken_investigation.md`](maxnumtoken_investigation.md) §Step 4). All tables in this report use the defaults; one explicit FP32-on-GPU sweep is summarised in the FP16-vs-FP32 GPU section below.
@@ -26,60 +26,6 @@ Per (model × backend × k) configuration: 18 (query × mode) cells × 3 repeats
 - `total_query` is everything: `retrieval + TTFT + decode`.
 - Reported as median across the 54 runs unless noted (p95 in tables marked `p95`).
 - Benchmark JSONs from commit `52e11e9` onward record `config.max_num_tokens`, `config.artifact_fingerprint` (SHA-256 of first 64 KB of the loaded `.litertlm`), and `config.git_commit_sha`. These let any reviewer cryptographically verify which artifact variant + code state produced each JSON. Earlier sweep JSONs (PR #57/#59) lack these fields but their content is unaffected.
-
-## Gemma 4 E2B (`gemma-4-E2B-it.litertlm`)
-
-### Median total query latency (seconds)
-
-| k | doc_chars med | GPU short / med / long | CPU short / med / long | CPU÷GPU |
-|---:|---:|---:|---:|---:|
-| **0 (no-RAG)** | 0 | 7.9 / 8.1 / 10.8 | 13.2 / 14.1 / 16.0 | 1.60× |
-| 1 | 561 | 11.4 / 11.8 / 12.8 | 13.0 / 16.3 / 17.5 | 1.35× |
-| 3 | 2098 | 12.8 / 13.8 / 16.5 | 19.1 / 22.0 / 22.5 | 1.44× |
-| 5 | 3547 | 9.9 / 14.2 / 14.0 | 26.3 / 27.6 / 28.6 | 2.36× |
-| 7 | 5139 | 12.8 / 14.3 / 17.6 | 23.5 / 32.0 / 33.2 | 1.87× |
-| 10 | 7482 | 15.2 / 14.6 / 17.9 | 23.4 / 26.2 / 27.7 | 1.68× |
-| 15 | 11297 | 13.0 / 12.4 / 14.8 | 31.0 / 38.2 / 40.7 | 2.80× |
-| 20 | 14520 | 19.3 / 15.8 / 14.3 | 33.4 / 39.8 / 44.5 | 2.28× |
-
-### TTFT (ms, median)
-
-| k | doc_chars med | GPU TTFT | CPU TTFT | CPU÷GPU |
-|---:|---:|---:|---:|---:|
-| **0 (no-RAG)** | 0 | 429 | 5564 | 13.0× |
-| 1 | 561 | 412 | 5355 | 13.0× |
-| 3 | 2098 | 445 | 7394 | 16.6× |
-| 5 | 3547 | 793 | 14604 | 18.4× |
-| 7 | 5139 | 819 | 14577 | 17.8× |
-| 10 | 7482 | 1074 | 13635 | 12.7× |
-| 15 | 11297 | 1479 | 21368 | 14.4× |
-| 20 | 14520 | 1722 | 22947 | 13.3× |
-
-### Decode (ms, median)
-
-| k | GPU decode | CPU decode | CPU÷GPU |
-|---:|---:|---:|---:|
-| **0 (no-RAG)** | 8263 | 8174 | 0.99× |
-| 1 | 7573 | 6764 | 0.89× |
-| 3 | 10223 | 9584 | 0.94× |
-| 5 | 9052 | 9571 | 1.06× |
-| 7 | 10723 | 13451 | 1.25× |
-| 10 | 10713 | 11870 | 1.11× |
-| 15 | 9664 | 9920 | 1.03× |
-| 20 | 11036 | 10697 | 0.97× |
-
-### p95 total query latency (s)
-
-| k | GPU p95 | CPU p95 |
-|---:|---:|---:|
-| **0 (no-RAG)** | 11.4 | 17.4 |
-| 1 | 17.7 | 19.1 |
-| 3 | 19.7 | 35.8 |
-| 5 | 21.2 | 35.1 |
-| 7 | 19.4 | 41.0 |
-| 10 | 23.8 | 37.9 |
-| 15 | 18.1 | 45.2 |
-| 20 | 22.2 | 50.4 |
 
 ## Gemma 4 E4B (`gemma-4-E4B-it.litertlm`)
 
@@ -134,6 +80,60 @@ Per (model × backend × k) configuration: 18 (query × mode) cells × 3 repeats
 | 10 | 29.0 | 84.5 |
 | 15 | 30.6 | 112.7 |
 | 20 | 35.3 | 104.9 |
+
+## Gemma 4 E2B (`gemma-4-E2B-it.litertlm`)
+
+### Median total query latency (seconds)
+
+| k | doc_chars med | GPU short / med / long | CPU short / med / long | CPU÷GPU |
+|---:|---:|---:|---:|---:|
+| **0 (no-RAG)** | 0 | 7.9 / 8.1 / 10.8 | 13.2 / 14.1 / 16.0 | 1.60× |
+| 1 | 561 | 11.4 / 11.8 / 12.8 | 13.0 / 16.3 / 17.5 | 1.35× |
+| 3 | 2098 | 12.8 / 13.8 / 16.5 | 19.1 / 22.0 / 22.5 | 1.44× |
+| 5 | 3547 | 9.9 / 14.2 / 14.0 | 26.3 / 27.6 / 28.6 | 2.36× |
+| 7 | 5139 | 12.8 / 14.3 / 17.6 | 23.5 / 32.0 / 33.2 | 1.87× |
+| 10 | 7482 | 15.2 / 14.6 / 17.9 | 23.4 / 26.2 / 27.7 | 1.68× |
+| 15 | 11297 | 13.0 / 12.4 / 14.8 | 31.0 / 38.2 / 40.7 | 2.80× |
+| 20 | 14520 | 19.3 / 15.8 / 14.3 | 33.4 / 39.8 / 44.5 | 2.28× |
+
+### TTFT (ms, median)
+
+| k | doc_chars med | GPU TTFT | CPU TTFT | CPU÷GPU |
+|---:|---:|---:|---:|---:|
+| **0 (no-RAG)** | 0 | 429 | 5564 | 13.0× |
+| 1 | 561 | 412 | 5355 | 13.0× |
+| 3 | 2098 | 445 | 7394 | 16.6× |
+| 5 | 3547 | 793 | 14604 | 18.4× |
+| 7 | 5139 | 819 | 14577 | 17.8× |
+| 10 | 7482 | 1074 | 13635 | 12.7× |
+| 15 | 11297 | 1479 | 21368 | 14.4× |
+| 20 | 14520 | 1722 | 22947 | 13.3× |
+
+### Decode (ms, median)
+
+| k | GPU decode | CPU decode | CPU÷GPU |
+|---:|---:|---:|---:|
+| **0 (no-RAG)** | 8263 | 8174 | 0.99× |
+| 1 | 7573 | 6764 | 0.89× |
+| 3 | 10223 | 9584 | 0.94× |
+| 5 | 9052 | 9571 | 1.06× |
+| 7 | 10723 | 13451 | 1.25× |
+| 10 | 10713 | 11870 | 1.11× |
+| 15 | 9664 | 9920 | 1.03× |
+| 20 | 11036 | 10697 | 0.97× |
+
+### p95 total query latency (s)
+
+| k | GPU p95 | CPU p95 |
+|---:|---:|---:|
+| **0 (no-RAG)** | 11.4 | 17.4 |
+| 1 | 17.7 | 19.1 |
+| 3 | 19.7 | 35.8 |
+| 5 | 21.2 | 35.1 |
+| 7 | 19.4 | 41.0 |
+| 10 | 23.8 | 37.9 |
+| 15 | 18.1 | 45.2 |
+| 20 | 22.2 | 50.4 |
 
 ## Cross-model comparison
 

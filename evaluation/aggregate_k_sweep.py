@@ -359,7 +359,14 @@ def write_report(runs: list[dict], out_path: Path) -> None:
             "this aggregator."
         )
 
-    models = sorted(set(m for (m, _b, _k) in matrix.keys()))
+    # Order: production-deployed model first (currently E4B), then others
+    # alphabetically. Keeps per-model sections + the cross-model comparison
+    # baseline consistent.
+    def _model_priority(m: str) -> tuple[int, str]:
+        if m == "gemma-4-E4B-it.litertlm":
+            return (0, m)
+        return (1, m)
+    models = sorted(set(m for (m, _b, _k) in matrix.keys()), key=_model_priority)
     all_ks = sorted(set(k for (_m, _b, k) in matrix.keys()))
 
     sample = next(iter(matrix.values()))
