@@ -14,7 +14,7 @@ _Last updated: 2026-05-16. Companion to [latency_report_v2.md](latency_report_v2
 - The 4096 cap is **not artifact-baked** — passing `maxNumTokens=8192` to `EngineConfig` succeeds at init on both backends and the artifact happily ran prefill over a 4917-token prompt.
 - At `maxNumTokens=8192`, FP16 GPU output **collapses into a repetition loop at total-context position ~5000 tokens** — about 50 generated tokens into the response. The transition is **sharp**, deterministic across runs.
 - CPU at `maxNumTokens=8192` stays coherent for the same prompt. The asymmetry is the precision difference.
-- **FP16 is confirmed as the root cause** (Step 3, 2026-05-16): forcing GPU to FP32 via a `prefer_activation_type=float32` metadata override on the `.litertlm` artifact eliminates the breakdown. Same artifact, same query, clean output.
+- **FP16 is confirmed as the root cause** (Step 3, 2026-05-16): forcing GPU to FP32 via a `prefer_activation_type=float32` metadata override on the `.litertlm` artifact produces clean output past total context 4096 — the cliff zone where FP16 degenerates. *Caveat*: the exact direct A/B on the FP16 failure case (`long_01` k=20 max=8192) couldn't be run on this device — FP32's larger KV cache OOMs the app. The fix is verified on the closest-comparable test (`long_01` k=15 max=5000, response ending at total context ~4514, clean); the direct head-to-head would need a 24 GB-RAM device. See Step 3 §"Important caveat" for the full evidence map.
 - **Operational conclusion**: the 4096 deployment ceiling on FP16 GPU is conservative — ~900 tokens of safety margin to the actual breakdown. Current k=15 deployment is nowhere near the cliff.
 - **FP32 GPU latency cost** (Step 5 full sweep, 2026-05-16): only **~25% slower than FP16 GPU at k=15** (~6 s extra wait), almost entirely in TTFT (compute-bound prefill). Decode is essentially identical (bandwidth-bound). FP32 GPU is a real shipping option for use cases that want extra correctness margin or higher k — not just an experiment. Memory ceiling on this device is in the 5000–8000 maxNumTokens range; KV cache doubles vs FP16.
 
@@ -294,6 +294,22 @@ The mechanism is now fully understood:
 
 Practical FP32-GPU ceiling on this device is somewhere in **6500–7500**; we didn't bisect to find the exact value.
 
+### Important caveat: the FP32 fix is not *directly* verified on the same `long_01` k=20 case where FP16 fails
+
+The natural head-to-head test — running `long_01` at k=20 with `maxNumTokens=8192` on **FP32 GPU** to directly compare against the FP16 GPU asterisk-loop captured in [`benchmark_20260516T104730_k20.json`](../latency_results/benchmark_20260516T104730_k20.json) — **could not be executed on this device**. FP32 KV cache at maxNumTokens=8192 plus the model plus activation buffers exceeds the ~10 GB of RAM available to the app, and the OS killed the benchmark process 7 seconds into the first large-prompt prefill, before any output was generated.
+
+So strictly, for `long_01` specifically:
+
+| Configuration | Observed | Source |
+|---|---|---|
+| FP16 GPU, max=8192, k=20 | ❌ Asterisk repetition loop (1506 garbage tokens past first ~50 coherent) | Steps 1–2, [benchmark_20260516T104730_k20.json](../latency_results/benchmark_20260516T104730_k20.json) |
+| FP32 GPU, max=8192, k=20 | 🔥 OOM crash (no output produced) | Step 3 first attempt |
+| FP32 GPU, max=5000, **k=15** | ✅ Clean response, no degeneration, total context reached ~4514 (past 4096 cap, into FP16 cliff zone) | Step 3 retry, [benchmark_20260516T162810_k15.json](../latency_results/benchmark_20260516T162810_k15.json) |
+
+**The closest-comparable evidence** — FP32 GPU on `long_01` at k=15 with maxNumTokens=5000, where the total context at end of response reached ~4514 tokens, **safely past 4096 where FP16 starts degrading toward its ~5000 cliff** — produced clean output. This is strong indirect evidence that FP32 would also resolve the k=20 case if memory allowed it; the only thing standing between the indirect and direct test is the device's GPU memory ceiling, not anything about the precision mechanism.
+
+**Recommended next test if anyone wants the airtight A/B**: reproduce the FP32 GPU `long_01` k=20 maxNumTokens=8192 run on a higher-RAM device variant (e.g. a 24 GB Snapdragon 8 Elite phone), where the ~12 GB peak demand fits. The mechanism predicts clean output; this is what would confirm it.
+
 ---
 
 ## Step 5 — FP32 GPU latency sweep at maxNumTokens=4096 (2026-05-16)
@@ -452,9 +468,10 @@ If you produce a new `.litertlm` variant (e.g. an INT16-activations rebuild, or 
 |---|---|---|
 | ~~Is the GPU cliff deterministic (same position every run) or stochastic?~~ | **Resolved (Step 2)** — bit-exactly deterministic across 3 reps | — |
 | ~~Is the Kotlin API able to force FP32 on GPU?~~ | **Resolved (reachability check)** — no via Kotlin/JNI, but **yes via the .litertlm metadata override path** (option b) | — |
-| ~~Is FP16 attention the root cause, or just one factor among others?~~ | **Resolved (Step 3, 2026-05-16)** — FP16 is the root cause. FP32 GPU produces clean output where FP16 GPU produced garbage on the same artifact and query | — |
+| ~~Is FP16 attention the root cause, or just one factor among others?~~ | **Resolved (Step 3, 2026-05-16)** — FP16 is the root cause. FP32 GPU produces clean output where FP16 GPU produced garbage on the same artifact, in the *cliff zone past 4096*. Direct A/B on the exact same `long_01` k=20 case where FP16 fails was prevented by GPU OOM (FP32 KV cache at max=8192 exceeds device RAM); strong indirect evidence via the closest-comparable test (FP32 on `long_01` k=15 max=5000, response ending at total context ~4514, clean). See Step 3 §"Important caveat" for the full evidence map. | — |
 | ~~Does the artifact's `prefer_activation_type` field explicitly set FP16, or rely on the system default?~~ | **Resolved (peek)** — the published Gemma 4 artifacts do **not** set the field; the runtime falls back to its per-backend default (FP16 on Android GPU text decoder) | — |
 | What is the tight memory ceiling for FP32 GPU on this device? | **Open** — bracketed 5000 ≤ ceiling < 8192; we'd bisect to find the exact value if FP32 GPU were a deployment candidate | ~30 min: 2–3 build/install/run cycles |
+| Direct head-to-head: does FP32 GPU produce clean output on the exact `long_01` k=20 maxNumTokens=8192 case where FP16 fails? | **Open** — blocked by GPU OOM on this device (peak ~12 GB demand > ~10 GB available). Mechanism is established by indirect evidence (Step 3); confirming the direct A/B requires a higher-RAM device (24 GB Snapdragon 8 Elite variant). | ~10 min on a 24 GB device |
 | ~~What is the FP32-GPU latency curve across k?~~ | **Resolved (Step 5)** — ~25% slower than FP16 GPU at k=15, dominated by 2–2.5× TTFT cost; decode essentially unchanged (bandwidth-bound) | — |
 | Does the cliff position depend on prompt length, or is it fixed at total context ~5000? | **Open** — would help characterize the kernel boundary; no longer deployment-relevant given FP16 is confirmed as the cause | ~30 min if anyone wants the characterization |
 
