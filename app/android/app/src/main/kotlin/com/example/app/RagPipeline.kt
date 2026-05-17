@@ -88,6 +88,17 @@ class RagPipeline(application: Application) {
     @Volatile
     var llmReady = false
 
+    // The actual backend the engine initialized on. May differ from the requested
+    // BuildConfig.USE_GPU_FOR_LLM flag because the init below falls back to CPU
+    // if GPU construction or GPU engine init throws. Set to the final value before
+    // llmReady flips true, so any reader awaiting awaitLlmReady() can trust it.
+    // Used by BenchmarkForegroundService to record the ACTUAL backend in the
+    // benchmark JSON's config block rather than the requested flag (which would
+    // mislabel a fallback as the originally-requested backend).
+    @Volatile
+    var activeBackend: String = "unknown"
+        private set
+
     // Shared init result so any number of callers can await the same success/failure.
     private val llmInit = CompletableDeferred<Result<Unit>>()
 
@@ -143,6 +154,7 @@ class RagPipeline(application: Application) {
                 // memorizeChunks(application.applicationContext, "mamai_trim.txt")
                 // Log.i("mam-ai", "Chunks loaded!")
 
+                this.activeBackend = activeBackend
                 llmReady = true
                 llmInit.complete(Result.success(Unit))
             } catch (t: Throwable) {

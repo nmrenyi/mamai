@@ -398,10 +398,12 @@ class BenchmarkForegroundService : Service() {
                     "unknown"
                 }
                 put("model", llmModelName)
-                // Read backend from BuildConfig at compile time. Older builds
-                // hard-coded "CPU" here even when GPU was active — fixed so the
-                // JSON metadata matches reality.
-                put("backend", if (BuildConfig.USE_GPU_FOR_LLM) "GPU" else "CPU")
+                // Record the ACTUAL backend the engine initialized on (RagPipeline
+                // falls back GPU→CPU if GPU construction or init throws). Reading
+                // BuildConfig.USE_GPU_FOR_LLM here would mislabel a silent fallback
+                // as the originally-requested backend and make GPU-vs-CPU comparisons
+                // invalid. activeBackend is set before llmReady flips true.
+                put("backend", pipeline.activeBackend)
                 put("mtp_enabled", BuildConfig.USE_MTP_FOR_LLM)
                 // Read max_num_tokens + sampler params from runtime_config.json — the same
                 // source RagPipeline reads from. Single source of truth, so the JSON metadata
