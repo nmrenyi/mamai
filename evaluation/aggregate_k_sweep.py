@@ -377,17 +377,23 @@ def write_report(runs: list[dict], out_path: Path) -> None:
     md.append(f"_Generated: {datetime.datetime.now().isoformat(timespec='seconds')}_\n")
     md.append("")
     md.append("## Device & stack\n")
-    md.append(f"- **Device**: {dev.get('manufacturer', '?')} {dev.get('model', '?')} ({dev.get('soc', '?')}) — Android {dev.get('android_version', '?')}")
+    soc = dev.get('soc', '?')
+    soc_display = f"{soc} / Snapdragon 8 Elite" if soc == "SM8750P" else soc
+    md.append(f"- **Device**: {dev.get('manufacturer', '?')} {dev.get('model', '?')} ({soc_display}) — Android {dev.get('android_version', '?')}, 16 GB RAM")
     md.append(f"- **Models tested**: " + ", ".join(f"{_short_model_label(m)} (`{m}`)" for m in models))
     md.append("- **LiteRT-LM**: 0.11.0")
     md.append("- **Backends tested**: GPU (OpenCL on Adreno) and CPU (XNNPACK)")
-    md.append("- **Activation precision**: GPU defaults to **FP16**, CPU defaults to **FP32** — this asymmetry matters at lifted context (see [`maxnumtoken_investigation.md`](maxnumtoken_investigation.md) §Step 4). All tables in this report use the defaults; one explicit FP32-on-GPU sweep is summarised in the FP16-vs-FP32 GPU section below.")
+    md.append("- **Activation precision**: GPU defaults to **FP16**, CPU defaults to **FP32** — this asymmetry matters at lifted context (see [`maxnumtoken_investigation.md`](maxnumtoken_investigation.md) §Step 4). All measurement tables use the defaults; one explicit FP32-on-GPU sweep is summarised in the FP16-vs-FP32 GPU section below.")
     md.append("- **Sampling**: temp=1.0, top_p=0.95, top_k=64 — read from `runtime_config.json`. No explicit `max_output_tokens` cap is enforced; the runtime decodes until a stop token or until total context hits `maxNumTokens=4096`.")
-    md.append("- **Total context budget** (`maxNumTokens` passed to `EngineConfig`): **4096** for every table in this report. The FP16-vs-FP32 section also references measurements at higher values (5000, 8192) used purely for the precision-cliff investigation.")
+    md.append("- **Total context budget** (`maxNumTokens` passed to `EngineConfig`): **4096** for every measurement table in this report. The FP16/FP32 section's prose discusses lifted values (5000, 8192) used purely to characterize the cliff — those measurements are not in any table.")
     md.append("")
     md.append("## TL;DR — today's deployment")
     md.append("")
-    md.append("> **FP16 GPU running Gemma 4 E4B at `maxNumTokens=4096`** is the current ship configuration on Snapdragon 8 Elite. Median total query latency **14–25 s across k=0–15 for E4B** (7.9–15 s for the smaller E2B); cleanly below the FP16 quality cliff at total context ~5000. k=20 prompts that exceed 4096 tokens are runtime-rejected (the same 8 of 18 query types in every sweep → 24/54 errors). Fallbacks: FP32 GPU (~21–34% slower, no cliff) for higher-context use cases on ≥16 GB devices; CPU FP32 (~2–4× slower than FP16 GPU) for devices without working OpenCL.")
+    md.append("> **Ship configuration: FP16 GPU running Gemma 4 E4B at `maxNumTokens=4096` on Snapdragon 8 Elite.** Median total query latency **13–25 s across k=0–15 for E4B** (7.9–18 s for the smaller E2B); cleanly below the FP16 quality cliff at total context ~5000.")
+    md.append(">")
+    md.append("> k=20 is **partial**: the 8 longest of 18 query types produce prompts >4096 tokens and get runtime-rejected (24/54 errors in every sweep); the other 10 query types complete normally.")
+    md.append(">")
+    md.append("> Fallbacks: **FP32 GPU at max=4096** (~21–34% slower at k=10–15, no precision cliff) for extra correctness margin on the same hardware; **FP32 GPU at max=5000–6000** for higher context (verified on this 16 GB device; max=8192 OOMs because FP32 doubles the KV cache, so the practical ceiling is around 6500–7500); **CPU FP32** (~2–4× slower than FP16 GPU) for devices without working OpenCL.")
     md.append("")
     sample_cfg = sample["data"].get("config", {})
     sample_repeats = sample_cfg.get("repeats", "?")
@@ -411,7 +417,9 @@ def write_report(runs: list[dict], out_path: Path) -> None:
     md.append("- `decode` is first-token to last-token.")
     md.append("- `total_query` is everything: `retrieval + TTFT + decode`.")
     md.append(f"- Reported as median across the {sample_n_results} runs unless noted (p95 in tables marked `p95`).")
-    md.append("- Benchmark JSONs from commit `52e11e9` onward record `config.max_num_tokens`, `config.artifact_fingerprint` (SHA-256 of first 64 KB of the loaded `.litertlm`), and `config.git_commit_sha`. These let any reviewer cryptographically verify which artifact variant + code state produced each JSON. Earlier sweep JSONs (PR #57/#59) lack these fields but their content is unaffected.")
+    md.append("")
+    md.append("### Provenance fields in benchmark JSONs (post-`52e11e9`)\n")
+    md.append("Each benchmark JSON's `config` block records `max_num_tokens`, `artifact_fingerprint` (SHA-256 of first 64 KB of the loaded `.litertlm`), and `git_commit_sha`. Together these let any reviewer cryptographically verify which artifact variant + code state produced the JSON, without trusting the filename. Earlier sweep JSONs (PR #57/#59) lack these fields but their content is unaffected.")
     md.append("")
 
     # ─────────── Per-model sections ───────────
@@ -426,14 +434,14 @@ def write_report(runs: list[dict], out_path: Path) -> None:
         others = [m for m in models if m != baseline]
         others_label = ", ".join(_short_model_label(m) for m in others)
         md.append("## Cross-model comparison\n")
+        comparator_phrase = f"the comparator ({others_label})" if len(others) == 1 else f"each comparator ({others_label})"
         md.append(
             f"Each table below compares **{_short_model_label(baseline)}** "
-            f"(baseline) against each comparator model ({others_label}). "
-            "Ratios are reported as **baseline ÷ comparator** at the same "
-            "backend × k cell, so values **> 1.0× mean the comparator is faster**. "
-            "Reading the columns: GPU prefill (TTFT) is compute-bound and tracks "
-            "parameter count closely; GPU decode is bandwidth-bound and gains less "
-            "from model shrinkage; CPU is compute-bound throughout."
+            f"(baseline) against {comparator_phrase}. Ratios are reported as "
+            "**baseline ÷ comparator** at the same backend × k cell, so values "
+            "**> 1.0× mean the comparator is faster**. The architectural "
+            "story behind these ratios (prefill compute-bound vs decode "
+            "bandwidth-bound) is in Key findings #1–#2 below."
         )
         md.append("")
         for other in others:
@@ -453,7 +461,7 @@ def write_report(runs: list[dict], out_path: Path) -> None:
     md.append("")
     md.append("All cross-model tables above use the **default** GPU activation precision, which on Android is **FP16**. That choice is not a knob in our code — LiteRT-LM picks FP16 for the GPU text-decoder path and FP32 for CPU (XNNPACK). The 4096 `maxNumTokens` value we ship was chosen because of how the two precisions behave at lifted context; the full investigation is in [`maxnumtoken_investigation.md`](maxnumtoken_investigation.md). Headlines:")
     md.append("")
-    md.append("- **The 4096 cap is a runtime config check, not an architectural constant.** It's `maxNumTokens` in `EngineConfig`, sourced from `runtime_config.json`. When a prompt + intended response would exceed it, LiteRT-LM rejects the request before any decoding (verified in `liblitertlm_jni.so`). At k=20, the same 8 of 18 query types in every sweep produce prompts above 4096 and get rejected — that's the 24/54 errors visible in every k=20 cell across all (model × backend) combinations.")
+    md.append("- **The 4096 cap is a runtime config check, not an architectural constant.** It's `maxNumTokens` in `EngineConfig`, sourced from `runtime_config.json`. When the prompt alone exceeds it, LiteRT-LM rejects the request before any decoding starts (verified in `liblitertlm_jni.so`). At k=20, the same 8 of 18 query types in every sweep produce prompts above 4096 and get rejected — that's the 24/54 errors visible in every k=20 cell across all (model × backend) combinations.")
     md.append("- ⚠️ **The FP16 default has a quality cliff** at total context ~5000 tokens. If you lift the cap to admit larger prompts, GPU output silently collapses into a `*` repetition loop, deterministically. Concrete example: [`benchmark_20260516T104730_k20.json`](../latency_results/benchmark_20260516T104730_k20.json) (long_01, k=20, FP16 GPU, maxNumTokens=8192).")
     md.append("- **CPU (FP32) stays clean** for the same lifted-cap prompt — the asymmetry isolates precision as the cause, not the artifact or backend choice.")
     md.append("- **Confirming the fix**: forcing GPU to FP32 (via injecting `prefer_activation_type=float32` into the `.litertlm` metadata) eliminates the cliff. Direct A/B on the exact `long_01` k=20 case wasn't possible — FP32 KV cache at maxNumTokens=8192 OOMs the test device — but the closest-comparable test (`long_01` k=15, max=5000, response ending at total context ~4514) produced clean output through the same FP16-cliff zone.")
@@ -517,17 +525,13 @@ def write_report(runs: list[dict], out_path: Path) -> None:
               "(mid-tier MediaTek, older Snapdragon without OpenCL) now have a realistic path: "
               "ship E2B on CPU, restrict k to small values.")
     md.append("")
-    md.append("### 5. 4096-token context wall is the binding ceiling — driven by precision, not runtime")
-    md.append("k=15 works cleanly on all four (model × backend) combinations. At k=20, **the 8 longest "
-              "query types out of 18** produce prompts that exceed the 4096-token cap and get rejected "
-              "by the runtime — that's the 24/54 errors visible in every cell. The other 10 query types "
-              "at k=20 fit and complete normally; the rejection is per-prompt, not per-k. The cap itself "
-              "is *liftable* (passing `maxNumTokens=8192` is accepted by the engine), but on the default "
-              "**FP16** GPU path the lifted output silently collapses past total context ~5000 — a "
-              "precision-driven quality cliff. Switching GPU to FP32 (via artifact metadata) removes the "
-              "cliff at ~25% latency cost. See the FP16-vs-FP32 GPU section above. **Latency is not the "
-              "constraint at the upper end of k — output quality is, and the fix is to change precision "
-              "rather than the cap.**")
+    md.append("### 5. The 4096-token cap is a precision-driven safety margin, not a hard runtime limit")
+    md.append("k=15 works cleanly on every (model × backend) cell. At k=20, the 8 longest of 18 query "
+              "types exceed the cap and get rejected by the runtime (24/54 errors per cell, identical "
+              "across all backends). The cap itself is *liftable* — but on the default **FP16** GPU "
+              "path, lifted output silently collapses past total context ~5000. FP32 GPU removes the "
+              "cliff at ~25% latency cost. See the FP16-vs-FP32 GPU section above for details. "
+              "**The constraint at high k is precision, not latency or memory.**")
     md.append("")
     md.append("### 6. TTFT scales linearly with retrieved-doc content past k=3")
     md.append("On both backends and both models, TTFT-per-doc-char is roughly constant past k=3, so "
@@ -539,7 +543,7 @@ def write_report(runs: list[dict], out_path: Path) -> None:
     md.append("## Data inventory (per `(model, backend, k)`)\n")
     md.append("| Model | Backend | k | File | Wall (min) | Runs | Errors |")
     md.append("|---|---|---:|---|---:|---:|---:|")
-    for (m, b, k) in sorted(matrix.keys(), key=lambda x: (x[0], x[1], x[2])):
+    for (m, b, k) in sorted(matrix.keys(), key=lambda x: (_model_priority(x[0]), x[1], x[2])):
         r = matrix[(m, b, k)]
         wall = r["data"]["total_benchmark_time_ms"] / 60000
         n = len(r["data"]["results"])

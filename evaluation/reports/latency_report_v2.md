@@ -1,21 +1,25 @@
 # MAM-AI On-Device Latency Sweep — Model × Backend × k
 
-_Generated: 2026-05-17T14:50:22_
+_Generated: 2026-05-17T14:56:54_
 
 
 ## Device & stack
 
-- **Device**: OnePlus OPD2413 (SM8750P) — Android 15
+- **Device**: OnePlus OPD2413 (SM8750P / Snapdragon 8 Elite) — Android 15, 16 GB RAM
 - **Models tested**: Gemma 4 E4B (`gemma-4-E4B-it.litertlm`), Gemma 4 E2B (`gemma-4-E2B-it.litertlm`)
 - **LiteRT-LM**: 0.11.0
 - **Backends tested**: GPU (OpenCL on Adreno) and CPU (XNNPACK)
-- **Activation precision**: GPU defaults to **FP16**, CPU defaults to **FP32** — this asymmetry matters at lifted context (see [`maxnumtoken_investigation.md`](maxnumtoken_investigation.md) §Step 4). All tables in this report use the defaults; one explicit FP32-on-GPU sweep is summarised in the FP16-vs-FP32 GPU section below.
+- **Activation precision**: GPU defaults to **FP16**, CPU defaults to **FP32** — this asymmetry matters at lifted context (see [`maxnumtoken_investigation.md`](maxnumtoken_investigation.md) §Step 4). All measurement tables use the defaults; one explicit FP32-on-GPU sweep is summarised in the FP16-vs-FP32 GPU section below.
 - **Sampling**: temp=1.0, top_p=0.95, top_k=64 — read from `runtime_config.json`. No explicit `max_output_tokens` cap is enforced; the runtime decodes until a stop token or until total context hits `maxNumTokens=4096`.
-- **Total context budget** (`maxNumTokens` passed to `EngineConfig`): **4096** for every table in this report. The FP16-vs-FP32 section also references measurements at higher values (5000, 8192) used purely for the precision-cliff investigation.
+- **Total context budget** (`maxNumTokens` passed to `EngineConfig`): **4096** for every measurement table in this report. The FP16/FP32 section's prose discusses lifted values (5000, 8192) used purely to characterize the cliff — those measurements are not in any table.
 
 ## TL;DR — today's deployment
 
-> **FP16 GPU running Gemma 4 E4B at `maxNumTokens=4096`** is the current ship configuration on Snapdragon 8 Elite. Median total query latency **14–25 s across k=0–15 for E4B** (7.9–15 s for the smaller E2B); cleanly below the FP16 quality cliff at total context ~5000. k=20 prompts that exceed 4096 tokens are runtime-rejected (the same 8 of 18 query types in every sweep → 24/54 errors). Fallbacks: FP32 GPU (~21–34% slower, no cliff) for higher-context use cases on ≥16 GB devices; CPU FP32 (~2–4× slower than FP16 GPU) for devices without working OpenCL.
+> **Ship configuration: FP16 GPU running Gemma 4 E4B at `maxNumTokens=4096` on Snapdragon 8 Elite.** Median total query latency **13–25 s across k=0–15 for E4B** (7.9–18 s for the smaller E2B); cleanly below the FP16 quality cliff at total context ~5000.
+>
+> k=20 is **partial**: the 8 longest of 18 query types produce prompts >4096 tokens and get runtime-rejected (24/54 errors in every sweep); the other 10 query types complete normally.
+>
+> Fallbacks: **FP32 GPU at max=4096** (~21–34% slower at k=10–15, no precision cliff) for extra correctness margin on the same hardware; **FP32 GPU at max=5000–6000** for higher context (verified on this 16 GB device; max=8192 OOMs because FP32 doubles the KV cache, so the practical ceiling is around 6500–7500); **CPU FP32** (~2–4× slower than FP16 GPU) for devices without working OpenCL.
 
 ## Methodology
 
@@ -25,7 +29,10 @@ Per (model × backend × k) configuration: 18 (query × mode) cells × 3 repeats
 - `decode` is first-token to last-token.
 - `total_query` is everything: `retrieval + TTFT + decode`.
 - Reported as median across the 54 runs unless noted (p95 in tables marked `p95`).
-- Benchmark JSONs from commit `52e11e9` onward record `config.max_num_tokens`, `config.artifact_fingerprint` (SHA-256 of first 64 KB of the loaded `.litertlm`), and `config.git_commit_sha`. These let any reviewer cryptographically verify which artifact variant + code state produced each JSON. Earlier sweep JSONs (PR #57/#59) lack these fields but their content is unaffected.
+
+### Provenance fields in benchmark JSONs (post-`52e11e9`)
+
+Each benchmark JSON's `config` block records `max_num_tokens`, `artifact_fingerprint` (SHA-256 of first 64 KB of the loaded `.litertlm`), and `git_commit_sha`. Together these let any reviewer cryptographically verify which artifact variant + code state produced the JSON, without trusting the filename. Earlier sweep JSONs (PR #57/#59) lack these fields but their content is unaffected.
 
 ## Gemma 4 E4B (`gemma-4-E4B-it.litertlm`)
 
@@ -137,7 +144,7 @@ Per (model × backend × k) configuration: 18 (query × mode) cells × 3 repeats
 
 ## Cross-model comparison
 
-Each table below compares **Gemma 4 E4B** (baseline) against each comparator model (Gemma 4 E2B). Ratios are reported as **baseline ÷ comparator** at the same backend × k cell, so values **> 1.0× mean the comparator is faster**. Reading the columns: GPU prefill (TTFT) is compute-bound and tracks parameter count closely; GPU decode is bandwidth-bound and gains less from model shrinkage; CPU is compute-bound throughout.
+Each table below compares **Gemma 4 E4B** (baseline) against the comparator (Gemma 4 E2B). Ratios are reported as **baseline ÷ comparator** at the same backend × k cell, so values **> 1.0× mean the comparator is faster**. The architectural story behind these ratios (prefill compute-bound vs decode bandwidth-bound) is in Key findings #1–#2 below.
 
 ### Gemma 4 E4B vs Gemma 4 E2B
 
@@ -184,7 +191,7 @@ Each table below compares **Gemma 4 E4B** (baseline) against each comparator mod
 
 All cross-model tables above use the **default** GPU activation precision, which on Android is **FP16**. That choice is not a knob in our code — LiteRT-LM picks FP16 for the GPU text-decoder path and FP32 for CPU (XNNPACK). The 4096 `maxNumTokens` value we ship was chosen because of how the two precisions behave at lifted context; the full investigation is in [`maxnumtoken_investigation.md`](maxnumtoken_investigation.md). Headlines:
 
-- **The 4096 cap is a runtime config check, not an architectural constant.** It's `maxNumTokens` in `EngineConfig`, sourced from `runtime_config.json`. When a prompt + intended response would exceed it, LiteRT-LM rejects the request before any decoding (verified in `liblitertlm_jni.so`). At k=20, the same 8 of 18 query types in every sweep produce prompts above 4096 and get rejected — that's the 24/54 errors visible in every k=20 cell across all (model × backend) combinations.
+- **The 4096 cap is a runtime config check, not an architectural constant.** It's `maxNumTokens` in `EngineConfig`, sourced from `runtime_config.json`. When the prompt alone exceeds it, LiteRT-LM rejects the request before any decoding starts (verified in `liblitertlm_jni.so`). At k=20, the same 8 of 18 query types in every sweep produce prompts above 4096 and get rejected — that's the 24/54 errors visible in every k=20 cell across all (model × backend) combinations.
 - ⚠️ **The FP16 default has a quality cliff** at total context ~5000 tokens. If you lift the cap to admit larger prompts, GPU output silently collapses into a `*` repetition loop, deterministically. Concrete example: [`benchmark_20260516T104730_k20.json`](../latency_results/benchmark_20260516T104730_k20.json) (long_01, k=20, FP16 GPU, maxNumTokens=8192).
 - **CPU (FP32) stays clean** for the same lifted-cap prompt — the asymmetry isolates precision as the cause, not the artifact or backend choice.
 - **Confirming the fix**: forcing GPU to FP32 (via injecting `prefer_activation_type=float32` into the `.litertlm` metadata) eliminates the cliff. Direct A/B on the exact `long_01` k=20 case wasn't possible — FP32 KV cache at maxNumTokens=8192 OOMs the test device — but the closest-comparable test (`long_01` k=15, max=5000, response ending at total context ~4514) produced clean output through the same FP16-cliff zone.
@@ -233,8 +240,8 @@ Decode speedup from E4B → E2B is **~1.5× on GPU** but **~2× on CPU**. Decode
 ### 4. GPU still wins, but E2B CPU opens up the no-GPU device tier
 E2B CPU is 1.4–2.4× slower than E2B GPU at every k — GPU remains the preferred backend where available. But E2B CPU at k=1 (~16 s median) is comparable to E4B GPU at k=1 (~14 s), which means devices that previously could *not* deploy MAM-AI at acceptable latency (mid-tier MediaTek, older Snapdragon without OpenCL) now have a realistic path: ship E2B on CPU, restrict k to small values.
 
-### 5. 4096-token context wall is the binding ceiling — driven by precision, not runtime
-k=15 works cleanly on all four (model × backend) combinations. At k=20, **the 8 longest query types out of 18** produce prompts that exceed the 4096-token cap and get rejected by the runtime — that's the 24/54 errors visible in every cell. The other 10 query types at k=20 fit and complete normally; the rejection is per-prompt, not per-k. The cap itself is *liftable* (passing `maxNumTokens=8192` is accepted by the engine), but on the default **FP16** GPU path the lifted output silently collapses past total context ~5000 — a precision-driven quality cliff. Switching GPU to FP32 (via artifact metadata) removes the cliff at ~25% latency cost. See the FP16-vs-FP32 GPU section above. **Latency is not the constraint at the upper end of k — output quality is, and the fix is to change precision rather than the cap.**
+### 5. The 4096-token cap is a precision-driven safety margin, not a hard runtime limit
+k=15 works cleanly on every (model × backend) cell. At k=20, the 8 longest of 18 query types exceed the cap and get rejected by the runtime (24/54 errors per cell, identical across all backends). The cap itself is *liftable* — but on the default **FP16** GPU path, lifted output silently collapses past total context ~5000. FP32 GPU removes the cliff at ~25% latency cost. See the FP16-vs-FP32 GPU section above for details. **The constraint at high k is precision, not latency or memory.**
 
 ### 6. TTFT scales linearly with retrieved-doc content past k=3
 On both backends and both models, TTFT-per-doc-char is roughly constant past k=3, so the prefill story scales predictably. The model shrink translates directly into a TTFT shrink across the whole range.
@@ -243,22 +250,6 @@ On both backends and both models, TTFT-per-doc-char is roughly constant past k=3
 
 | Model | Backend | k | File | Wall (min) | Runs | Errors |
 |---|---|---:|---|---:|---:|---:|
-| Gemma 4 E2B | CPU | 0 (no-RAG) | `benchmark_20260515T223100.json` | 22.5 | 54 | 0 |
-| Gemma 4 E2B | CPU | 1 | `benchmark_20260515T183910_k1.json` | 23.9 | 54 | 0 |
-| Gemma 4 E2B | CPU | 3 | `benchmark_20260515T190320_k3.json` | 30.0 | 54 | 0 |
-| Gemma 4 E2B | CPU | 5 | `benchmark_20260515T193337_k5.json` | 34.2 | 54 | 0 |
-| Gemma 4 E2B | CPU | 7 | `benchmark_20260515T200805_k7.json` | 35.5 | 54 | 0 |
-| Gemma 4 E2B | CPU | 10 | `benchmark_20260515T204358_k10.json` | 33.9 | 54 | 0 |
-| Gemma 4 E2B | CPU | 15 | `benchmark_20260515T211813_k15.json` | 41.7 | 54 | 0 |
-| Gemma 4 E2B | CPU | 20 | `benchmark_20260515T220014_k20.json` | 30.4 | 54 | 24 |
-| Gemma 4 E2B | GPU | 0 (no-RAG) | `benchmark_20260515T175744.json` | 17.5 | 54 | 0 |
-| Gemma 4 E2B | GPU | 1 | `benchmark_20260515T152447_k1.json` | 20.9 | 54 | 0 |
-| Gemma 4 E2B | GPU | 3 | `benchmark_20260515T154608_k3.json` | 22.4 | 54 | 0 |
-| Gemma 4 E2B | GPU | 5 | `benchmark_20260515T160846_k5.json` | 21.1 | 54 | 0 |
-| Gemma 4 E2B | GPU | 7 | `benchmark_20260515T163011_k7.json` | 22.8 | 54 | 0 |
-| Gemma 4 E2B | GPU | 10 | `benchmark_20260515T165316_k10.json` | 23.3 | 54 | 0 |
-| Gemma 4 E2B | GPU | 15 | `benchmark_20260515T171649_k15.json` | 21.1 | 54 | 0 |
-| Gemma 4 E2B | GPU | 20 | `benchmark_20260515T173816_k20.json` | 19.1 | 54 | 24 |
 | Gemma 4 E4B | CPU | 0 (no-RAG) | `benchmark_20260515T022647.json` | 36.9 | 54 | 0 |
 | Gemma 4 E4B | CPU | 1 | `benchmark_20260514T213337_k1.json` | 38.7 | 54 | 0 |
 | Gemma 4 E4B | CPU | 3 | `benchmark_20260514T221238_k3.json` | 50.2 | 54 | 0 |
@@ -275,6 +266,22 @@ On both backends and both models, TTFT-per-doc-char is roughly constant past k=3
 | Gemma 4 E4B | GPU | 10 | `benchmark_20260514T193453_k10.json` | 29.1 | 54 | 0 |
 | Gemma 4 E4B | GPU | 15 | `benchmark_20260514T200414_k15.json` | 32.4 | 54 | 0 |
 | Gemma 4 E4B | GPU | 20 | `benchmark_20260514T203653_k20.json` | 22.8 | 54 | 24 |
+| Gemma 4 E2B | CPU | 0 (no-RAG) | `benchmark_20260515T223100.json` | 22.5 | 54 | 0 |
+| Gemma 4 E2B | CPU | 1 | `benchmark_20260515T183910_k1.json` | 23.9 | 54 | 0 |
+| Gemma 4 E2B | CPU | 3 | `benchmark_20260515T190320_k3.json` | 30.0 | 54 | 0 |
+| Gemma 4 E2B | CPU | 5 | `benchmark_20260515T193337_k5.json` | 34.2 | 54 | 0 |
+| Gemma 4 E2B | CPU | 7 | `benchmark_20260515T200805_k7.json` | 35.5 | 54 | 0 |
+| Gemma 4 E2B | CPU | 10 | `benchmark_20260515T204358_k10.json` | 33.9 | 54 | 0 |
+| Gemma 4 E2B | CPU | 15 | `benchmark_20260515T211813_k15.json` | 41.7 | 54 | 0 |
+| Gemma 4 E2B | CPU | 20 | `benchmark_20260515T220014_k20.json` | 30.4 | 54 | 24 |
+| Gemma 4 E2B | GPU | 0 (no-RAG) | `benchmark_20260515T175744.json` | 17.5 | 54 | 0 |
+| Gemma 4 E2B | GPU | 1 | `benchmark_20260515T152447_k1.json` | 20.9 | 54 | 0 |
+| Gemma 4 E2B | GPU | 3 | `benchmark_20260515T154608_k3.json` | 22.4 | 54 | 0 |
+| Gemma 4 E2B | GPU | 5 | `benchmark_20260515T160846_k5.json` | 21.1 | 54 | 0 |
+| Gemma 4 E2B | GPU | 7 | `benchmark_20260515T163011_k7.json` | 22.8 | 54 | 0 |
+| Gemma 4 E2B | GPU | 10 | `benchmark_20260515T165316_k10.json` | 23.3 | 54 | 0 |
+| Gemma 4 E2B | GPU | 15 | `benchmark_20260515T171649_k15.json` | 21.1 | 54 | 0 |
+| Gemma 4 E2B | GPU | 20 | `benchmark_20260515T173816_k20.json` | 19.1 | 54 | 24 |
 
 > **Note:** the table above lists the canonical FP16-default runs (which is what every table in this report tabulates). The `Wall (min)` column is benchmark runtime (operational), not user-facing latency. The aggregator dedupes by `(model, backend, k)`, so the **8 FP32 GPU sweep JSONs (2026-05-16)** and the **16 today-instrumented runs (2026-05-17, FP32 + FP16 with `artifact_fingerprint` provenance)** referenced by the FP16-vs-FP32 GPU section are not listed here. Their full filenames + fingerprints are in [`maxnumtoken_investigation.md`](maxnumtoken_investigation.md) §References.
 
