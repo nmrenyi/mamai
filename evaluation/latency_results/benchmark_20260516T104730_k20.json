@@ -1,0 +1,190 @@
+{
+  "benchmark_version": 1,
+  "timestamp": "20260516T104838",
+  "device": {
+    "manufacturer": "OnePlus",
+    "model": "OPD2413",
+    "device": "OP615EL1",
+    "hardware": "qcom",
+    "board": "sun",
+    "soc": "SM8750P",
+    "android_version": "15",
+    "sdk_int": 35,
+    "abi": "arm64-v8a"
+  },
+  "config": {
+    "repeats": 1,
+    "cooldown_ms": 1000,
+    "skip_retrieval": false,
+    "rag_only": true,
+    "query_filter": "long_01",
+    "retrieval_top_k_override": 20,
+    "model": "gemma-4-E4B-it.litertlm",
+    "backend": "GPU",
+    "mtp_enabled": false,
+    "max_tokens": 32000,
+    "temperature": 1,
+    "top_p": 0.95,
+    "top_k": 64
+  },
+  "init": {
+    "gecko_sqlite_ms": 63,
+    "llm_load_ms": 10008,
+    "warmup_query_ms": 72496,
+    "total_init_ms": 82570
+  },
+  "memory": {
+    "used_mb": 5,
+    "free_mb": 0,
+    "total_mb": 5,
+    "max_mb": 384
+  },
+  "results": [
+    {
+      "query_id": "long_01",
+      "category": "long",
+      "query_text": "I am a midwife at a rural clinic in Zanzibar. A 28 year old woman, gravida 4 para 3, is at 38 weeks gestation. She came to the clinic complaining of severe headache, swelling in her hands and face, and epigastric pain. Her blood pressure is 170 over 115. She has protein in her urine. The nearest hospital is 2 hours away. What should I do while waiting for transport?",
+      "query_word_count": 68,
+      "use_retrieval": true,
+      "repetition": 1,
+      "retrieval_time_ms": 2085,
+      "ttft_ms": 6408,
+      "prefill_ms": 6408,
+      "decode_ms": 263190,
+      "total_generation_ms": 269598,
+      "total_query_ms": 271683,
+      "response_length_chars": 6027,
+      "estimated_tokens": 1506,
+      "decode_throughput_tps": 5.72,
+      "num_retrieved_docs": 20,
+      "retrieved_chunks": [
+        {
+          "text": "> DIAGNOSIS OF HYPERTENSIVE DISORDERS OF PREGNANCY\n\n### **PROTEINURIA**\n\nThe presence of proteinuria changes the diagnosis from gestational hypertension to pre-eclampsia. Because vaginal secretions or amniotic fluid may contaminate a urine specimen, only clean-catch midstream specimens should be used. Catheterization for this purpose is not justified due to the risk of urinary tract infection.\n\nDiagnostic criteria for proteinuria include: two urine dipstick measurements of at least 2+ (30 mg per dL) taken six hours apart; at least 300 mg of protein in a 24-hour urine sample; or a urinary protein\/creatinine ratio of 0.3 or greater.\n\nIt is important to rule out pre-eclampsia before assigning another etiology for the presence of proteinuria in a pregnant woman with elevated blood pressure. However, other conditions can cause proteinuria and false positive results are possible. Urinary tract infection, severe anaemia, heart failure and difficult labour may all cause proteinuria. Blood in the urine due to catheter trauma or schistosomiasis and contamination from vaginal blood can give false positive results.\n\nRandom urine sampling, such as the dipstick test for protein, is a useful screening tool. A change from negative to positive during pregnancy is a warning sign. If dipsticks are not available, a sample of urine can be heated to boiling in a clean test tube. Add a drop of 2% acetic acid to check for persistent precipitates that can be quantified as a percentage of protein to the volume of the total sample.",
+          "source": "WHO_Complications_2017",
+          "page": 195,
+          "chars": 1530
+        },
+        {
+          "text": "> DIAGNOSIS OF HYPERTENSIVE DISORDERS OF PREGNANCY\n\n**TABLE S-12. Differential diagnosis of elevated blood pressure, headache, blurred vision, convulsions or loss of consciousness**\n\n-------------------------------------------------------|------------------------------------------|\n| • SBP 160 mmHg or higher and\/or DBP 110 mmHg or higher after 20 weeks of gestation • Proteinuria 2+ on dipstick | • Headache (increasing frequency, unrelieved by regular analgesics) • Vision changes (e.g. blurred vision) • Oliguria (passing less than 400 mL urine in 24 hours) • Upper abdominal pain (epigastric pain or pain in right upper quadrant) • Difficulty breathing (rales on auscultation of lungs due to fluid in lungs) • Nausea and vomiting • Hyperreflexia or clonus In facilities with laboratory capacity: • Liver enzymes (transaminases) more than twice the normal range • Serum creatinine higher than 1.1 mg\/dL or a doubling, or higher, of the baseline serum creatinine concentration in the absence of other renal disease • Platelets less than 100,000 cells\/mcL (100 × 109\/L) | Severe pre eclampsia,a,b page S-57 |",
+          "source": "WHO_Complications_2017",
+          "page": 197,
+          "chars": 1110
+        },
+        {
+          "text": "> DIAGNOSIS OF HYPERTENSIVE DISORDERS OF PREGNANCY > TABLE S-14. Oral antihypertensive medications for non-severe hypertension\n\n#### **Gestation between 24 and 34 Weeks**\n\nIn women with severe pre-eclampsia and a viable fetus before 34 weeks of gestation, expectant management is recommended, provided that uncontrolled maternal hypertension, maternal danger signs (e.g. severe headache, visual changes and abdominal pain) and fetal distress are absent and can be monitored. When laboratory services are available, it is advisable to monitor the maternal laboratory values outlined in **Table S-12 (page S-52)** (creatinine, liver transaminases and platelets).\n\nIf it is not possible to monitor maternal and fetal well-being, transfer to a tertiary care hospital is recommended. If referral to a tertiary hospital is not possible, manage severe pre-eclampsia as eclampsia.\n\n- Give antenatal corticosteroids to accelerate fetal lung maturation. Antenatal corticosteroid therapy is recommended for women with pregnancies at a gestational age of 24–34 weeks for whom preterm birth is considered imminent (due to severe pre-eclampsia or eclampsia), if the following conditions are met:\n - Gestational age assessment can be accurately undertaken.\n - There is no clinical evidence of maternal infection.\n - Adequate childbirth care is available (including the capacity to recognize and safely manage preterm labour and birth), and the preterm newborn can receive adequate care if needed (including\n\nresuscitation, thermal care, feeding support, infection treatment and safe oxygen use).",
+          "source": "WHO_Complications_2017",
+          "page": 207,
+          "chars": 1580
+        },
+        {
+          "text": "> DIAGNOSIS OF HYPERTENSIVE DISORDERS OF PREGNANCY > TABLE S-14. Oral antihypertensive medications for non-severe hypertension\n\n#### **Gestation Less than 24 Weeks (Pre-Viable Fetus)**\n\nInduction of labour is recommended for women with severe pre-eclampsia if the fetus is not viable or is unlikely to achieve viability within one or two weeks.\n\n- Assess the cervix (**page P-19**) and induce labour as per medical management of inevitable abortion if the gestational age is less than 24 weeks (**Table S-4, page S-13); or offer dilatation and evacuation (S-18) for expedited birth.**\n- Hysterotomy (incision of the uterus through the abdominal wall at less than 24 weeks of gestation) should be avoided.\n\n**Note:** Before performing a **hysterotomy**, ensure that:\n\n- coagulopathy has been ruled out;\n- safe general or regional anaesthesia is available. Spinal anaesthesia is associated with a risk of hypotension. This risk can be reduced if adequate IV fluids (500–1000 mL) are infused prior to administration of the spinal anaesthesia (**page P-11**).\n\nDo not use local anaesthesia or ketamine in women with pre-eclampsia or eclampsia.",
+          "source": "WHO_Complications_2017",
+          "page": 206,
+          "chars": 1139
+        },
+        {
+          "text": "> DIAGNOSIS OF HYPERTENSIVE DISORDERS OF PREGNANCY > GESTATION AT OR MORE THAN 37 + 0\/7 WEEKS\n\n#### **SEVERE PRE-ECLAMPSIA AND ECLAMPSIA**\n\nSevere pre-eclampsia and eclampsia are managed similarly, except that birth must occur within 12 hours of onset of convulsions in eclampsia.\n\n**Note:** All cases of severe pre-eclampsia should be managed actively. Symptoms and signs of \"impending eclampsia\" (e.g. blurred vision, hyperreflexia) are unreliable. Once symptoms consistent with severe pre-eclampsia begin, expectant management is not recommended.",
+          "source": "WHO_Complications_2017",
+          "page": 201,
+          "chars": 549
+        },
+        {
+          "text": "> DIAGNOSIS OF HYPERTENSIVE DISORDERS OF PREGNANCY\n\n**TABLE S-12. Differential diagnosis of elevated blood pressure, headache, blurred vision, convulsions or loss of consciousness**\n\n| Presenting Symptom and Other Symptoms and Signs Typically Present | Symptoms, Signs and Laboratory Findings Sometimes Present | Probable Diagnosis |\n|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------|-----------------------------------------------------------------------------|\n| • SBP 140 mmHg or higher and\/or DBP 90 mmHg or higher before 20 weeks of gestation • After 20 weeks: Proteinuria 2+ on – dipstick – Presence of any pre eclampsia features | | Chronic hypertension with superimposed pre-eclampsia, page S-66 |",
+          "source": "WHO_Complications_2017",
+          "page": 196,
+          "chars": 974
+        },
+        {
+          "text": "> WHO LABOUR CARE GUIDE Name Mary Jane Williams Parity 2 Labour onset spontaneous Active labour diagnosis [Date 06\/07\/20 ] Ruptured membranes [Date 06\/07\/20 Time 5:00 ] Risk factors History of stillbirth; anaemia\n\n**Table 5. Guidance for completing Section 4 of the LCG**\n\n--------------------------------------------------------------------------------------------------|\n| Urine | Check protein and acetone in urine with a reagent strip. | Record readings of protein (P) and acetone (A) as Negative, Trace, +, ++, +++, ++++. | Alert: P++, A++ A 2+ protein (P++) could guide further management, although confirmation may be done with a second dipstick of 2+ at the next urine void. Proteinuria could be a sign of pre-eclampsia, urinary tract infection, severe anaemia, or previously undiagnosed renal or cardiac disease. Ketonuria could be a sign of dehydration secondary to reduced fluid intake or excessive losses (vomiting or diarrhea), prolonged labour or previously undiagnosed diabetes (13). | If P++, A++ or more, interpret measurements in the context of a full clinical examination. Alert a senior provider and follow local guidelines. If P = Negative, Trace or +, assess every 4 hours or each time the woman voids during labour. |",
+          "source": "WHO_LabourCare_2020",
+          "page": 23,
+          "chars": 1240
+        },
+        {
+          "text": "> DIAGNOSIS OF HYPERTENSIVE DISORDERS OF PREGNANCY\n\n**TABLE S-12. Differential diagnosis of elevated blood pressure, headache, blurred vision, convulsions or loss of consciousness**\n\n| Presenting Symptom and Other Symptoms and Signs Typically Present | Symptoms, Signs and Laboratory Findings Sometimes Present | Probable Diagnosis |\n|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------|-----------------------------------------------------------------------------|\n| • Two readings of SBP 140 mmHg or higher but lower than 160 mmHg and\/or DBP 90 mmHg or higher but lower than 110 mmHg four hours apart after 20 weeks of gestation • Proteinuria 2+ on dipstick | | Mild pre eclampsia, page S-56 |",
+          "source": "WHO_Complications_2017",
+          "page": 196,
+          "chars": 961
+        },
+        {
+          "text": "> DIAGNOSIS OF HYPERTENSIVE DISORDERS OF PREGNANCY\n\n**TABLE S-12. Differential diagnosis of elevated blood pressure, headache, blurred vision, convulsions or loss of consciousness**\n\n| Presenting Symptom and Other Symptoms and Signs Typically Present | Symptoms, Signs and Laboratory Findings Sometimes Present | Probable Diagnosis |\n|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------|-----------------------------------------------------------------------------|\n| • Two readings of SBP 140 mmHg or higher but lower than 160 mmHg and\/or DBP 90 mmHg or higher but lower than 110 mmHg four hours apart after 20 weeks of gestation • No proteinuria • No features of pre eclampsia | | Gestational hypertension, page S-55 |",
+          "source": "WHO_Complications_2017",
+          "page": 196,
+          "chars": 986
+        },
+        {
+          "text": "# **12.1 SUBENABLING OUTCOMES, RELATED TASKS, ASSESSMENT CRITERIA, ASSESSMENT METHODS AND ASSESSMENT INSTRUMENT**\n\n| Sub Enabling | Related Tasks | Assessment Criteria | Assessment | Assessment |\n|---------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------|----------------------------------|-----------------------------------------|\n| | woman with mild pre eclampsia during antenatal j) Give care to a pregnant woman with severe pre eclampsia during antenatal | disorders of pregnancy is correctly provided | | |",
+          "source": "Curr_NTA Level 6_27.07 Tanzania",
+          "page": 45,
+          "chars": 742
+        },
+        {
+          "text": "# IF ELEVATED DIASTOLIC BLOOD PRESSURE\n\n| SIGNS | CLASSIFY | TREAT AND ADVISE |\n|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|\n| Diastolic blood pressure ≥110 mmHg and 3+ proteinuria, or Diastolic blood pressure ≥90 mmHg on two readings and 2+ proteinuria, and any of: ⇒ severe headache ⇒ blurred vision ⇒ epigastric pain. | SEVERE PRE-ECLAMPSIA | ■ Give magnesium sulphate ■ If in early labour or postpartum, refer urgently to hospital ■ If late labour: → continue magnesium sulphate treatment ■ B13 → monitor blood pressure every hour. → DO NOT give ergometrine after delivery. ■ Refer urgently to hospital after delivery |",
+          "source": "WHO_IntegratedPregBirth_2015",
+          "page": 86,
+          "chars": 1259
+        },
+        {
+          "text": "> DIAGNOSIS OF HYPERTENSIVE DISORDERS OF PREGNANCY\n\n**TABLE S-12. Differential diagnosis of elevated blood pressure, headache, blurred vision, convulsions or loss of consciousness**\n\na If a woman has any one of the symptoms or signs listed for severe pre-eclampsia (with the exception of proteinuria 2+ on the dipstick), diagnose severe pre-eclampsia.\n\n**A small proportion of women with eclampsia have normal blood pressure. Treat all women with convulsions as if they have eclampsia until another diagnosis is confirmed.**",
+          "source": "WHO_Complications_2017",
+          "page": 198,
+          "chars": 524
+        },
+        {
+          "text": "> DIAGNOSIS OF HYPERTENSIVE DISORDERS OF PREGNANCY > SPECIFIC MANAGEMENT OF HYPERTENSIVE DISORDERS OF PREGNANCY\n\n#### *GESTATION LESS THAN 37 + 0\/7 WEEKS*\n\n- Advise her to watch for symptoms and signs of severe pre-eclampsia (**Table S-12, page S-52**).\n- See her twice weekly to monitor blood pressure and fetal well-being and to assess for symptoms and signs of severe pre-eclampsia.\n\n**If systolic blood pressure is 160 mmHg or higher and\/or diastolic blood pressure is 110 mmHg or higher, or if signs of severe preeclampsia appear, even if her blood pressure is normal**, admit the woman and follow recommendations for management of severe preeclampsia and eclampsia (**page S-57**).",
+          "source": "WHO_Complications_2017",
+          "page": 201,
+          "chars": 687
+        },
+        {
+          "text": "> Recommendations > 1.2.11 At every antenatal contact, update the woman's antenatal records to include details of history, test results, examination findings, medicines and discussions.\n\n#### **Pre-eclampsia and hypertension in pregnancy**\n\n- 1.2.27 Urgently refer women with severe hypertension (blood pressure of 160\/ 110 mmHg or higher) to secondary care to be seen on the same day. The urgency of the referral should be determined by an overall clinical assessment.\n- 1.2.28 Offer a urine dipstick test for proteinuria at every routine face-to-face antenatal appointment.\n\nFor a short explanation of why the committee made the recommendations and how they might affect practice, see the rationale and impact section on pre-eclampsia and hypertension in pregnancy.",
+          "source": "NICE_Antenatal_2021",
+          "page": 17,
+          "chars": 767
+        },
+        {
+          "text": "# **ASSESSMENT OF MATERNAL CONDITION**\n\n- Monitor the woman's condition:\n - During the **latent phase** of the first stage of labour: Check maternal mood and behaviour (distressed, anxious) at least once every hour; check blood pressure, pulse and temperature at least once every four hours.\n - During the **active phase** of first stage of labour: Check maternal mood and behaviour (distressed, anxious) at least once every 30 minutes; check blood pressure at least once every four hours, temperature at least once every two hours and pulse once every 30 minutes.\n - During **second stage**: Check maternal mood and behaviour (distressed, anxious) at least once every five minutes.\n- Evaluate the woman for emergency signs and for signs of distress, and respond appropriately:\n - If the **woman's pulse is increasing**, she may be dehydrated or in pain or she may be developing a fever.\n\nNormal labour and childbirth **C-89**\n\n- Ensure adequate hydration via oral or IV routes.\n- Provide adequate analgesia (**page C-55).**\n- If the **woman's temperature is higher than 38°C**, manage the cause of the fever **(page S-113**) and monitor temperature at least every two hours.\n- If the **woman's blood pressure decreases**, suspect occult or frank haemorrhage.\n- If **acetone is present in the woman's urine**, suspect poor nutrition or dehydration and encourage her to eat or drink; otherwise, give dextrose IV.",
+          "source": "WHO_Complications_2017",
+          "page": 112,
+          "chars": 1411
+        },
+        {
+          "text": "> DIAGNOSIS OF HYPERTENSIVE DISORDERS OF PREGNANCY > SPECIFIC MANAGEMENT OF HYPERTENSIVE DISORDERS OF PREGNANCY\n\n#### **GESTATIONAL HYPERTENSION**\n\nManage on an outpatient basis:\n\n- Monitor blood pressure, urine (for proteinuria) and fetal condition weekly.\n- If **blood pressure worsens or the woman develops features of pre-eclampsia,** manage as pre-eclampsia (**page S-56**).\n- If there are **signs of severe fetal growth restriction or fetal compromise**, admit the woman to the hospital for assessment and possible expedited birth.\n- Counsel the woman and her family about danger signs indicating severe pre-eclampsia or eclampsia.\n- If all **observations remain stable**, allow to proceed with spontaneous labour and childbirth (**page C-77**).\n\n• In women with gestational hypertension, if **spontaneous labour has not occurred before term**, induce labour at term.",
+          "source": "WHO_Complications_2017",
+          "page": 199,
+          "chars": 873
+        },
+        {
+          "text": "> DIAGNOSIS OF HYPERTENSIVE DISORDERS OF PREGNANCY\n\n### **Gestation after 37 + 0\/7 Completed Weeks**\n\nFor women with pre-eclampsia at term (37 + 0\/7 weeks), regardless of pre-eclampsia severity, giving birth is recommended.\n\n- Assess the cervix (**page P-19**) and induce labour (**page P-17**).\n- If **vaginal birth is not anticipated** within 12 hours (eclampsia) or 24 hours (severe pre-eclampsia), perform a caesarean (**page P-53**).\n- If there are **fetal heart rate abnormalities** (less than 100 or more than 180 beats per minute), perform a caesarean (**page P-53**).\n- If **safe anaesthesia is not available for caesarean** or if the **fetus is dead**:\n\n- Aim for vaginal birth.\n- If the **cervix is unfavourable** (firm, thick, closed), ripen the cervix (**page P-21**).\n\n**Note:** Before performing a **caesarean**, ensure that:\n\n- coagulopathy has been ruled out;\n- safe general or regional anaesthesia is available. Spinal anaesthesia is associated with a risk of hypotension. This risk can be reduced if adequate IV fluids (500–1000 mL) are infused prior to administration of the spinal anaesthesia (**page P-11**).\n\nDo not use local anaesthesia or ketamine in women with pre-eclampsia or eclampsia.",
+          "source": "WHO_Complications_2017",
+          "page": 209,
+          "chars": 1214
+        },
+        {
+          "text": "> DIAGNOSIS OF HYPERTENSIVE DISORDERS OF PREGNANCY\n\n**TABLE S-12. Differential diagnosis of elevated blood pressure, headache, blurred vision, convulsions or loss of consciousness**\n\n| Presenting Symptom and Other Symptoms and Signs Typically Present | Symptoms, Signs and Laboratory Findings Sometimes Present | Probable Diagnosis |\n|----------------------------------------------------------------------------------|--------------------------------------------------------------------|-------------------------------------|\n| • Fever • Chills\/rigors • Headache • Muscle\/joint pain | • Enlarged spleen | Malaria, page S-117 |\n| • Symptoms and signs of uncomplicated malaria • Coma • Anaemia | • Convulsions • Jaundice | Severe malaria, page S-121 |",
+          "source": "WHO_Complications_2017",
+          "page": 198,
+          "chars": 749
+        },
+        {
+          "text": "> DIAGNOSIS OF HYPERTENSIVE DISORDERS OF PREGNANCY > TABLE S-14. Oral antihypertensive medications for non-severe hypertension\n\n#### *OPTIMAL TIMING FOR BIRTH*\n\nBirth should be considered as soon as the woman's condition has stabilized. The decision about the optimal timing of childbirth should be made on an individual basis, taking into account, among other factors, gestational age, maternal and fetal status and well-being, cervical favourability, and urgency.\n\nFollowing an eclamptic convulsion, birth of the baby should occur within 12 hours of the onset of convulsions.",
+          "source": "WHO_Complications_2017",
+          "page": 206,
+          "chars": 577
+        },
+        {
+          "text": "> DIAGNOSIS OF HYPERTENSIVE DISORDERS OF PREGNANCY > TABLE S-14. Oral antihypertensive medications for non-severe hypertension\n\n#### **Gestation 34 to 36 6\/7 Weeks**\n\n**Note:** After 34 completed weeks of gestation, corticosteroids are not recommended for the indication of fetal lung maturation.\n\nIn women with severe pre-eclampsia and a viable fetus that is between 34 and 36 + 6\/7 weeks of gestation, a policy of expectant management may be recommended, **provided that** uncontrolled maternal hypertension,\n\nworsening maternal status and fetal distress are absent and can be closely monitored.\n\nIf any features of worsening severe pre-eclampsia or eclampsia are present, or if close monitoring of the woman and fetus is not feasible, transfer to a higherlevel facility. If transfer is not possible, the birth should be expedited.",
+          "source": "WHO_Complications_2017",
+          "page": 208,
+          "chars": 833
+        }
+      ],
+      "retrieved_total_chars": 19705,
+      "response_text": "This is a **medical emergency**. You must act immediately.\n\n**Escalate to a doctor or arrange urgent referral now.**\n\nThe patient has signs of **severe pre-eclampsia**.\n\n*   **Severe pre-eclampsia** is diagnosed by:\n    *   Systolic blood pressure (SBP) of 160 mmHg or higher and\/ or Diastolic blood pressure (DBP) of 10 mmHg or higher.\n    *   **Severe pre-eclampsia**\n    *   *   **Severe pre-eclampsia**\n    *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   **   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   **   *   *   *   *   *   *   *   *   *   *   *   *   ***   *   *   *   *   *   *   *   *   *   *   *   *   *   *   **   *   *   *   *   *   *   *   *   *   *   *   *   **   *   *   *   *   *   *   *   *   *   *   *   *   *   ****   *   *   *   *   *   *   *   *   *   *   *   **   *   *   *   *   *   *   *   *   *   *   *   *   *   ****   **   *   *   *   *   *   *   *   *   *   *   *   *   ****   *   *   *   *   **   *   *   *   *   ****   **   *   *   *   *   *   *   *   *   **   *   **   *   *   *   *   *   **   *   *   *   *   **   ***   *   *   **   *   *   *   *   *   *   *   *   *   **   **   *   *   *   *   *   *   *   *   *   *   *   *   ***   *   *   *   *   *   *   *   *   *   *   *   **   **   *   *   *   *   *   *   *   *   *   **   *****   *   *   *   *   *   *   *   *   *   *   **   **   **   **   **   *   *   *   *   *   *   *   *   *   *   **   ****   ***   **   *   *   *   *   *   *   ****   **   ******   *   *   *   *   *   *   **   *   ******   *   *   *   **   *   *   *   *   *****   *   ******   *   *   *   *   *   *   **   *   *****   ***   **   *   *   *   **   *   *   *   *   **   ****   **   ****   *   *   *   *   *   *   *   *   *   *****   ***   *****   *   *   *   *   *   *   *   *   ****   *****   ****   *   *   *   *   *   *   *   *   *****   *****   *   ****   *   *   *   *   **   *   *   *   *   ****   ***   *   *   *   *   *   *   *   **   ********   ***   *   *   *   *   *   *   *   ***   *   *   *****   ********   *   *   *   *   *   *   **   ****   ***   ******   *   *   *   *   *   *   *   *   *   ***   *   *   ****   *********   ****   *   *   *   *   *   *   *   **   *******   ********   *   *   *   *   *   *   *   *   *   **   ***   *********   *   *   ***   *   *   *   *   *   **   ************   *   *   *   *   *   *   *   *   *   ******   *   *   ****   *   *   *   *****   *   *********   *   *   *   *   *   *   *   *   *****   ********   *   *   *   *   *   *   ****   ************   *   *   *   *   *   *   *   **   **   ***********   *   *   *   *   *   *   *   **   *   ************   *   *   *   *   *   *   *   *   ***   **************   *   *   *   *   *   *   *   *   *****   **********   *   *   *   *   *   *   *   *   *   *   **   ************   *   *   *   *   *   *   *   *   ****   **********   *   *   *   *   *   *   *   *   **   ************   *   *   *   *   *   *   *   *   **   **************   *   *   *   *   *   *   *   **   *************   *   *   *   *   *   *   *   *   *   ****   **********   *   *   *   *   *   *   *   *   ****   **********   *   *   *   *   *   *   *   *   ******   *   *   ****   **   *********   *   *   *   *   *   *   *   *   **   ***************   *   *   *   *   *   *   *   *   ****   ***************   *   *   *   *   *   *   *   *   *   *   *   *******   *********   *   *   *   *   *   *   *   *   ***   ***************   *   *   *   *   *   *   *   *   *   *   **   **************   *   *   *   *   *   *   *   *   *   *   ****   **   **********   *   *   *   *   *   *   *   *   *   *****   *************   *   *   *   *   *   *   *   *   *   *   ***************   *   *   *   *   *   *   *   *   ****   ***********   *   *   *   *   *   *   *   *   *   *   **   ************   *   *   *   *   *   *   *   *   **   *************   *   *   *   *   *   *   *   *   *   ****   *************   *   *   *   *   *   *   *   *   ***   *   *   ****   **   ***********   *   *   *   *   *   *   *   *   *   *   ***   *   *   ****   ******   *   *   *   *   *   *   *   **   **************   *   *   *   *   *   *   *   *   *   *   *   ***   *************   *   *   *   *   *   *   *   **   ***************   *   *   *   *   *   *   *   *   ****   **********   *   *   *   *   *   *   *   *   ************   *   *   *   *   *   *   *   *   **********   *   *   *   *   *   *   *   *   ***************   ",
+      "error": null,
+      "heap_before_mb": 2,
+      "heap_after_mb": 2
+    }
+  ],
+  "total_benchmark_time_ms": 355264
+}

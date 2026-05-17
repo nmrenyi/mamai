@@ -23,6 +23,25 @@ val useMtpForLlm = project.findProperty("useMtpForLlm")?.toString()?.toBoolean()
 // can surface what's actually linked at build time. Update in lockstep with the dependency.
 val litertlmVersion = "0.11.0"
 
+// Capture the current git commit SHA at build time so benchmark JSONs (and any other
+// runtime-emitted metadata) can record which code state produced the data. Falls back to
+// "unknown" outside a git checkout. Uses --short for compactness; reviewers can `git show`
+// the prefix to disambiguate.
+fun gitShortSha(): String {
+    return try {
+        val proc = ProcessBuilder("git", "rev-parse", "--short", "HEAD")
+            .directory(rootDir.parentFile?.parentFile ?: rootDir)
+            .redirectErrorStream(true)
+            .start()
+        val out = proc.inputStream.bufferedReader().readText().trim()
+        proc.waitFor()
+        if (out.isNotEmpty() && proc.exitValue() == 0) out else "unknown"
+    } catch (e: Exception) {
+        "unknown"
+    }
+}
+val gitSha = gitShortSha()
+
 fun propOrEnv(envName: String, propertyName: String): String? =
     System.getenv(envName)?.takeIf { it.isNotBlank() }
         ?: (keystoreProperties.getProperty(propertyName)?.takeIf { it.isNotBlank() })
@@ -62,6 +81,7 @@ android {
         buildConfigField("boolean", "USE_GPU_FOR_LLM", useGpuForLlm.toString())
         buildConfigField("boolean", "USE_MTP_FOR_LLM", useMtpForLlm.toString())
         buildConfigField("String", "LITERTLM_VERSION", "\"$litertlmVersion\"")
+        buildConfigField("String", "GIT_SHA", "\"$gitSha\"")
     }
 
     sourceSets {

@@ -23,6 +23,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -388,23 +389,60 @@ class BenchmarkForegroundService : Service() {
                 // serialize all results — an asset/parse error here would discard 20+ minutes
                 // of completed runs that are still in-memory. Better to ship an "unknown" tag
                 // and preserve the timing data than lose the whole sweep.
-                put("model", try {
+                val llmModelName = try {
                     JSONObject(
                         application.assets.open("app_config.json").bufferedReader().use { it.readText() }
                     ).getString("llm_model")
                 } catch (e: Exception) {
                     Log.w("mam-ai-bench", "[BENCHMARK] Failed to read llm_model from app_config.json — recording 'unknown': $e")
                     "unknown"
-                })
-                // Read backend from BuildConfig at compile time. Older builds
-                // hard-coded "CPU" here even when GPU was active — fixed so the
-                // JSON metadata matches reality.
-                put("backend", if (BuildConfig.USE_GPU_FOR_LLM) "GPU" else "CPU")
+                }
+                put("model", llmModelName)
+                // Record the ACTUAL backend the engine initialized on (RagPipeline
+                // falls back GPU→CPU if GPU construction or init throws). Reading
+                // BuildConfig.USE_GPU_FOR_LLM here would mislabel a silent fallback
+                // as the originally-requested backend and make GPU-vs-CPU comparisons
+                // invalid. activeBackend is set before llmReady flips true.
+                put("backend", pipeline.activeBackend)
                 put("mtp_enabled", BuildConfig.USE_MTP_FOR_LLM)
-                put("max_tokens", 32000)
-                put("temperature", 1.0)
-                put("top_p", 0.95)
-                put("top_k", 64)
+                // Read max_num_tokens + sampler params from runtime_config.json — the same
+                // source RagPipeline reads from. Single source of truth, so the JSON metadata
+                // can't drift from what the engine actually used.
+                try {
+                    val rt = JSONObject(application.assets.open("runtime_config.json").bufferedReader().use { it.readText() })
+                    put("max_num_tokens", rt.getJSONObject("engine").getInt("max_num_tokens"))
+                    val gen = rt.getJSONObject("generation")
+                    put("temperature", gen.getDouble("temperature"))
+                    put("top_p", gen.getDouble("top_p"))
+                    put("top_k", gen.getInt("top_k"))
+                } catch (e: Exception) {
+                    Log.w("mam-ai-bench", "[BENCHMARK] Failed to read runtime_config.json — recording defaults: $e")
+                    put("max_num_tokens", -1)
+                    put("temperature", -1.0)
+                    put("top_p", -1.0)
+                    put("top_k", -1)
+                }
+                // Artifact fingerprint: SHA-256 of the first 64 KB of the loaded .litertlm.
+                // The header (FlatBuffers metadata) lives in the first few KB, so this hash
+                // uniquely distinguishes artifact variants — e.g. the default Gemma 4 E4B
+                // build from the FP32-tagged rebuild that adds `prefer_activation_type=float32`
+                // to the prefill_decode section. Without this, JSON metadata can't tell which
+                // .litertlm variant was loaded.
+                put("artifact_fingerprint", try {
+                    val modelFile = File(application.getExternalFilesDir(null), llmModelName)
+                    val buf = ByteArray(65536)
+                    val read = modelFile.inputStream().use { it.read(buf) }
+                    val digest = MessageDigest.getInstance("SHA-256")
+                        .digest(if (read > 0) buf.copyOf(read) else byteArrayOf())
+                    digest.joinToString("") { "%02x".format(it) }
+                } catch (e: Exception) {
+                    Log.w("mam-ai-bench", "[BENCHMARK] Failed to fingerprint artifact: $e")
+                    "unknown"
+                })
+                // Provenance: the git commit SHA that produced this APK. Wired via
+                // BuildConfig.GIT_SHA at Gradle build time.
+                put("git_commit_sha", BuildConfig.GIT_SHA)
+                put("litertlm_version", BuildConfig.LITERTLM_VERSION)
             })
             put("init", JSONObject().apply {
                 put("gecko_sqlite_ms", syncInitMs)

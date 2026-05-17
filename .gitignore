@@ -1,7 +1,11 @@
 _scratch/
 evaluation/models/
 evaluation/results/
-evaluation/latency_results/
+evaluation/latency_results/*
+# Keep the canonical FP16 GPU failure example checked in as a reference for the
+# maxNumTokens investigation (long_01 at k=20 → asterisk repetition loop past
+# total context ~5000). Referenced by evaluation/reports/maxnumtoken_investigation.md.
+!evaluation/latency_results/benchmark_20260516T104730_k20.json
 
 # IDE
 .idea/

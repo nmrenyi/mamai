@@ -95,9 +95,24 @@ def test_runtime_parses_as_json():
 
 def test_runtime_required_keys():
     cfg = _runtime()
+    assert "engine" in cfg
     assert "generation" in cfg
     assert "retrieval" in cfg
     assert "context_injection" in cfg
+
+
+def test_runtime_engine_max_num_tokens():
+    # RagPipeline.kt reads this at startup via runtimeConfig.getJSONObject("engine")
+    # .getInt("max_num_tokens") and passes it to EngineConfig. Missing key or
+    # non-positive value would crash on first launch, which CI must catch here
+    # rather than on a test device. See evaluation/reports/maxnumtoken_investigation.md
+    # for why 4096 is the deployment-safe value (FP16 GPU cliff at total context ~5000).
+    engine = _runtime()["engine"]
+    assert "max_num_tokens" in engine, "runtime_config.engine missing 'max_num_tokens'"
+    val = engine["max_num_tokens"]
+    assert isinstance(val, int) and val > 0, (
+        f"engine.max_num_tokens must be a positive integer, got {val!r}"
+    )
 
 
 def test_runtime_generation_params():
