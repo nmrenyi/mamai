@@ -570,13 +570,19 @@ class BenchmarkForegroundService : Service() {
             }
             outFile.writeText(checkpoint.toString(2))
 
-            // Cooldown between rows. Without this, back-to-back createConversation
-            // calls into LiteRT-LM hung indefinitely after row 1-2 in our first
-            // smoke test on OPD2413 — the latency benchmark already runs with a
-            // 5s cooldown for the same reason. 1s is plenty for MCQ-length
-            // generations and keeps the throughput hit minimal.
+            // Cooldown between rows. Matches the latency benchmark's default
+            // (cooldownMs = 5_000L) so the eval path inherits the same
+            // power-management characteristics that benchmark proved stable
+            // on OPPO ColorOS. With shorter cooldowns we observed ColorOS
+            // HansManager freezing the :benchmark process between rows
+            // (every thread S/sleeping/wchan=0, no further progress)
+            // because the per-row work was too brief to count as "active"
+            // — the real fix is the "Allow background activity" Battery
+            // setting per BenchmarkForegroundService's pre-flight, but the
+            // 5s cooldown is a defensive belt to keep the eval and latency
+            // paths behaving identically under power management.
             if (i + 1 < rows.length()) {
-                delay(1000L)
+                delay(5000L)
             }
         }
 
