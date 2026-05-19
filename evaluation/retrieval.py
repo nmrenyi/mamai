@@ -11,7 +11,9 @@ import struct
 
 import numpy as np
 
-_METADATA_PREFIX = re.compile(r"^\[SOURCE:([^|]+)\|PAGE:(\d+)\]")
+# CID was added in bundle v0.2.0; the trailing group is optional so we keep
+# parsing v0.1.0 chunks correctly.
+_METADATA_PREFIX = re.compile(r"^\[SOURCE:([^|]+)\|PAGE:(\d+)(?:\|CID:([0-9a-f]+))?\]")
 
 
 def load_vector_store(db_path: str) -> list[tuple[str, np.ndarray]]:
@@ -117,14 +119,16 @@ class GeckoEmbedder:
 
 
 def parse_chunk_metadata(raw: str) -> dict[str, object]:
-    """Parse the app's [SOURCE:stem|PAGE:n] prefix from a stored chunk."""
+    """Parse the app's [SOURCE:stem|PAGE:n|CID:hex] prefix from a stored chunk.
+    `cid` is None for pre-v0.2.0 bundles that did not carry it."""
     match = _METADATA_PREFIX.match(raw)
     if not match:
-        return {"text": raw, "source": "", "page": 0}
+        return {"text": raw, "source": "", "page": 0, "cid": None}
     return {
         "text": raw[match.end():].strip(),
         "source": match.group(1),
         "page": int(match.group(2)),
+        "cid": match.group(3),
     }
 
 
