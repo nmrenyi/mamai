@@ -139,6 +139,7 @@ class BenchmarkForegroundService : Service() {
         }
         benchmarkStarted = true
 
+        val evalMode = intent?.getBooleanExtra("eval_mode", false) ?: false
         val repeats = intent?.getIntExtra("repeats", DEFAULT_REPEATS) ?: DEFAULT_REPEATS
         val cooldownMs = intent?.getLongExtra("cooldown_ms", DEFAULT_COOLDOWN_MS) ?: DEFAULT_COOLDOWN_MS
         val skipRetrieval = intent?.getBooleanExtra("skip_retrieval", false) ?: false
@@ -148,7 +149,11 @@ class BenchmarkForegroundService : Service() {
 
         scope.launch {
             try {
-                runBenchmark(repeats, cooldownMs, skipRetrieval, ragOnly, queryFilter, retrieveKOverride)
+                if (evalMode) {
+                    runMcqEval()
+                } else {
+                    runBenchmark(repeats, cooldownMs, skipRetrieval, ragOnly, queryFilter, retrieveKOverride)
+                }
             } catch (t: Throwable) {
                 Log.e(TAG, "[BENCHMARK] FATAL ERROR: ${t.message}", t)
                 Log.w(BENCH_TAG, "[BENCHMARK] FAILED")
@@ -456,6 +461,108 @@ class BenchmarkForegroundService : Service() {
         }
 
         val outFile = File(getExternalFilesDir(null), "benchmark_results.json")
+        outFile.writeText(output.toString(2))
+        Log.w(BENCH_TAG, "[BENCHMARK] Results written to ${outFile.absolutePath}")
+        Log.w(BENCH_TAG, "[BENCHMARK] COMPLETE")
+    }
+
+    // ── MCQ eval mode ────────────────────────────────────────────────────
+
+    /**
+     * On-device MCQ evaluation runner. Reads a pushed
+     * `eval_input.json` ({system_prompt, rows: [{id, user_message}]}),
+     * iterates rows through the same LiteRT pipeline production uses,
+     * but with the MCQ adapter system prompt and no retrieval. Writes
+     * `eval_output.json` ({rows: [{id, response_text, error?}]}) for
+     * the harness (run_eval_device.py) to pull and score.
+     *
+     * Triggered via `am start ... --ez eval_mode true`. Production paths
+     * are unreachable from this branch — production chat continues to
+     * use the deployed system prompt and the default RAG-injection
+     * behaviour.
+     */
+    private suspend fun runMcqEval() {
+        val timestamp = SimpleDateFormat("yyyyMMdd'T'HHmmss", Locale.US).format(Date())
+        val evalStart = System.currentTimeMillis()
+        Log.w(BENCH_TAG, "[BENCHMARK] START eval_mode=true")
+
+        val inFile = File(getExternalFilesDir(null), "eval_input.json")
+        if (!inFile.exists()) {
+            Log.e(BENCH_TAG, "[BENCHMARK] eval_input.json not found at ${inFile.absolutePath}")
+            Log.w(BENCH_TAG, "[BENCHMARK] FAILED")
+            return
+        }
+        val input = JSONObject(inFile.readText())
+        val systemPrompt = input.optString("system_prompt", "")
+        if (systemPrompt.isEmpty()) {
+            Log.e(BENCH_TAG, "[BENCHMARK] eval_input.json missing 'system_prompt'")
+            Log.w(BENCH_TAG, "[BENCHMARK] FAILED")
+            return
+        }
+        val rows = input.getJSONArray("rows")
+        Log.w(BENCH_TAG, "[BENCHMARK] eval rows: ${rows.length()}, system_prompt: ${systemPrompt.length} chars")
+
+        updateNotification("Initializing pipeline (eval mode)…", -1, 0)
+        Log.w(BENCH_TAG, "[BENCHMARK] Initializing pipeline (Gecko + SQLite)...")
+        val initStart = System.currentTimeMillis()
+        val pipeline = withContext(executor.asCoroutineDispatcher()) {
+            RagPipeline(application)
+        }
+        val syncInitMs = System.currentTimeMillis() - initStart
+
+        updateNotification("Loading LLM…", -1, 0)
+        val llmWaitStart = System.currentTimeMillis()
+        withContext(executor.asCoroutineDispatcher()) { pipeline.awaitLlmReady() }
+        val llmInitMs = System.currentTimeMillis() - llmWaitStart
+        Log.w(BENCH_TAG, "[BENCHMARK] Init complete: sync=${syncInitMs}ms llm=${llmInitMs}ms")
+
+        val out = JSONArray()
+        for (i in 0 until rows.length()) {
+            val row = rows.getJSONObject(i)
+            val id = row.getString("id")
+            val userMessage = row.getString("user_message")
+            updateNotification("[${i + 1}/${rows.length()}] $id", i + 1, rows.length())
+            Log.w(BENCH_TAG, "[BENCHMARK] eval ${i + 1}/${rows.length()} id=$id")
+
+            val t0 = System.currentTimeMillis()
+            val response = StringBuilder()
+            var error: String? = null
+            try {
+                withContext(executor.asCoroutineDispatcher()) {
+                    pipeline.generateResponse(
+                        prompt = userMessage,
+                        history = emptyList(),
+                        useRetrieval = false,
+                        retrievalListener = {},
+                        generationListener = { partial, _ -> response.append(partial) },
+                        systemInstructionsOverride = systemPrompt,
+                        bypassPromptFormatting = true,
+                    )
+                }
+            } catch (e: Exception) {
+                error = e.message
+                Log.e(BENCH_TAG, "[BENCHMARK] eval row $id failed: ${e.message}", e)
+            }
+            val elapsedMs = System.currentTimeMillis() - t0
+
+            out.put(JSONObject().apply {
+                put("id", id)
+                put("response_text", response.toString())
+                put("inference_time_ms", elapsedMs)
+                put("error", error ?: JSONObject.NULL)
+            })
+            Log.w(BENCH_TAG, "[BENCHMARK] eval row $id done in ${elapsedMs}ms, ${response.length} chars")
+        }
+
+        val output = JSONObject().apply {
+            put("eval_version", 1)
+            put("timestamp", timestamp)
+            put("device", collectDeviceInfo())
+            put("n_rows", rows.length())
+            put("total_time_ms", System.currentTimeMillis() - evalStart)
+            put("rows", out)
+        }
+        val outFile = File(getExternalFilesDir(null), "eval_output.json")
         outFile.writeText(output.toString(2))
         Log.w(BENCH_TAG, "[BENCHMARK] Results written to ${outFile.absolutePath}")
         Log.w(BENCH_TAG, "[BENCHMARK] COMPLETE")

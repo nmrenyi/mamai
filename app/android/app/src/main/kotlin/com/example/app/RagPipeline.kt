@@ -237,6 +237,18 @@ class RagPipeline(application: Application) {
      *  [retrieveKOverride] — when non-null, replaces `retrievalConfig.top_k`
      *  for this call only. Used by [BenchmarkActivity] for the per-k latency
      *  sweep; production callers leave it null and inherit the runtime config.
+     *
+     *  [systemInstructionsOverride] — when non-null, replaces the asset-loaded
+     *  system prompt for this call only. Production callers leave it null and
+     *  inherit the deployed English/Swahili clinical prompt. Used by the eval
+     *  mode in [BenchmarkForegroundService] to swap in the MCQ adapter prompt
+     *  so single-letter answers can be scored.
+     *
+     *  [bypassPromptFormatting] — when true, [prompt] is sent to the model
+     *  verbatim with no context-label / question-label injection. Pairs with
+     *  [systemInstructionsOverride] for the eval path, where the caller has
+     *  already built the exact user message it wants scored. Production
+     *  callers leave it false and inherit the deployed RAG-injection behaviour.
      */
     suspend fun generateResponse(
         prompt: String,
@@ -246,6 +258,8 @@ class RagPipeline(application: Application) {
         retrievalListener: (docs: List<RetrievedDoc>) -> Unit,
         generationListener: (partial: String, done: Boolean) -> Unit,
         retrieveKOverride: Int? = null,
+        systemInstructionsOverride: String? = null,
+        bypassPromptFormatting: Boolean = false,
     ): String =
         coroutineScope {
             awaitLlmReady()
@@ -277,21 +291,31 @@ class RagPipeline(application: Application) {
             // Number the documents so the LLM can cite them as [1], [2], [3].
             val contextStr = docs.mapIndexed { i, doc -> "Document ${i + 1}:\n${doc.text}" }.joinToString("\n\n")
 
-            val systemInstructions = if (language == "sw") systemInstructionsSw else systemInstructionsEn
-            val contextLabel = if (language == "sw")
-                contextInjectionConfig.getString("context_label_sw")
-            else
-                contextInjectionConfig.getString("context_label_en")
-            val questionLabel = if (language == "sw")
-                contextInjectionConfig.getString("question_label_sw")
-            else
-                contextInjectionConfig.getString("question_label_en")
+            val systemInstructions = systemInstructionsOverride
+                ?: if (language == "sw") systemInstructionsSw else systemInstructionsEn
 
-            // Build the final user message: retrieved context (if any) followed by the question.
-            // LiteRT-LM handles the chat template internally, so we only supply the content.
-            val queryMessage = buildString {
-                if (contextStr.isNotEmpty()) append("$contextLabel\n$contextStr\n\n")
-                append("$questionLabel $prompt")
+            // Build the final user message. The eval path supplies the exact
+            // text it wants scored, so we skip context-label / question-label
+            // injection when `bypassPromptFormatting=true`. Production callers
+            // keep the deployed RAG-injection behaviour.
+            val queryMessage = if (bypassPromptFormatting) {
+                prompt
+            } else {
+                val contextLabel = if (language == "sw")
+                    contextInjectionConfig.getString("context_label_sw")
+                else
+                    contextInjectionConfig.getString("context_label_en")
+                val questionLabel = if (language == "sw")
+                    contextInjectionConfig.getString("question_label_sw")
+                else
+                    contextInjectionConfig.getString("question_label_en")
+
+                // Build the final user message: retrieved context (if any) followed by the question.
+                // LiteRT-LM handles the chat template internally, so we only supply the content.
+                buildString {
+                    if (contextStr.isNotEmpty()) append("$contextLabel\n$contextStr\n\n")
+                    append("$questionLabel $prompt")
+                }
             }
 
             // Pass conversation history via initialMessages; system instructions via systemInstruction.

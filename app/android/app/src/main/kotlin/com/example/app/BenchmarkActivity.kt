@@ -44,6 +44,8 @@ class BenchmarkActivity : Activity() {
         val serviceIntent = Intent(this, BenchmarkForegroundService::class.java).apply {
             // Forward every extra the user might have passed via `am start`.
             // Defaults are resolved inside the service.
+            if (intent.hasExtra("eval_mode"))
+                putExtra("eval_mode", intent.getBooleanExtra("eval_mode", false))
             if (intent.hasExtra("repeats"))
                 putExtra("repeats", intent.getIntExtra("repeats", 3))
             if (intent.hasExtra("cooldown_ms"))
