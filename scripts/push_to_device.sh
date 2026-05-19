@@ -19,6 +19,11 @@ DEVICE_PUSH="$REPO_ROOT/device_push"
 INSTALL_RECORD="$DEVICE_PUSH/bundle/debug/rag_bundle_staged.json"
 DEVICE_DIR="/sdcard/Android/data/com.example.app/files"
 DEPLOY_RECORD_NAME="rag_bundle_deployed.json"
+# Marker the app's intro_page checks (intro_page.dart:_bundleMarker) to skip the
+# bundle-download prompt. The in-app extractor writes it after a successful
+# tar.gz extract; sideloads via this script must write it too, or the app will
+# offer to re-download the bundle on next launch.
+BUNDLE_READY_MARKER=".rag_bundle_ready"
 
 PUSH_EMBEDDING_MODELS=0
 SERIAL=""
@@ -235,7 +240,7 @@ record = {
 Path("$DEPLOY_RECORD_LOCAL").write_text(json.dumps(record, indent=2) + "\n")
 PY
 
-"$ADB_BIN" "${ADB_ARGS[@]}" shell "mkdir -p $DEVICE_DIR && rm -f $DEVICE_DIR/*.pdf $DEVICE_DIR/$DEPLOY_RECORD_NAME $DEVICE_DIR/rag_bundle_staged.json"
+"$ADB_BIN" "${ADB_ARGS[@]}" shell "mkdir -p $DEVICE_DIR && rm -f $DEVICE_DIR/*.pdf $DEVICE_DIR/$DEPLOY_RECORD_NAME $DEVICE_DIR/rag_bundle_staged.json $DEVICE_DIR/$BUNDLE_READY_MARKER"
 
 # ---------------------------------------------------------------------------
 # Push staged files
@@ -257,6 +262,13 @@ fi
 
 echo "Writing deployment receipt ..."
 "$ADB_BIN" "${ADB_ARGS[@]}" push "$DEPLOY_RECORD_LOCAL" "$DEVICE_DIR/" >/dev/null
+
+# Write the bundle-ready marker last, only after all asset pushes have
+# succeeded — same ordering as the in-app extractor. If any earlier adb push
+# failed, `set -euo pipefail` would have aborted before reaching this point,
+# so the device never ends up with a marker but missing assets.
+echo "Writing bundle-ready marker ..."
+"$ADB_BIN" "${ADB_ARGS[@]}" shell "echo -n ok > $DEVICE_DIR/$BUNDLE_READY_MARKER"
 
 # ---------------------------------------------------------------------------
 # Summary
