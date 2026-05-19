@@ -517,6 +517,8 @@ class BenchmarkForegroundService : Service() {
         Log.w(BENCH_TAG, "[BENCHMARK] Init complete: sync=${syncInitMs}ms llm=${llmInitMs}ms")
 
         val out = JSONArray()
+        val outFile = File(getExternalFilesDir(null), "eval_output.json")
+
         for (i in 0 until rows.length()) {
             val row = rows.getJSONObject(i)
             val id = row.getString("id")
@@ -552,18 +554,31 @@ class BenchmarkForegroundService : Service() {
                 put("error", error ?: JSONObject.NULL)
             })
             Log.w(BENCH_TAG, "[BENCHMARK] eval row $id done in ${elapsedMs}ms, ${response.length} chars")
+
+            // Checkpoint after every row so a hang in the next iteration doesn't
+            // discard finished work. Mirrors how the harness writes intermediate
+            // checkpoints in run_eval.py.
+            val checkpoint = JSONObject().apply {
+                put("eval_version", 1)
+                put("timestamp", timestamp)
+                put("device", collectDeviceInfo())
+                put("n_rows", rows.length())
+                put("n_rows_done", i + 1)
+                put("total_time_ms", System.currentTimeMillis() - evalStart)
+                put("rows", out)
+            }
+            outFile.writeText(checkpoint.toString(2))
+
+            // Cooldown between rows. Without this, back-to-back createConversation
+            // calls into LiteRT-LM hung indefinitely after row 1-2 in our first
+            // smoke test on OPD2413 — the latency benchmark already runs with a
+            // 5s cooldown for the same reason. 1s is plenty for MCQ-length
+            // generations and keeps the throughput hit minimal.
+            if (i + 1 < rows.length()) {
+                delay(1000L)
+            }
         }
 
-        val output = JSONObject().apply {
-            put("eval_version", 1)
-            put("timestamp", timestamp)
-            put("device", collectDeviceInfo())
-            put("n_rows", rows.length())
-            put("total_time_ms", System.currentTimeMillis() - evalStart)
-            put("rows", out)
-        }
-        val outFile = File(getExternalFilesDir(null), "eval_output.json")
-        outFile.writeText(output.toString(2))
         Log.w(BENCH_TAG, "[BENCHMARK] Results written to ${outFile.absolutePath}")
         Log.w(BENCH_TAG, "[BENCHMARK] COMPLETE")
     }
