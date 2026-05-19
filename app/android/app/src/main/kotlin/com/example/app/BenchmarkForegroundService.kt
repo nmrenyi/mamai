@@ -355,6 +355,7 @@ class BenchmarkForegroundService : Service() {
                                     put("text", doc.text)
                                     put("source", doc.source)
                                     put("page", doc.page)
+                                    put("cid", doc.cid ?: JSONObject.NULL)
                                     put("chars", doc.text.length)
                                 })
                             }

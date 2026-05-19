@@ -32,9 +32,10 @@ import java.util.concurrent.Executors
 
 /** A retrieved document chunk with its source metadata. */
 data class RetrievedDoc(
-    val text: String,   // chunk body, with [SOURCE|PAGE] prefix stripped
-    val source: String, // filename stem, e.g. "WHO_PositiveBirth_2018"
-    val page: Int,      // PDF page number
+    val text: String,    // chunk body, with [SOURCE|PAGE|CID] prefix stripped
+    val source: String,  // filename stem, e.g. "WHO_PositiveBirth_2018"
+    val page: Int,       // PDF page number
+    val cid: String? = null, // sha256(chunk_text)[:16] — null for pre-v0.2.0 bundles
 )
 
 /** The RAG pipeline for LLM generation. */
@@ -218,7 +219,8 @@ class RagPipeline(application: Application) {
         textMemory.recordBatchedMemoryItems(ImmutableList.copyOf(facts)).get()
     }
 
-    /** Parse the [SOURCE:stem|PAGE:n] prefix from a raw chunk string. */
+    /** Parse the [SOURCE:stem|PAGE:n|CID:hex] prefix from a raw chunk string.
+     *  CID is optional — pre-v0.2.0 bundles use [SOURCE:stem|PAGE:n]. */
     private fun parseChunkMetadata(raw: String): RetrievedDoc {
         val match = METADATA_PREFIX.find(raw)
         return if (match != null) {
@@ -226,6 +228,7 @@ class RagPipeline(application: Application) {
                 text = raw.substring(match.range.last + 1).trim(),
                 source = match.groupValues[1],
                 page = match.groupValues[2].toIntOrNull() ?: 0,
+                cid = match.groupValues[3].takeIf { it.isNotEmpty() },
             )
         } else {
             RetrievedDoc(text = raw, source = "", page = 0)
@@ -393,7 +396,10 @@ class RagPipeline(application: Application) {
 
     companion object {
         private val CHUNK_SEPARATORS = listOf("<sep>", "<doc_sep>")
-        // Matches the [SOURCE:stem|PAGE:n] prefix written by chunk_guidelines.py
-        private val METADATA_PREFIX = Regex("""^\[SOURCE:([^|]+)\|PAGE:(\d+)\]""")
+        // Matches the [SOURCE:stem|PAGE:n|CID:hex] prefix written by chunk_guidelines.py.
+        // CID was added in bundle v0.2.0 — the trailing group is optional so we keep
+        // parsing v0.1.0 bundles correctly.
+        private val METADATA_PREFIX =
+            Regex("""^\[SOURCE:([^|]+)\|PAGE:(\d+)(?:\|CID:([0-9a-f]+))?\]""")
     }
 }
