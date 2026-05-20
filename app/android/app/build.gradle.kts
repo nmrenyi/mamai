@@ -21,7 +21,7 @@ val useMtpForLlm = project.findProperty("useMtpForLlm")?.toString()?.toBoolean()
 
 // Used in both the dependency declaration below and the BuildConfig field so the About page
 // can surface what's actually linked at build time. Update in lockstep with the dependency.
-val litertlmVersion = "0.11.0"
+val litertlmVersion = "0.12.0"
 
 // Capture the current git commit SHA at build time so benchmark JSONs (and any other
 // runtime-emitted metadata) can record which code state produced the data. Falls back to
