@@ -473,8 +473,8 @@ class BenchmarkForegroundService : Service() {
      * On-device evaluation runner. Reads a pushed `eval_input.json`
      * ({system_prompt, use_retrieval?, rows: [{id, user_message, history?}]}),
      * iterates rows through the same LiteRT pipeline production uses, and
-     * writes `eval_output.json` ({rows: [{id, response_text, error?}]}) for
-     * the harness (run_eval_device.py) to pull and score.
+     * writes `eval_output.json` ({rows: [{id, response_text, inference_time_ms,
+     * error}]}) for the harness (run_eval_device.py) to pull and score.
      *
      * Tracks:
      *  - MCQ / SAQ no-RAG: `use_retrieval=false` → the pre-built `user_message`
@@ -537,8 +537,9 @@ class BenchmarkForegroundService : Service() {
             // Optional multi-turn history (healthbench): [{role, text}, …] replayed
             // before user_message. Absent for single-turn MCQ/SAQ rows.
             // RagPipeline maps role=="user" → user turn and everything else →
-            // model turn, so normalize to "user"/"model" here and fail loudly on
-            // anything unexpected rather than silently mis-attributing a turn.
+            // model turn, so normalize to "user"/"model" here; skip blank turns,
+            // and log + skip an unrecognized role rather than silently
+            // mis-attributing it as a model turn.
             val history = mutableListOf<Map<String, String>>()
             row.optJSONArray("history")?.let { h ->
                 for (j in 0 until h.length()) {
