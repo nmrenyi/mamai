@@ -536,14 +536,25 @@ class BenchmarkForegroundService : Service() {
             val userMessage = row.getString("user_message")
             // Optional multi-turn history (healthbench): [{role, text}, …] replayed
             // before user_message. Absent for single-turn MCQ/SAQ rows.
+            // RagPipeline maps role=="user" → user turn and everything else →
+            // model turn, so normalize to "user"/"model" here and fail loudly on
+            // anything unexpected rather than silently mis-attributing a turn.
             val history = mutableListOf<Map<String, String>>()
             row.optJSONArray("history")?.let { h ->
                 for (j in 0 until h.length()) {
                     val turn = h.getJSONObject(j)
-                    history.add(mapOf(
-                        "role" to turn.optString("role", "user"),
-                        "text" to turn.optString("text", ""),
-                    ))
+                    val text = turn.optString("text", "").trim()
+                    if (text.isEmpty()) continue  // skip blank turns
+                    val role = when (turn.optString("role", "").trim().lowercase()) {
+                        "user", "human" -> "user"
+                        "assistant", "model", "bot", "ai" -> "model"
+                        else -> {
+                            Log.e(BENCH_TAG, "[BENCHMARK] row $id history turn $j has " +
+                                "unrecognized role='${turn.optString("role")}'; skipping turn")
+                            continue
+                        }
+                    }
+                    history.add(mapOf("role" to role, "text" to text))
                 }
             }
             updateNotification("[${i + 1}/${rows.length()}] $id", i + 1, rows.length())
