@@ -150,7 +150,7 @@ class BenchmarkForegroundService : Service() {
         scope.launch {
             try {
                 if (evalMode) {
-                    runMcqEval()
+                    runEval()
                 } else {
                     runBenchmark(repeats, cooldownMs, skipRetrieval, ragOnly, queryFilter, retrieveKOverride)
                 }
@@ -467,22 +467,28 @@ class BenchmarkForegroundService : Service() {
         Log.w(BENCH_TAG, "[BENCHMARK] COMPLETE")
     }
 
-    // ── MCQ eval mode ────────────────────────────────────────────────────
+    // ── Eval mode (MCQ + open-ended SAQ/rubric) ──────────────────────────
 
     /**
-     * On-device MCQ evaluation runner. Reads a pushed
-     * `eval_input.json` ({system_prompt, rows: [{id, user_message}]}),
-     * iterates rows through the same LiteRT pipeline production uses,
-     * but with the MCQ adapter system prompt and no retrieval. Writes
-     * `eval_output.json` ({rows: [{id, response_text, error?}]}) for
-     * the harness (run_eval_device.py) to pull and score.
+     * On-device evaluation runner. Reads a pushed `eval_input.json`
+     * ({system_prompt, use_retrieval?, rows: [{id, user_message, history?}]}),
+     * iterates rows through the same LiteRT pipeline production uses, and
+     * writes `eval_output.json` ({rows: [{id, response_text, inference_time_ms,
+     * error}]}) for the harness (run_eval_device.py) to pull and score.
      *
-     * Triggered via `am start ... --ez eval_mode true`. Production paths
-     * are unreachable from this branch — production chat continues to
-     * use the deployed system prompt and the default RAG-injection
-     * behaviour.
+     * Tracks:
+     *  - MCQ / SAQ no-RAG: `use_retrieval=false` → the pre-built `user_message`
+     *    is sent verbatim (bypassPromptFormatting) with no retrieval.
+     *  - SAQ / rubric +RAG: `use_retrieval=true` → on-device retrieval runs and
+     *    the deployed context-injection formatting is applied (production path),
+     *    so the eval exercises the real retrieval + injection stack.
+     *  - Multi-turn (healthbench): optional per-row `history`
+     *    ([{role: "user"|"model", text}]) is replayed as conversation history.
+     *
+     * Triggered via `am start ... --ez eval_mode true`. Production chat paths
+     * are unreachable from this branch.
      */
-    private suspend fun runMcqEval() {
+    private suspend fun runEval() {
         val timestamp = SimpleDateFormat("yyyyMMdd'T'HHmmss", Locale.US).format(Date())
         val evalStart = System.currentTimeMillis()
         Log.w(BENCH_TAG, "[BENCHMARK] START eval_mode=true")
@@ -501,7 +507,11 @@ class BenchmarkForegroundService : Service() {
             return
         }
         val rows = input.getJSONArray("rows")
-        Log.w(BENCH_TAG, "[BENCHMARK] eval rows: ${rows.length()}, system_prompt: ${systemPrompt.length} chars")
+        // When true, run on-device retrieval + the deployed context-injection
+        // formatting (production path). When false (MCQ / SAQ no-RAG), send the
+        // pre-built user_message verbatim with no retrieval.
+        val useRetrieval = input.optBoolean("use_retrieval", false)
+        Log.w(BENCH_TAG, "[BENCHMARK] eval rows: ${rows.length()}, system_prompt: ${systemPrompt.length} chars, use_retrieval=$useRetrieval")
 
         updateNotification("Initializing pipeline (eval mode)…", -1, 0)
         Log.w(BENCH_TAG, "[BENCHMARK] Initializing pipeline (Gecko + SQLite)...")
@@ -524,6 +534,30 @@ class BenchmarkForegroundService : Service() {
             val row = rows.getJSONObject(i)
             val id = row.getString("id")
             val userMessage = row.getString("user_message")
+            // Optional multi-turn history (healthbench): [{role, text}, …] replayed
+            // before user_message. Absent for single-turn MCQ/SAQ rows.
+            // RagPipeline maps role=="user" → user turn and everything else →
+            // model turn, so normalize to "user"/"model" here; skip blank turns,
+            // and log + skip an unrecognized role rather than silently
+            // mis-attributing it as a model turn.
+            val history = mutableListOf<Map<String, String>>()
+            row.optJSONArray("history")?.let { h ->
+                for (j in 0 until h.length()) {
+                    val turn = h.getJSONObject(j)
+                    val text = turn.optString("text", "").trim()
+                    if (text.isEmpty()) continue  // skip blank turns
+                    val role = when (turn.optString("role", "").trim().lowercase()) {
+                        "user", "human" -> "user"
+                        "assistant", "model", "bot", "ai" -> "model"
+                        else -> {
+                            Log.e(BENCH_TAG, "[BENCHMARK] row $id history turn $j has " +
+                                "unrecognized role='${turn.optString("role")}'; skipping turn")
+                            continue
+                        }
+                    }
+                    history.add(mapOf("role" to role, "text" to text))
+                }
+            }
             updateNotification("[${i + 1}/${rows.length()}] $id", i + 1, rows.length())
             Log.w(BENCH_TAG, "[BENCHMARK] eval ${i + 1}/${rows.length()} id=$id")
 
@@ -534,12 +568,14 @@ class BenchmarkForegroundService : Service() {
                 withContext(executor.asCoroutineDispatcher()) {
                     pipeline.generateResponse(
                         prompt = userMessage,
-                        history = emptyList(),
-                        useRetrieval = false,
+                        history = history,
+                        useRetrieval = useRetrieval,
                         retrievalListener = {},
                         generationListener = { partial, _ -> response.append(partial) },
                         systemInstructionsOverride = systemPrompt,
-                        bypassPromptFormatting = true,
+                        // Verbatim only on the no-retrieval path (caller pre-built the
+                        // message). With retrieval, use the deployed injection formatting.
+                        bypassPromptFormatting = !useRetrieval,
                     )
                 }
             } catch (e: Exception) {
