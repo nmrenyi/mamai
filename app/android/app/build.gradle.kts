@@ -132,6 +132,10 @@ dependencies {
     implementation("com.google.ai.edge.litertlm:litertlm-android:$litertlmVersion")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.10.2")
     implementation("com.google.protobuf:protobuf-javalite:3.25.4")
+    // LiteRT runtime — provides org.tensorflow.lite.Interpreter used by
+    // EmbeddingGemmaEmbedder to run the EmbeddingGemma .tflite on CPU/XNNPACK.
+    // (Already present transitively via the RAG/LLM stack; pinned explicitly.)
+    implementation("com.google.ai.edge.litert:litert:1.0.1")
 }
 
 tasks.register("prepareKotlinBuildScriptModel") {}

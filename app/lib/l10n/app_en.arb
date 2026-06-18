@@ -142,7 +142,7 @@
   },
   "introAssetGemmaTitle": "Gemma 3n on-device model",
   "introAssetGemmaSubtitle": "Main language model for chat responses.",
-  "introAssetGeckoTitle": "Gecko embedding model",
+  "introAssetGeckoTitle": "EmbeddingGemma retriever model",
   "introAssetGeckoSubtitle": "Used to find the most relevant guideline passages.",
   "introAssetTokenizerTitle": "SentencePiece tokenizer",
   "introAssetTokenizerSubtitle": "Tokenizer required by the embedding model.",

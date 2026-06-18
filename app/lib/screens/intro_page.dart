@@ -120,10 +120,15 @@ class _IntroPageState extends State<IntroPage> {
     // `_modelFileSha256`, verified after download.
     "gemma-3n-E4B-it-int4.litertlm":
         "https://huggingface.co/nmrenyi/gemma-3n-E4B-it-litert-lm/resolve/main/gemma-3n-E4B-it-int4.litertlm",
-    "Gecko_1024_quant.tflite":
-        "https://huggingface.co/litert-community/Gecko-110m-en/resolve/main/Gecko_1024_quant.tflite",
-    "sentencepiece.model":
-        "https://huggingface.co/litert-community/Gecko-110m-en/resolve/main/sentencepiece.model",
+    // EmbeddingGemma-300M retriever (replaces Gecko). Generic CPU int4/int8
+    // seq256 LiteRT export + its Gemma SentencePiece tokenizer, hosted ungated
+    // under the project HF account (mirror of litert-community/embeddinggemma-300m).
+    // Saved locally as embeddinggemma_tokenizer.model to avoid clashing with any
+    // legacy Gecko sentencepiece.model.
+    "embeddinggemma-300M_seq256_mixed-precision.tflite":
+        "https://huggingface.co/nmrenyi/embeddinggemma-300m-litert-mamai/resolve/main/embeddinggemma-300M_seq256_mixed-precision.tflite",
+    "embeddinggemma_tokenizer.model":
+        "https://huggingface.co/nmrenyi/embeddinggemma-300m-litert-mamai/resolve/main/sentencepiece.model",
   };
 
   // Pinned SHA-256 of each model file, verified after download. This is what
@@ -136,10 +141,10 @@ class _IntroPageState extends State<IntroPage> {
   static const Map<String, String> _modelFileSha256 = {
     "gemma-3n-E4B-it-int4.litertlm":
         "2e67a6cd51dfe0f793431e6bd4ed8d029c88e10f52ca0469ad38445e3cd3c1f4",
-    "Gecko_1024_quant.tflite":
-        "2334395c8192ea6466093dc39177c524535ba8318c876232096d023518d323e6",
-    "sentencepiece.model":
-        "839ffa4b9afae8d77834a88b87781849aa021975d6063dec6085633fcaf7171c",
+    "embeddinggemma-300M_seq256_mixed-precision.tflite":
+        "37115ef7bff76cd37dd86abe503ff511b1032bf85fc624a85c49c84899e92bc5",
+    "embeddinggemma_tokenizer.model":
+        "d6daa52d93d7aad10e8388bd526c4e501d914b47177398d1d9621f1fe48438c7",
   };
 
   // Key used in the downloads map to track bundle download progress.
@@ -702,8 +707,8 @@ class _IntroPageState extends State<IntroPage> {
   // Model files downloaded individually from HuggingFace.
   static const List<String> _modelFiles = [
     "gemma-3n-E4B-it-int4.litertlm",
-    "sentencepiece.model",
-    "Gecko_1024_quant.tflite",
+    "embeddinggemma_tokenizer.model",
+    "embeddinggemma-300M_seq256_mixed-precision.tflite",
   ];
 
   List<_StartupDownloadItem> _startupDownloads(AppLocalizations l10n) => [
@@ -714,16 +719,16 @@ class _IntroPageState extends State<IntroPage> {
       sizeLabel: "4.92 GB",
     ),
     _StartupDownloadItem(
-      key: "Gecko_1024_quant.tflite",
+      key: "embeddinggemma-300M_seq256_mixed-precision.tflite",
       title: l10n.introAssetGeckoTitle,
       subtitle: l10n.introAssetGeckoSubtitle,
-      sizeLabel: "146 MB",
+      sizeLabel: "171 MB",
     ),
     _StartupDownloadItem(
-      key: "sentencepiece.model",
+      key: "embeddinggemma_tokenizer.model",
       title: l10n.introAssetTokenizerTitle,
       subtitle: l10n.introAssetTokenizerSubtitle,
-      sizeLabel: "794 KB",
+      sizeLabel: "4.5 MB",
     ),
     _StartupDownloadItem(
       key: _bundleKey,

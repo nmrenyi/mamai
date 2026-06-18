@@ -278,7 +278,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Main language model for chat responses.';
 
   @override
-  String get introAssetGeckoTitle => 'Gecko embedding model';
+  String get introAssetGeckoTitle => 'EmbeddingGemma retriever model';
 
   @override
   String get introAssetGeckoSubtitle =>
