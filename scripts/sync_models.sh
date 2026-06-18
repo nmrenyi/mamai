@@ -9,8 +9,9 @@
 # All public on HuggingFace — no token required. The Gemma 3n repo above is a
 # byte-identical, ungated copy of the (license-gated) official
 # google/gemma-3n-E4B-it-litert-lm, redistributed under the Gemma Terms of Use
-# so the app can fetch it without per-user gating. HF_TOKEN is still honored if
-# set (e.g. to pull straight from the gated official repo).
+# so the app can fetch it without per-user gating. To validate against the
+# canonical gated repo instead, override the repo AND pass a token, e.g.:
+#   GEMMA_REPO=google/gemma-3n-E4B-it-litert-lm HF_TOKEN=hf_xxx scripts/sync_models.sh
 # Files already present are skipped (re-run is idempotent).
 #
 # Usage:
@@ -26,7 +27,9 @@ MODELS_DIR="$REPO_ROOT/device_push/models"
 
 HF="https://huggingface.co"
 GECKO_REPO="litert-community/Gecko-110m-en"
-GEMMA_REPO="nmrenyi/gemma-3n-E4B-it-litert-lm"
+# Overridable so maintainers can pull from the canonical gated repo with a token
+# (see header). Defaults to the project's ungated, byte-identical copy.
+GEMMA_REPO="${GEMMA_REPO:-nmrenyi/gemma-3n-E4B-it-litert-lm}"
 HF_TOKEN="${HF_TOKEN:-}"
 
 GECKO_ONLY=0

@@ -170,18 +170,29 @@ class _IntroPageState extends State<IntroPage> {
         download: download,
       );
       await _verifyModelChecksum(filename, destPath, download);
-      setState(() => download.finished = true);
+      download.finished = true;
+      // Guard against setState() after dispose: the download keeps running
+      // (foreground service) even if the user navigated away mid-download.
+      if (mounted) setState(() {});
     } catch (e) {
-      setState(() => download.markError(_downloadErrorMessage(e, url: _modelFileUrls[filename]!)));
+      download.markError(_downloadErrorMessage(e, url: _modelFileUrls[filename]!));
+      if (mounted) setState(() {});
     }
   }
+
+  /// Sidecar marker proving a model file passed its SHA-256 check. We record
+  /// the verified hash here instead of re-hashing multi-GB files on every cold
+  /// start (`downloadsDone` reads this), so verification cost is paid once at
+  /// download time, not on every launch.
+  String _verifiedMarkerPath(String destPath) => '$destPath.verified';
 
   /// Verifies a downloaded model file against its pinned SHA-256. A mismatch
   /// (truncated, corrupt, or tampered file from the CDN/mirror) deletes the
   /// file and throws, so the caller surfaces an error and the user can retry —
   /// re-downloading from scratch. Files with no pinned hash are accepted as-is.
-  /// The hash is streamed off disk so it never loads the (multi-GB) file into
-  /// memory.
+  /// On success a `.verified` marker is written so the integrity guarantee
+  /// survives across launches without re-hashing. The hash is streamed off disk
+  /// so it never loads the (multi-GB) file into memory.
   Future<void> _verifyModelChecksum(
     String filename,
     String destPath,
@@ -190,28 +201,29 @@ class _IntroPageState extends State<IntroPage> {
     final expected = _modelFileSha256[filename];
     if (expected == null) return;
 
-    setState(() {
-      download.finalizing = true;
-      download.stage = _bundleStageVerifying;
-    });
+    download.finalizing = true;
+    download.stage = _bundleStageVerifying;
+    if (mounted) setState(() {});
 
     final file = io.File(destPath);
     final digest = await crypto.sha256.bind(file.openRead()).first;
     final actual = digest.toString();
 
-    setState(() {
-      download.finalizing = false;
-      download.stage = null;
-    });
+    download.finalizing = false;
+    download.stage = null;
+    if (mounted) setState(() {});
 
+    final marker = io.File(_verifiedMarkerPath(destPath));
     if (actual != expected) {
       try {
         file.deleteSync();
       } catch (_) {}
-      throw Exception(
-        'Checksum mismatch for $filename: expected $expected, got $actual',
-      );
+      try {
+        if (marker.existsSync()) marker.deleteSync();
+      } catch (_) {}
+      throw _ChecksumException(filename, expected, actual);
     }
+    marker.writeAsStringSync(actual);
     debugPrint('Checksum OK for $filename ($actual)');
   }
 
@@ -368,6 +380,13 @@ class _IntroPageState extends State<IntroPage> {
 
   String _downloadErrorMessage(Object e, {required String url}) {
     const hint = 'Please connect to a stable internet connection, then tap Retry.';
+    if (e is _ChecksumException) {
+      // Integrity-specific message: don't hide a failed SHA-256 behind the
+      // generic network error. The bad file was already deleted.
+      return 'Downloaded file failed its integrity check (${e.filename}) and was '
+          'removed — the copy on the server may be corrupted or truncated. '
+          'Tap Retry to download it again.\nSource: $url';
+    }
     final body = e is TimeoutException
         ? 'Connection lost after several retries. $hint'
         : 'Download failed after several retries. $hint';
@@ -628,7 +647,21 @@ class _IntroPageState extends State<IntroPage> {
     if (downloads.isEmpty && _downloadDir != null && _pinnedBundle != null) {
       final modelsReady = _modelFiles.every((f) {
         final file = io.File('${_downloadDir!.path}/$f');
-        return file.existsSync() && file.lengthSync() > 0;
+        if (!file.existsSync() || file.lengthSync() == 0) return false;
+        // For files with a pinned hash, require proof they passed verification:
+        // a `.verified` marker recording the confirmed SHA-256. A full-size but
+        // never-verified file (sideloaded, partially overwritten, or from an
+        // older build) is treated as NOT ready, so it gets re-downloaded and
+        // re-checked rather than trusted on size alone. We don't re-hash the
+        // multi-GB file on every cold start; the marker carries the proof.
+        final pinned = _modelFileSha256[f];
+        if (pinned != null) {
+          final marker = io.File('${_downloadDir!.path}/$f.verified');
+          if (!marker.existsSync() || marker.readAsStringSync().trim() != pinned) {
+            return false;
+          }
+        }
+        return true;
       });
       final bundleReady = io.File(
         '${_downloadDir!.path}/$_bundleMarker',
@@ -1552,6 +1585,20 @@ void _forceBundleExtractProgress(
   });
 }
 
+
+/// Thrown when a downloaded model file's SHA-256 does not match the pinned
+/// value. Carried separately from network errors so the UI can show an
+/// integrity-specific message instead of the generic "download failed".
+class _ChecksumException implements Exception {
+  final String filename;
+  final String expected;
+  final String actual;
+  _ChecksumException(this.filename, this.expected, this.actual);
+
+  @override
+  String toString() =>
+      'Checksum mismatch for $filename: expected $expected, got $actual';
+}
 
 class DownloadInProgress {
   int total;
