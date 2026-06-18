@@ -2,11 +2,16 @@
 # sync_models.sh — Download AI model files from HuggingFace into device_push/models/
 #
 # Downloads:
-#   gemma-4-E4B-it.litertlm   (3.65 GB) from litert-community/gemma-4-E4B-it-litert-lm
-#   Gecko_1024_quant.tflite   (146 MB)  from litert-community/Gecko-110m-en
-#   sentencepiece.model       (794 KB)  from litert-community/Gecko-110m-en
+#   gemma-3n-E4B-it-int4.litertlm (4.92 GB) from nmrenyi/gemma-3n-E4B-it-litert-lm
+#   Gecko_1024_quant.tflite       (146 MB)  from litert-community/Gecko-110m-en
+#   sentencepiece.model           (794 KB)  from litert-community/Gecko-110m-en
 #
-# All files are public on HuggingFace — no token required.
+# All public on HuggingFace — no token required. The Gemma 3n repo above is a
+# byte-identical, ungated copy of the (license-gated) official
+# google/gemma-3n-E4B-it-litert-lm, redistributed under the Gemma Terms of Use
+# so the app can fetch it without per-user gating. To validate against the
+# canonical gated repo instead, override the repo AND pass a token, e.g.:
+#   GEMMA_REPO=google/gemma-3n-E4B-it-litert-lm HF_TOKEN=hf_xxx scripts/sync_models.sh
 # Files already present are skipped (re-run is idempotent).
 #
 # Usage:
@@ -22,7 +27,10 @@ MODELS_DIR="$REPO_ROOT/device_push/models"
 
 HF="https://huggingface.co"
 GECKO_REPO="litert-community/Gecko-110m-en"
-GEMMA4_REPO="litert-community/gemma-4-E4B-it-litert-lm"
+# Overridable so maintainers can pull from the canonical gated repo with a token
+# (see header). Defaults to the project's ungated, byte-identical copy.
+GEMMA_REPO="${GEMMA_REPO:-nmrenyi/gemma-3n-E4B-it-litert-lm}"
+HF_TOKEN="${HF_TOKEN:-}"
 
 GECKO_ONLY=0
 
@@ -56,7 +64,9 @@ download_file() {
   fi
 
   echo "Downloading $filename ..."
-  if ! curl -fL --show-error --retry 3 --retry-all-errors --progress-bar -o "$dest.tmp" "$url"; then
+  local auth=()
+  [[ -n "$HF_TOKEN" ]] && auth=(-H "Authorization: Bearer $HF_TOKEN")
+  if ! curl -fL --show-error --retry 3 --retry-all-errors --progress-bar "${auth[@]}" -o "$dest.tmp" "$url"; then
     rm -f "$dest.tmp"
     return 1
   fi
@@ -65,8 +75,8 @@ download_file() {
 }
 
 if [[ "$GECKO_ONLY" -eq 0 ]]; then
-  download_file "gemma-4-E4B-it.litertlm" \
-    "$HF/$GEMMA4_REPO/resolve/main/gemma-4-E4B-it.litertlm"
+  download_file "gemma-3n-E4B-it-int4.litertlm" \
+    "$HF/$GEMMA_REPO/resolve/main/gemma-3n-E4B-it-int4.litertlm"
 fi
 
 download_file "Gecko_1024_quant.tflite" \

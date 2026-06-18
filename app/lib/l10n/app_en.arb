@@ -140,7 +140,7 @@
       "count": { "type": "int" }
     }
   },
-  "introAssetGemmaTitle": "Gemma 4 on-device model",
+  "introAssetGemmaTitle": "Gemma 3n on-device model",
   "introAssetGemmaSubtitle": "Main language model for chat responses.",
   "introAssetGeckoTitle": "Gecko embedding model",
   "introAssetGeckoSubtitle": "Used to find the most relevant guideline passages.",
