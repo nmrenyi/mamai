@@ -37,16 +37,20 @@ prompt). The app only embeds queries on-device; documents are pre-embedded in th
       retrieval discriminates correctly (PPH query ranks PPH docs 0.64/0.59 vs 0.25/0.23).
 - [~] 3. Re-embed corpus (63,650 texts from the v0.2.0 store, doc prompt). RUNNING
       (`/tmp/eg_embed_corpus.py` → `/tmp/eg_embeddings.sqlite`, ~17/s, ~55 min).
-- [ ] 4. Producer: build bundle v0.3.0 + host on nmrenyi/mamai-medical-guidelines releases.
+- [x] 4. Producer: built bundle v0.3.0 (87 PDFs, 63650 chunks, manifest sha `ce2c5a46…`),
+      hosted at github.com/nmrenyi/mamai-medical-guidelines releases/v0.3.0. Producer PR merged.
 - [x] 5a. App Kotlin: `SentencePieceBpe.kt` (BPE, byte-fallback) — **JVM-validated 1007/1007**
       vs Python incl. 1000 real corpus docs + multilingual/emoji/math edge cases.
 - [x] 5b. App Kotlin: `EmbeddingGemmaEmbedder.kt` (Embedder<String>, TFLite Interpreter,
       L2-norm, prompts). Wired into RagPipeline behind `app_config.embedder`.
 - [x] 5c. App config/plumbing: app_config.json (embedder=embeddinggemma), intro_page
       download URLs + pinned SHA-256 + file list/labels, build.gradle litert dep.
-- [ ] 5d. rag_assets.lock.json → v0.3.0 (after bundle hosted).
-- [ ] 6. On-device retrieval test + parity spot-check (NEEDS DEVICE).
-- [ ] 7. PR for review (not auto-merge).
+- [x] 5d. rag_assets.lock.json → v0.3.0 (bundle hosted, manifest sha pinned).
+- [x] 6. On-device retrieval test: EG embedder constructs (199ms); on-device query
+      embed + vector search 609ms/3 docs (FASTER than Gecko's ~2.3s); relevant docs
+      retrieved; coherent grounded answer with citations. Offline: 4 diverse queries
+      all retrieve highly-relevant docs (cos 0.65–0.71).
+- [x] 7. PR opened + merged (user authorized auto-merge after on-device validation).
 
 ## Validation evidence (offline, high-confidence)
 - Tokenizer parity: `SentencePieceBpe.kt` == Python `sentencepiece` on 1007 inputs (exact).

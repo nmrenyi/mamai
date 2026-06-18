@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "_comment": "Pin the RAG data bundle version consumed by this app. Run scripts/sync_rag_assets.sh to fetch and install the pinned bundle.",
-  "bundle_version": "v0.2.0",
-  "bundle_url": "https://github.com/nmrenyi/mamai-medical-guidelines/releases/download/v0.2.0/rag-bundle-v0.2.0.tar.gz",
-  "manifest_sha256": "033cd166ef5bab6c29560eb03713d0b044531081ce799795f103b6916526026f",
+  "bundle_version": "v0.3.0",
+  "bundle_url": "https://github.com/nmrenyi/mamai-medical-guidelines/releases/download/v0.3.0/rag-bundle-v0.3.0.tar.gz",
+  "manifest_sha256": "ce2c5a468a9bc455b2e1c079965430b6d38037a8aca23cb2e84da02258527c6a",
   "producer_repo": "mamai-medical-guidelines",
-  "producer_commit": "4a659ef300910f2f2b52b1ff8bffcf1729342906",
+  "producer_commit": "4723d0fd324805d5e5ef8df102abe37d6f92e4d5",
   "chunk_count": 63650,
   "source_count": 87
 }
