@@ -69,12 +69,25 @@ class RagPipeline(application: Application) {
         Log.w("mam-ai", "[TIMING] Thread: ${Thread.currentThread().name} — starting heavy init")
 
         val t1 = System.currentTimeMillis()
-        embedder = GeckoEmbeddingModel(
-            baseFolder + appConfig.getString("embedding_model"),
-            Optional.of(baseFolder + appConfig.getString("tokenizer")),
-            appConfig.getBoolean("use_gpu_for_embeddings"),
-        )
-        Log.w("mam-ai", "[TIMING] GeckoEmbeddingModel constructor: ${System.currentTimeMillis() - t1}ms")
+        // Embedder is config-selectable: "gecko" (legacy Gecko TFLite, native) or
+        // "embeddinggemma" (EmbeddingGemma-300M int4/int8 TFLite via our custom
+        // Embedder). The vector store MUST have been built with the matching
+        // embedder — they live in different vector spaces.
+        val embedderType = appConfig.optString("embedder", "gecko")
+        embedder = if (embedderType == "embeddinggemma") {
+            EmbeddingGemmaEmbedder(
+                baseFolder + appConfig.getString("embedding_model"),
+                baseFolder + appConfig.getString("tokenizer"),
+                appConfig.optInt("embedding_seq_len", 256),
+            )
+        } else {
+            GeckoEmbeddingModel(
+                baseFolder + appConfig.getString("embedding_model"),
+                Optional.of(baseFolder + appConfig.getString("tokenizer")),
+                appConfig.getBoolean("use_gpu_for_embeddings"),
+            )
+        }
+        Log.w("mam-ai", "[TIMING] embedder ($embedderType) constructor: ${System.currentTimeMillis() - t1}ms")
 
         val t2 = System.currentTimeMillis()
         textMemory = DefaultSemanticTextMemory(

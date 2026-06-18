@@ -276,7 +276,7 @@ class AppLocalizationsSw extends AppLocalizations {
       'Mfano mkuu wa lugha kwa majibu ya mazungumzo.';
 
   @override
-  String get introAssetGeckoTitle => 'Mfano wa Gecko wa ulinganishi';
+  String get introAssetGeckoTitle => 'Mfano wa EmbeddingGemma wa utafutaji';
 
   @override
   String get introAssetGeckoSubtitle =>

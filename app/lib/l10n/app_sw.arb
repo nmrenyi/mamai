@@ -142,7 +142,7 @@
   },
   "introAssetGemmaTitle": "Mfano wa Gemma 3n kwenye kifaa",
   "introAssetGemmaSubtitle": "Mfano mkuu wa lugha kwa majibu ya mazungumzo.",
-  "introAssetGeckoTitle": "Mfano wa Gecko wa ulinganishi",
+  "introAssetGeckoTitle": "Mfano wa EmbeddingGemma wa utafutaji",
   "introAssetGeckoSubtitle": "Hutumika kupata sehemu za mwongozo zinazofaa zaidi.",
   "introAssetTokenizerTitle": "Tokenizer ya SentencePiece",
   "introAssetTokenizerSubtitle": "Tokenizer inayohitajika na mfano wa ulinganishi.",

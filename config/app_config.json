@@ -1,7 +1,9 @@
 {
+  "embedder": "embeddinggemma",
   "llm_model": "gemma-3n-E4B-it-int4.litertlm",
-  "embedding_model": "Gecko_1024_quant.tflite",
-  "tokenizer": "sentencepiece.model",
+  "embedding_model": "embeddinggemma-300M_seq256_mixed-precision.tflite",
+  "tokenizer": "embeddinggemma_tokenizer.model",
   "embedding_dim": 768,
+  "embedding_seq_len": 256,
   "use_gpu_for_embeddings": false
 }

@@ -551,7 +551,7 @@ abstract class AppLocalizations {
   /// No description provided for @introAssetGeckoTitle.
   ///
   /// In en, this message translates to:
-  /// **'Gecko embedding model'**
+  /// **'EmbeddingGemma retriever model'**
   String get introAssetGeckoTitle;
 
   /// No description provided for @introAssetGeckoSubtitle.
