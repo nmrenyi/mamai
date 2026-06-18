@@ -4,6 +4,7 @@ import 'dart:collection';
 import 'dart:io';
 import 'dart:io' as io;
 import 'dart:isolate';
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -111,12 +112,34 @@ class _IntroPageState extends State<IntroPage> {
   // Model files downloaded individually from HuggingFace (public, no auth).
   // Update these URLs if the model repos publish new versions.
   static const Map<String, String> _modelFileUrls = {
-    "gemma-4-E4B-it.litertlm":
-        "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm",
+    // The canonical Gemma 3n LiteRT-LM repo (google/gemma-3n-E4B-it-litert-lm)
+    // is license-gated and 401s the app's no-auth downloader. We therefore host
+    // a byte-identical, ungated copy under the project's own HuggingFace account
+    // (redistributed under the Gemma Terms of Use) so fresh installs work without
+    // per-user license gating. Integrity is enforced by the pinned SHA-256 in
+    // `_modelFileSha256`, verified after download.
+    "gemma-3n-E4B-it-int4.litertlm":
+        "https://huggingface.co/nmrenyi/gemma-3n-E4B-it-litert-lm/resolve/main/gemma-3n-E4B-it-int4.litertlm",
     "Gecko_1024_quant.tflite":
         "https://huggingface.co/litert-community/Gecko-110m-en/resolve/main/Gecko_1024_quant.tflite",
     "sentencepiece.model":
         "https://huggingface.co/litert-community/Gecko-110m-en/resolve/main/sentencepiece.model",
+  };
+
+  // Pinned SHA-256 of each model file, verified after download. This is what
+  // lets us pull the (license-gated) Gemma 3n artifact from an ungated mirror
+  // safely: a mirror that ships a truncated, corrupt, or tampered model fails
+  // this check and the file is deleted + re-downloaded. Integrity of the model
+  // is a patient-safety concern, so this guard is mandatory, not cosmetic.
+  // Values are the SHA-256 of the official google/gemma-3n-E4B-it-litert-lm
+  // int4 export and the litert-community Gecko / SentencePiece artifacts.
+  static const Map<String, String> _modelFileSha256 = {
+    "gemma-3n-E4B-it-int4.litertlm":
+        "2e67a6cd51dfe0f793431e6bd4ed8d029c88e10f52ca0469ad38445e3cd3c1f4",
+    "Gecko_1024_quant.tflite":
+        "2334395c8192ea6466093dc39177c524535ba8318c876232096d023518d323e6",
+    "sentencepiece.model":
+        "839ffa4b9afae8d77834a88b87781849aa021975d6063dec6085633fcaf7171c",
   };
 
   // Key used in the downloads map to track bundle download progress.
@@ -146,10 +169,50 @@ class _IntroPageState extends State<IntroPage> {
         destPath: destPath,
         download: download,
       );
+      await _verifyModelChecksum(filename, destPath, download);
       setState(() => download.finished = true);
     } catch (e) {
       setState(() => download.markError(_downloadErrorMessage(e, url: _modelFileUrls[filename]!)));
     }
+  }
+
+  /// Verifies a downloaded model file against its pinned SHA-256. A mismatch
+  /// (truncated, corrupt, or tampered file from the CDN/mirror) deletes the
+  /// file and throws, so the caller surfaces an error and the user can retry —
+  /// re-downloading from scratch. Files with no pinned hash are accepted as-is.
+  /// The hash is streamed off disk so it never loads the (multi-GB) file into
+  /// memory.
+  Future<void> _verifyModelChecksum(
+    String filename,
+    String destPath,
+    DownloadInProgress download,
+  ) async {
+    final expected = _modelFileSha256[filename];
+    if (expected == null) return;
+
+    setState(() {
+      download.finalizing = true;
+      download.stage = _bundleStageVerifying;
+    });
+
+    final file = io.File(destPath);
+    final digest = await crypto.sha256.bind(file.openRead()).first;
+    final actual = digest.toString();
+
+    setState(() {
+      download.finalizing = false;
+      download.stage = null;
+    });
+
+    if (actual != expected) {
+      try {
+        file.deleteSync();
+      } catch (_) {}
+      throw Exception(
+        'Checksum mismatch for $filename: expected $expected, got $actual',
+      );
+    }
+    debugPrint('Checksum OK for $filename ($actual)');
   }
 
   /// Restarts the download for a given key (model file or bundle).
@@ -583,14 +646,14 @@ class _IntroPageState extends State<IntroPage> {
         if (pdfCount != _pinnedBundle!.sourceCount) {
           return false;
         }
-        // Sanity-check: Gemma 4 E4B is 3.65 GB — reject truncated downloads.
-        // Threshold is 3.5 GB (95 % of actual) to catch partial downloads
-        // in the 3.0–3.65 GB range that would otherwise pass the old 3 GB guard.
+        // Sanity-check: Gemma 3n E4B int4 is 4.92 GB — reject truncated downloads.
+        // Threshold is 4.6 GB (~94 % of actual) to catch partial downloads that
+        // would otherwise pass for a complete model file.
         final gemmaSize = io.File(
-          '${_downloadDir!.path}/gemma-4-E4B-it.litertlm',
+          '${_downloadDir!.path}/gemma-3n-E4B-it-int4.litertlm',
         ).lengthSync();
         debugPrint('Gemma model size: $gemmaSize bytes');
-        return gemmaSize > 3500000000;
+        return gemmaSize > 4600000000;
       }
       return false;
     }
@@ -605,17 +668,17 @@ class _IntroPageState extends State<IntroPage> {
 
   // Model files downloaded individually from HuggingFace.
   static const List<String> _modelFiles = [
-    "gemma-4-E4B-it.litertlm",
+    "gemma-3n-E4B-it-int4.litertlm",
     "sentencepiece.model",
     "Gecko_1024_quant.tflite",
   ];
 
   List<_StartupDownloadItem> _startupDownloads(AppLocalizations l10n) => [
     _StartupDownloadItem(
-      key: "gemma-4-E4B-it.litertlm",
+      key: "gemma-3n-E4B-it-int4.litertlm",
       title: l10n.introAssetGemmaTitle,
       subtitle: l10n.introAssetGemmaSubtitle,
-      sizeLabel: "3.65 GB",
+      sizeLabel: "4.92 GB",
     ),
     _StartupDownloadItem(
       key: "Gecko_1024_quant.tflite",

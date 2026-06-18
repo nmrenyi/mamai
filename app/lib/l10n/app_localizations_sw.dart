@@ -269,7 +269,7 @@ class AppLocalizationsSw extends AppLocalizations {
   }
 
   @override
-  String get introAssetGemmaTitle => 'Mfano wa Gemma 4 kwenye kifaa';
+  String get introAssetGemmaTitle => 'Mfano wa Gemma 3n kwenye kifaa';
 
   @override
   String get introAssetGemmaSubtitle =>

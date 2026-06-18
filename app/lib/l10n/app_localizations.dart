@@ -539,7 +539,7 @@ abstract class AppLocalizations {
   /// No description provided for @introAssetGemmaTitle.
   ///
   /// In en, this message translates to:
-  /// **'Gemma 4 on-device model'**
+  /// **'Gemma 3n on-device model'**
   String get introAssetGemmaTitle;
 
   /// No description provided for @introAssetGemmaSubtitle.

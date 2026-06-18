@@ -6,6 +6,13 @@ recommendations into concrete app-side steps. **Both changes are now cleared to 
 
 ---
 
+> ## ⏱️ Implementation status (2026-06-18)
+> The two changes are being shipped **independently** (as §0 advises):
+> - **Gemma 3n generator swap — ✅ DONE (this PR).** `app_config.json` now points at `gemma-3n-E4B-it-int4.litertlm`; download wiring, size guard, UI/labels updated. Verified on a real device: model init + RAG retrieval (3 docs) + grounded, cited answers + correct emergency escalation ("Heavy bleeding is an emergency. Immediately escalate…"). The official model repo is license-gated, so the app downloads from an ungated mirror and verifies a **pinned SHA-256** before use. The kenya-SAQ harm-flag caveat (§2) is recorded for post-ship monitoring.
+> - **EmbeddingGemma retriever swap — ⏳ DEFERRED to a separate PR.** Blocked on artifacts that don't exist yet in any repo (see §5): no on-device int8 LiteRT export, no EmbeddingGemma `Embedder` in the RAG SDK (a custom `Embedder<String>` must be written), and the corpus must be re-embedded into a new `embeddings.sqlite` bundle in the producer repo. The eval validated EmbeddingGemma only via server-side PyTorch (`sentence_transformers`), not LiteRT. Tracked for follow-up.
+
+---
+
 ## 0. TL;DR for the implementer
 
 | Change | Status | Expected answer-quality effect | Why |

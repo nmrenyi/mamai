@@ -271,7 +271,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get introAssetGemmaTitle => 'Gemma 4 on-device model';
+  String get introAssetGemmaTitle => 'Gemma 3n on-device model';
 
   @override
   String get introAssetGemmaSubtitle =>

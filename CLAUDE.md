@@ -14,7 +14,7 @@ This is a medical app used by nurses and midwives in Zanzibar. Wrong or unsafe m
 
 ## Project Overview
 
-MAM-AI is a medical search application for nurses and midwives in Zanzibar. It uses on-device RAG (Retrieval-Augmented Generation) with the Gemma 4 E4B model to provide medical information searches without requiring internet connectivity. The app runs LLM inference entirely on-device using Google AI Edge LiteRT-LM.
+MAM-AI is a medical search application for nurses and midwives in Zanzibar. It uses on-device RAG (Retrieval-Augmented Generation) with the Gemma 3n E4B model to provide medical information searches without requiring internet connectivity. The app runs LLM inference entirely on-device using Google AI Edge LiteRT-LM.
 
 ## Repository Structure
 
@@ -76,8 +76,8 @@ The app uses Flutter platform channels for bidirectional communication:
 
 The RAG pipeline (`RagPipeline.kt`) manages three main components:
 
-1. **LLM Backend**: LiteRT-LM Gemma 4 E4B inference
-   - Model: `gemma-4-E4B-it.litertlm` (int4 quantized, 3.65 GB)
+1. **LLM Backend**: LiteRT-LM Gemma 3n E4B inference
+   - Model: `gemma-3n-E4B-it-int4.litertlm` (int4 quantized, 4.92 GB)
    - CPU by default; GPU opt-in via `useGpuForLlm` Gradle property (see Backend Selection)
    - Max tokens: 4096
 
@@ -95,7 +95,7 @@ The RAG pipeline (`RagPipeline.kt`) manages three main components:
 **Query flow**:
 1. User submits prompt in Flutter UI
 2. Android embeds the query and searches vector store for top-3 relevant documents
-3. Documents + query are fed to Gemma 4 E4B with the prompt template
+3. Documents + query are fed to Gemma 3n E4B with the prompt template
 4. LiteRT-LM generates a streaming response sent back to Flutter via EventChannel
 
 ### Streaming Architecture
@@ -108,7 +108,7 @@ The RAG pipeline (`RagPipeline.kt`) manages three main components:
 ### Model Files
 
 Models are downloaded on first launch from HuggingFace and stored in `application.getExternalFilesDir(null)`:
-- `gemma-4-E4B-it.litertlm`: Gemma 4 E4B LLM (int4 quantized, 3.65 GB) — `litert-community/gemma-4-E4B-it-litert-lm`
+- `gemma-3n-E4B-it-int4.litertlm`: Gemma 3n E4B LLM (int4 quantized, 4.92 GB). Canonical source is `google/gemma-3n-E4B-it-litert-lm`, which is **license-gated** (401s the app's no-auth downloader), so the app downloads from `nmrenyi/gemma-3n-E4B-it-litert-lm` — a byte-identical, ungated copy under the project's own HF account (redistributed under the Gemma Terms of Use) — and verifies the file against a pinned SHA-256 (`_modelFileSha256` in `intro_page.dart`) to guarantee integrity.
 - `Gecko_1024_quant.tflite`: Gecko embedding model — `litert-community/Gecko-110m-en`
 - `sentencepiece.model`: Tokenizer — `litert-community/Gecko-110m-en`
 - `embeddings.sqlite`: Pre-computed document embeddings — mamai-medical-guidelines GitHub release
