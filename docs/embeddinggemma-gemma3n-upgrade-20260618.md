@@ -2,7 +2,7 @@
 
 **Audience:** engineers working in THIS repo (the MAM-AI Android app). The evidence/reports referenced below live in the separate **`nmrenyi/mamai-eval`** repo.
 **Source of truth (why):** in the `nmrenyi/mamai-eval` repo — `configs/config-v0.2.0/reports/r2c-retriever-generator-synthesis-20260618.html` (+ sub-reports `r2c-embedder/`, `r2c-rerank/`, `r2c-threshold/`). This doc translates those
-recommendations into concrete app-side steps and, crucially, **separates what's ready to ship from what's blocked.**
+recommendations into concrete app-side steps. **Both changes are now cleared to ship** — the earlier Gemma 3n questions are resolved (§2); what remains is the implementation work, prerequisites, and one safety caveat to record.
 
 ---
 
@@ -11,7 +11,7 @@ recommendations into concrete app-side steps and, crucially, **separates what's 
 | Change | Status | Expected answer-quality effect | Why |
 |---|---|---|---|
 | **EmbeddingGemma** (replace Gecko retriever) | ✅ **Ready** (with prerequisites below) | **~0 today** | Best deployable retriever; low-risk; sets up future G-RAG. NOT an answer-quality win on the current generator. |
-| **Gemma 3n** (replace Gemma 4 generator) | ⛔ **Blocked** — do not ship yet | Large (~2× kenya recall) *if* unblocked | Two open questions must be resolved first (safety harm-flag + why 3n→4 happened). |
+| **Gemma 3n** (replace Gemma 4 generator) | ✅ **Ready** (ship with a noted safety caveat) | **Large** (~2× kenya recall; +8 pp hb completeness) | Biggest lever found. Earlier questions resolved: the 3n→4 move was just "newer version" (no technical reason), and the lone safety red flag is noted + monitored, not blocking — see §2. |
 
 The two changes are **independent** — EmbeddingGemma can ship on its own. They're only *synergistic*
 in one cell (EmbeddingGemma×3n is the single config where RAG beats no-RAG end-to-end).
@@ -64,30 +64,30 @@ re-embedded with EmbeddingGemma and a new vector store built. This is the bulk o
 
 ---
 
-## 2. Gemma 3n — generator swap (BLOCKED — do not ship)
+## 2. Gemma 3n — generator swap (READY — ship with a noted safety caveat)
 
 ### What the evidence says
 Swapping the device generator **Gemma 4 E4B → Gemma 3n E4B** roughly **doubles** kenya key-fact recall
 (0.115 → 0.270) and adds ~8 pp healthbench completeness, uniformly across every retriever. This is the
-single largest lever found — **but the synthesis explicitly gates it.**
+single largest lever found, and per the decisions below it is **cleared to ship.**
 
-### Why it's blocked — two open questions to resolve first
-1. **Safety (harm-flag) is metric-dependent.** On the healthbench rubric, 3n's penalty is slightly *lower*
-   (safer); but on the earlier **kenya-SAQ harm-flag** metric 3n was **worse** (~0.32 vs ~0.19). Before
-   shipping a 2× completeness gain, resolve whether 3n is acceptable on the harm axis — ideally a focused
-   safety eval on the deployment SAQ set + a clinical/acceptance sign-off or threshold.
-2. **Why did the device move 3n → 4 in the first place?** 3n was the predecessor on-device, so it should be
-   deployable, but confirm the original 3n→4 rationale (size? latency? vendor default? a regression we'd
-   reintroduce?) so the reversal is **deliberate**, not a silent trade.
+### The two earlier questions — both resolved
+1. **The 3n → 4 move was not technical.** Gemma 4 was adopted simply because it's the **newer version** —
+   no latency/size/quality regression drove it. So reverting to 3n reintroduces **no known problem**; it's a
+   deliberate, low-risk choice.
+2. **Safety: one red flag, recorded and accepted (not a blocker).** Across metrics 3n is at least as safe as
+   Gemma 4 — on the healthbench rubric its penalty rate is slightly *lower*. The single exception is the
+   kenya-SAQ **harm-flag** metric, where 3n scored worse (~0.32 vs ~0.19). **Decision: note this caveat and
+   ship** — it's one flag against a large, consistent completeness gain, and rubric-level safety favors 3n.
+   **Mitigation:** keep the harm-flag metric in the post-ship eval and watch it; revisit only if it regresses
+   in production.
 
-### What would unblock it
-- A harm-flag safety result for 3n vs 4 on the deployment SAQ set, meeting an agreed acceptance bar.
-- Documented confirmation of the 3n→4 rationale + that the `gemma-3n-E4B-it` `.litertlm` runs acceptably on
-  the target device (latency/RAM).
-
-### Implementation once unblocked (for reference)
-- `app_config.json` `llm_model`: `gemma-4-E4B-it.litertlm` → the Gemma 3n E4B `.litertlm` artifact.
-- Re-run on-device parity + the safety/quality checks above.
+### Implementation
+- `app_config.json` `llm_model`: `gemma-4-E4B-it.litertlm` → the **Gemma 3n E4B** `.litertlm` artifact.
+- Confirm the `gemma-3n-E4B-it` `.litertlm` runs acceptably on the target device (latency/RAM) — a normal
+  pre-ship deployability check, not a gate (3n was the predecessor on-device, so it's expected to pass).
+- Re-run on-device answer parity, **carrying the kenya-SAQ harm-flag metric** in that check per the safety
+  note above.
 
 ---
 
@@ -95,17 +95,18 @@ single largest lever found — **but the synthesis explicitly gates it.**
 
 The generator is the **binding constraint** on answer quality; retrieval is not. So:
 
-- **EmbeddingGemma alone won't improve answers** (RAG is net-neutral on Gemma 4). Ship it for retrieval
-  quality + as a G-RAG prerequisite + because it never hurts on the stronger generator — but don't expect
-  a metric move, and don't let it be sold as the answer-quality fix.
-- **The real answer-quality levers** are (a) the **Gemma 3n** decision (pending §2) and (b) **G-RAG** —
-  grounding the generator so it actually uses retrieved context instead of being hurt by it. G-RAG is a
-  separate workstream, not in scope here.
+- **Gemma 3n is the answer-quality win and is now cleared to ship** (§2): ~2× kenya recall, +8 pp hb
+  completeness — the highest-leverage change in this doc.
+- **EmbeddingGemma alone won't improve answers** on Gemma 4 (RAG is net-neutral there). Ship it for
+  retrieval quality, because it never hurts on 3n, and because it's where RAG first pays off end-to-end
+  (EmbeddingGemma×3n is the one config that beats no-RAG) — but don't sell it as a standalone quality fix.
+- **G-RAG** (grounding the generator to actually use retrieved context) remains a separate, deeper lever for
+  turning retrieval into answers — out of scope here.
 - **No retrieval-side abstention/confidence gate is available** (the thresholdability report: cosine and
   reranker scores can't predict when RAG helps). If a confidence gate is wanted, it must be generator-side.
 
-Suggested order: ship **EmbeddingGemma** now (low-risk, independent) → resolve the **3n gates** → pursue
-**G-RAG**. EmbeddingGemma + 3n together is where retrieval first pays off end-to-end.
+Suggested order: **ship Gemma 3n** (the real gain) and **EmbeddingGemma** (low-risk; together they're where
+RAG first converts) → then pursue **G-RAG**.
 
 ---
 
