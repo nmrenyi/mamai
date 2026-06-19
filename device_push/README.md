@@ -10,14 +10,13 @@ below).
 device_push/
 ├── bundle/     # sync-managed RAG assets — rm -rf bundle/ to wipe (gitignored)
 │   ├── embeddings.sqlite
-│   ├── docs/   # 55 source PDFs, normalized filenames
+│   ├── docs/   # 87 source PDFs, normalized filenames
 │   └── debug/  # provenance stamp + chunks_for_rag.txt
 ├── models/     # static ML model files, populated by sync_models.sh (gitignored)
-│   ├── Gecko_1024_quant.tflite
-│   ├── sentencepiece.model
-│   ├── gemma-4-E4B-it.litertlm
+│   ├── embeddinggemma-300M_seq256_mixed-precision.tflite
+│   ├── embeddinggemma_tokenizer.model
 │   ├── gemma-3n-E4B-it-int4.litertlm
-│   └── gemma-3n-E4B-it-int4.task
+│   └── (legacy: Gecko_1024_quant.tflite, gemma-4-E4B-it.litertlm — no longer used)
 ```
 
 `bundle/` is entirely owned by `sync_rag_assets.sh` — it is atomically rebuilt on every sync run, including its `debug/` provenance stamp. `models/` is never touched by the sync script. To wipe everything the sync produced: `rm -rf device_push/bundle/`.
@@ -27,17 +26,17 @@ device_push/
 ### Static ML models (populate via script or manual copy)
 | File | Format | Notes |
 |------|--------|-------|
-| `models/gemma-4-E4B-it.litertlm` | LiteRT-LM | Current deployed model |
-| `models/gemma-3n-E4B-it-int4.litertlm` | LiteRT-LM | Previous deployed model (quality baseline) |
-| `models/gemma-3n-E4B-it-int4.task` | MediaPipe | Kept for MediaPipe compatibility testing |
-| `models/Gecko_1024_quant.tflite` | TFLite | Embedding model |
-| `models/sentencepiece.model` | tokenizer | Tokenizer for Gecko |
+| `models/gemma-3n-E4B-it-int4.litertlm` | LiteRT-LM | Current deployed generator |
+| `models/embeddinggemma-300M_seq256_mixed-precision.tflite` | TFLite | Current deployed retriever (EmbeddingGemma-300M) |
+| `models/embeddinggemma_tokenizer.model` | tokenizer | Gemma SentencePiece for EmbeddingGemma |
+| `models/Gecko_1024_quant.tflite` | TFLite | Legacy embedder (no longer deployed) |
+| `models/gemma-4-E4B-it.litertlm` | LiteRT-LM | Legacy generator (no longer deployed) |
 
 ### RAG bundle assets (managed by sync script)
 | File | Source | Size |
 |------|--------|------|
-| `bundle/embeddings.sqlite` | pre-computed embeddings for 21,731 chunks | ~89 MB |
-| `bundle/docs/*.pdf` (55 files) | source medical guidelines, URL-safe names | ~91 MB |
+| `bundle/embeddings.sqlite` | EmbeddingGemma embeddings for 63,650 chunks | ~261 MB |
+| `bundle/docs/*.pdf` (87 files) | source medical guidelines, URL-safe names | ~430 MB |
 | `bundle/debug/rag_bundle_staged.json` | staged bundle provenance | small |
 
 PDF filenames use normalized SOURCE ids (spaces/parens → underscores, e.g.
@@ -69,8 +68,8 @@ transfer. To wipe the staged bundle entirely: `rm -rf device_push/bundle/`.
 # Download the public model artifacts into device_push/models/
 bash scripts/sync_models.sh
 
-# Optional: only fetch Gecko + tokenizer
-bash scripts/sync_models.sh --gecko-only
+# Optional: only fetch the EmbeddingGemma model + tokenizer (skip the large Gemma LLM)
+bash scripts/sync_models.sh --embedder-only
 ```
 
 ## Push to device
@@ -79,7 +78,7 @@ bash scripts/sync_models.sh --gecko-only
 # Push staged RAG assets (embeddings.sqlite + PDFs + provenance stamp)
 bash scripts/push_to_device.sh
 
-# Also push Gecko + sentencepiece.model
+# Also push the EmbeddingGemma model + tokenizer
 bash scripts/push_to_device.sh --embedding-models
 
 # If multiple devices are connected

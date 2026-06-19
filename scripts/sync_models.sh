@@ -2,21 +2,22 @@
 # sync_models.sh — Download AI model files from HuggingFace into device_push/models/
 #
 # Downloads:
-#   gemma-3n-E4B-it-int4.litertlm (4.92 GB) from nmrenyi/gemma-3n-E4B-it-litert-lm
-#   Gecko_1024_quant.tflite       (146 MB)  from litert-community/Gecko-110m-en
-#   sentencepiece.model           (794 KB)  from litert-community/Gecko-110m-en
+#   gemma-3n-E4B-it-int4.litertlm                     (4.92 GB) from nmrenyi/gemma-3n-E4B-it-litert-lm
+#   embeddinggemma-300M_seq256_mixed-precision.tflite (171 MB)  from nmrenyi/embeddinggemma-300m-litert-mamai
+#   embeddinggemma_tokenizer.model                    (4.5 MB)  from nmrenyi/embeddinggemma-300m-litert-mamai (sentencepiece.model)
 #
-# All public on HuggingFace — no token required. The Gemma 3n repo above is a
-# byte-identical, ungated copy of the (license-gated) official
-# google/gemma-3n-E4B-it-litert-lm, redistributed under the Gemma Terms of Use
-# so the app can fetch it without per-user gating. To validate against the
-# canonical gated repo instead, override the repo AND pass a token, e.g.:
+# All public on HuggingFace — no token required. Both nmrenyi repos are
+# byte-identical, ungated copies of the (license-gated) official
+# google/gemma-3n-E4B-it-litert-lm and litert-community/embeddinggemma-300m,
+# redistributed under the Gemma Terms of Use so the app can fetch them without
+# per-user gating. To validate against a canonical gated repo, override the repo
+# AND pass a token, e.g.:
 #   GEMMA_REPO=google/gemma-3n-E4B-it-litert-lm HF_TOKEN=hf_xxx scripts/sync_models.sh
 # Files already present are skipped (re-run is idempotent).
 #
 # Usage:
-#   scripts/sync_models.sh               # download all three files
-#   scripts/sync_models.sh --gecko-only  # skip Gemma, download only Gecko + tokenizer
+#   scripts/sync_models.sh                   # download all three files
+#   scripts/sync_models.sh --embedder-only   # skip the Gemma LLM, download only the embedder + tokenizer
 #
 # Requirements: curl
 
@@ -26,22 +27,22 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MODELS_DIR="$REPO_ROOT/device_push/models"
 
 HF="https://huggingface.co"
-GECKO_REPO="litert-community/Gecko-110m-en"
-# Overridable so maintainers can pull from the canonical gated repo with a token
-# (see header). Defaults to the project's ungated, byte-identical copy.
+# Overridable so maintainers can pull from a canonical gated repo with a token
+# (see header). Defaults to the project's ungated, byte-identical copies.
+EMBEDDER_REPO="${EMBEDDER_REPO:-nmrenyi/embeddinggemma-300m-litert-mamai}"
 GEMMA_REPO="${GEMMA_REPO:-nmrenyi/gemma-3n-E4B-it-litert-lm}"
 HF_TOKEN="${HF_TOKEN:-}"
 
-GECKO_ONLY=0
+EMBEDDER_ONLY=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --gecko-only)
-      GECKO_ONLY=1
+    --embedder-only)
+      EMBEDDER_ONLY=1
       shift
       ;;
     -h|--help)
-      awk 'NR >= 2 && NR <= 16 { sub(/^# ?/, ""); print }' "$0"
+      awk 'NR >= 2 && NR <= 22 { sub(/^# ?/, ""); print }' "$0"
       exit 0
       ;;
     *)
@@ -74,18 +75,20 @@ download_file() {
   echo "  -> $dest"
 }
 
-if [[ "$GECKO_ONLY" -eq 0 ]]; then
+if [[ "$EMBEDDER_ONLY" -eq 0 ]]; then
   download_file "gemma-3n-E4B-it-int4.litertlm" \
     "$HF/$GEMMA_REPO/resolve/main/gemma-3n-E4B-it-int4.litertlm"
 fi
 
-download_file "Gecko_1024_quant.tflite" \
-  "$HF/$GECKO_REPO/resolve/main/Gecko_1024_quant.tflite"
+download_file "embeddinggemma-300M_seq256_mixed-precision.tflite" \
+  "$HF/$EMBEDDER_REPO/resolve/main/embeddinggemma-300M_seq256_mixed-precision.tflite"
 
-download_file "sentencepiece.model" \
-  "$HF/$GECKO_REPO/resolve/main/sentencepiece.model"
+# The tokenizer asset is named sentencepiece.model upstream; stage it under the
+# distinct on-device filename the app expects (app_config.json "tokenizer").
+download_file "embeddinggemma_tokenizer.model" \
+  "$HF/$EMBEDDER_REPO/resolve/main/sentencepiece.model"
 
 echo ""
 echo "Models ready in $MODELS_DIR"
 echo "Next: bash scripts/push_to_device.sh --embedding-models"
-echo "Note: this pushes only Gecko + sentencepiece. The Gemma .litertlm is downloaded here for staging/verification and is fetched by the app on first launch."
+echo "Note: this pushes only the EmbeddingGemma model + tokenizer. The Gemma .litertlm is downloaded here for staging/verification and is fetched by the app on first launch."

@@ -14,7 +14,7 @@
 
 ---
 
-Android app that answers clinical questions offline using on-device RAG — Gemma 4 E4B (LiteRT-LM) for generation, Gecko for embeddings, SQLite for vector search. No internet needed after the initial ~4.5 GB model download.
+Android app that answers clinical questions offline using on-device RAG — Gemma 3n E4B (LiteRT-LM) for generation, EmbeddingGemma-300M for embeddings, SQLite for vector search. No internet needed after the initial ~5 GB model download.
 
 ## Architecture
 
@@ -30,14 +30,14 @@ Android app that answers clinical questions offline using on-device RAG — Gemm
 │  ┌────────────────────────────────────────────┐ │
 │  │ RagPipeline.kt                             │ │
 │  │  ┌──────────┐ ┌──────────┐ ┌────────────┐ │ │
-│  │  │ Gemma 4  │ │  Gecko   │ │  SQLite    │ │ │
-│  │  │ LiteRT-LM│ │ Embedder │ │ VectorStore│ │ │
+│  │  │ Gemma 3n │ │ Embedding│ │  SQLite    │ │ │
+│  │  │ LiteRT-LM│ │ Gemma    │ │ VectorStore│ │ │
 │  │  └──────────┘ └──────────┘ └────────────┘ │ │
 │  └────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────┘
 ```
 
-Query → Gecko embeds → SQLite retrieves top-3 guideline chunks → prompt assembled → LiteRT-LM streams response → Flutter renders markdown.
+Query → EmbeddingGemma embeds → SQLite retrieves top-3 guideline chunks → prompt assembled → LiteRT-LM streams response → Flutter renders markdown.
 
 ## Build & Run
 
@@ -57,16 +57,20 @@ Download the APK from [Releases](../../releases) and sideload onto a real Androi
 
 ## Model Files
 
-Downloaded on first launch from public HuggingFace repos — no auth required.
+Downloaded on first launch — no auth required. Google's official Gemma 3n and
+EmbeddingGemma LiteRT repos are license-gated, so the app pulls byte-identical,
+ungated copies from the project's own HuggingFace account (redistributed under the
+Gemma Terms of Use) and verifies each file against a pinned SHA-256 before use.
 
 | File | Size | Source |
 |---|---|---|
-| `gemma-4-E4B-it.litertlm` | 3.65 GB | [litert-community/gemma-4-E4B-it-litert-lm](https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm) |
-| `Gecko_1024_quant.tflite` | 146 MB | [litert-community/Gecko-110m-en](https://huggingface.co/litert-community/Gecko-110m-en) |
-| `sentencepiece.model` | 794 KB | [litert-community/Gecko-110m-en](https://huggingface.co/litert-community/Gecko-110m-en) |
-| `embeddings.sqlite` | ~140 MB | [mamai-medical-guidelines releases](https://github.com/nmrenyi/mamai-medical-guidelines/releases) |
+| `gemma-3n-E4B-it-int4.litertlm` | 4.92 GB | [nmrenyi/gemma-3n-E4B-it-litert-lm](https://huggingface.co/nmrenyi/gemma-3n-E4B-it-litert-lm) (mirror of gated `google/gemma-3n-E4B-it-litert-lm`) |
+| `embeddinggemma-300M_seq256_mixed-precision.tflite` | 171 MB | [nmrenyi/embeddinggemma-300m-litert-mamai](https://huggingface.co/nmrenyi/embeddinggemma-300m-litert-mamai) (mirror of gated `litert-community/embeddinggemma-300m`) |
+| `embeddinggemma_tokenizer.model` | 4.5 MB | [nmrenyi/embeddinggemma-300m-litert-mamai](https://huggingface.co/nmrenyi/embeddinggemma-300m-litert-mamai) |
+| `embeddings.sqlite` | ~261 MB | [mamai-medical-guidelines releases](https://github.com/nmrenyi/mamai-medical-guidelines/releases) |
 
-The pinned RAG bundle version lives in `config/rag_assets.lock.json`.
+The pinned RAG bundle version lives in `config/rag_assets.lock.json`; the pinned
+model checksums live in `_modelFileSha256` in `app/lib/screens/intro_page.dart`.
 
 ## Updating RAG Assets
 
@@ -77,9 +81,9 @@ Chunking and embedding are managed in the companion [mamai-medical-guidelines](h
 
 ```bash
 bash scripts/sync_rag_assets.sh          # download + stage bundle
-bash scripts/sync_models.sh              # download Gecko + Gemma from HuggingFace
+bash scripts/sync_models.sh              # download EmbeddingGemma + Gemma 3n from HuggingFace
 bash scripts/push_to_device.sh           # push everything to connected device
-bash scripts/push_to_device.sh --embedding-models  # push Gecko + tokenizer only
+bash scripts/push_to_device.sh --embedding-models  # push embedder + tokenizer only
 ```
 
 ## Releasing
@@ -102,12 +106,16 @@ Benchmarks run across AfriMedQA, MedQA USMLE, MedMCQA, Kenya Vignettes, AfriMedQ
 | Model | MCQ avg | Open-ended avg |
 |---|---|---|
 | GPT-5 (no-RAG) | 82.8% | 4.19 / 5 |
-| Gemma 3n E4B (no-RAG) | 45.5% | 2.98 / 5 |
-| **Gemma 4 E4B (deployed, no-RAG)** | **42.9%** | **2.61 / 5** |
+| **Gemma 3n E4B (deployed, no-RAG)** | **45.5%** | **2.98 / 5** |
+| Gemma 4 E4B (previous deploy, no-RAG) | 42.9% | 2.61 / 5 |
 
-RAG slightly hurts both on-device models on MCQ; GPT-5 is unaffected.
+The deployed generator was swapped Gemma 4 E4B → **Gemma 3n E4B** (≈2× Kenya key-fact
+recall, +8 pp HealthBench completeness); the retriever was swapped Gecko →
+**EmbeddingGemma-300M**. RAG slightly hurts the on-device models on MCQ; GPT-5 is unaffected.
 
-On an OPPO Snapdragon 8 Elite device, Gemma 4 E4B averages **11.7 s TTFT**, **26.8 s total**, **13.8 tok/s** — slower TTFT than Gemma 3n E4B (6.8 s) despite faster decode.
+On an OPPO Snapdragon 8 Elite device, the deployed Gemma 3n E4B averages **~6.8 s TTFT**
+(vs Gemma 4 E4B's 11.7 s), with EmbeddingGemma query embedding + vector search around
+**0.5–0.6 s** (faster than Gecko's ~2.3 s).
 
 With LiteRT-LM 0.11.0 on GPU (opt-in), TTFT drops to ~1–2 s on the same device; decode rate is unchanged. Multi-token Prediction (`ExperimentalFlags.enableSpeculativeDecoding`, gated behind the `useMtpForLlm` Gradle property) was smoke-tested and produced a **~10–20% decode slowdown** rather than the vendor's claimed >2× — drafter acceptance is likely poor for our long retrieved-context prompts. Off by default; re-test before re-enabling.
 
