@@ -81,10 +81,10 @@ The RAG pipeline (`RagPipeline.kt`) manages three main components:
    - CPU by default; GPU opt-in via `useGpuForLlm` Gradle property (see Backend Selection)
    - Max tokens: 4096
 
-2. **Embeddings**: Gecko embedding model for semantic search
-   - Model: `Gecko_1024_quant.tflite` (768-dim embeddings)
-   - Tokenizer: `sentencepiece.model`
-   - CPU by default (`use_gpu_for_embeddings: false` in `app_config.json`)
+2. **Embeddings**: EmbeddingGemma-300M for semantic search
+   - Model: `embeddinggemma-300M_seq256_mixed-precision.tflite` (int4/int8 seq256 LiteRT, 768-dim)
+   - Tokenizer: `embeddinggemma_tokenizer.model` (Gemma SentencePiece)
+   - Run on CPU/XNNPACK via a custom `EmbeddingGemmaEmbedder` (the GPU delegate fails op-support for this model). Selected by `"embedder": "embeddinggemma"` in `app_config.json`; the legacy Gecko path (`GeckoEmbeddingModel`) is retained as a config fallback.
 
 3. **Vector Store**: SQLite-backed semantic memory
    - Database: `embeddings.sqlite` (pre-computed document embeddings)
@@ -109,8 +109,8 @@ The RAG pipeline (`RagPipeline.kt`) manages three main components:
 
 Models are downloaded on first launch from HuggingFace and stored in `application.getExternalFilesDir(null)`:
 - `gemma-3n-E4B-it-int4.litertlm`: Gemma 3n E4B LLM (int4 quantized, 4.92 GB). Canonical source is `google/gemma-3n-E4B-it-litert-lm`, which is **license-gated** (401s the app's no-auth downloader), so the app downloads from `nmrenyi/gemma-3n-E4B-it-litert-lm` — a byte-identical, ungated copy under the project's own HF account (redistributed under the Gemma Terms of Use) — and verifies the file against a pinned SHA-256 (`_modelFileSha256` in `intro_page.dart`) to guarantee integrity.
-- `Gecko_1024_quant.tflite`: Gecko embedding model — `litert-community/Gecko-110m-en`
-- `sentencepiece.model`: Tokenizer — `litert-community/Gecko-110m-en`
+- `embeddinggemma-300M_seq256_mixed-precision.tflite`: EmbeddingGemma-300M retriever — `nmrenyi/embeddinggemma-300m-litert-mamai` (ungated mirror of gated `litert-community/embeddinggemma-300m`)
+- `embeddinggemma_tokenizer.model`: Gemma SentencePiece tokenizer — `nmrenyi/embeddinggemma-300m-litert-mamai`
 - `embeddings.sqlite`: Pre-computed document embeddings — mamai-medical-guidelines GitHub release
 
 Model download URLs are defined in `_modelFileUrls` in `app/lib/screens/intro_page.dart`. The pinned RAG bundle URL/version live in `config/rag_assets.lock.json`.
@@ -144,7 +144,7 @@ The RAG prompt is defined in `RagPipeline.kt:205-225`. It emphasizes:
 ### Backend Selection
 
 - **LLM**: defaults to CPU in production. Controlled by the `USE_GPU_FOR_LLM` `BuildConfig` field, set at compile time via the Gradle property `useGpuForLlm` (default `false`). If GPU init fails at runtime, `RagPipeline.kt` automatically falls back to CPU.
-- **Embeddings**: CPU by default (`use_gpu_for_embeddings: false` in `config/app_config.json`).
+- **Embeddings**: always CPU/XNNPACK. EmbeddingGemma's GPU delegate fails op-support, so `EmbeddingGemmaEmbedder` runs on CPU; the `use_gpu_for_embeddings` flag in `config/app_config.json` only affects the legacy Gecko fallback path.
 
 **To enable GPU locally** (e.g. for latency testing on a capable device), add to `~/.gradle/gradle.properties`:
 ```

@@ -117,8 +117,8 @@ fi
 
 EMBEDDINGS_SQLITE="$DEVICE_PUSH/bundle/embeddings.sqlite"
 DOCS_DIR="$DEVICE_PUSH/bundle/docs"
-GECKO_MODEL="$DEVICE_PUSH/models/Gecko_1024_quant.tflite"
-TOKENIZER_MODEL="$DEVICE_PUSH/models/sentencepiece.model"
+EMBEDDER_MODEL="$DEVICE_PUSH/models/embeddinggemma-300M_seq256_mixed-precision.tflite"
+TOKENIZER_MODEL="$DEVICE_PUSH/models/embeddinggemma_tokenizer.model"
 
 if [[ ! -f "$EMBEDDINGS_SQLITE" ]]; then
     echo "ERROR: staged file missing: $EMBEDDINGS_SQLITE" >&2
@@ -142,8 +142,8 @@ if [[ "$DOC_COUNT" != "$LOCK_SOURCE_COUNT" ]]; then
 fi
 
 if [[ "$PUSH_EMBEDDING_MODELS" -eq 1 ]]; then
-    if [[ ! -f "$GECKO_MODEL" ]]; then
-        echo "ERROR: staged model missing: $GECKO_MODEL" >&2
+    if [[ ! -f "$EMBEDDER_MODEL" ]]; then
+        echo "ERROR: staged model missing: $EMBEDDER_MODEL" >&2
         exit 1
     fi
     if [[ ! -f "$TOKENIZER_MODEL" ]]; then
@@ -255,7 +255,7 @@ done
 MODEL_COUNT=0
 if [[ "$PUSH_EMBEDDING_MODELS" -eq 1 ]]; then
     echo "Pushing embedding model + tokenizer ..."
-    "$ADB_BIN" "${ADB_ARGS[@]}" push "$GECKO_MODEL" "$DEVICE_DIR/" >/dev/null
+    "$ADB_BIN" "${ADB_ARGS[@]}" push "$EMBEDDER_MODEL" "$DEVICE_DIR/" >/dev/null
     "$ADB_BIN" "${ADB_ARGS[@]}" push "$TOKENIZER_MODEL" "$DEVICE_DIR/" >/dev/null
     MODEL_COUNT=2
 fi
