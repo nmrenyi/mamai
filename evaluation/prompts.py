@@ -23,7 +23,6 @@ _evalcfg  = json.loads((_CONFIG_DIR / "eval_config.json").read_text())
 # --- App system prompt (single source of truth: config/prompts/system_en.txt) ---
 
 APP_SYSTEM_PROMPT: str = (_PROMPTS_DIR / "system_en.txt").read_text(encoding="utf-8").rstrip("\n")
-APP_SYSTEM_PROMPT_SW: str = (_PROMPTS_DIR / "system_sw.txt").read_text(encoding="utf-8").rstrip("\n")
 
 # --- MCQ adapter prompt ---
 # NOT the app prompt. Required because the app prompt produces clinical prose,
