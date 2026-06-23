@@ -11,7 +11,7 @@ A clinical decision-support tool for nurse-midwives in Zanzibar. Provides fully 
 | Android version | 7.0 (API 24) |
 | Architecture | arm64-v8a (64-bit) |
 
-> **Why API 24?** The LiteRT-LM Android runtime used for on-device Gemma 3n requires Android 7.0+.
+> **Why API 24?** The LiteRT-LM Android runtime used for on-device Gemma 4 requires Android 7.0+.
 
 > **Real device required.** The on-device LiteRT-LM stack is intended for physical Android hardware, not emulators.
 
@@ -38,6 +38,8 @@ For signed local release builds, copy
 to `app/android/key.properties` and fill in your keystore values. CI stage
 releases use the same fields via GitHub secrets.
 
-## Languages
+## Language
 
-The app supports English and Swahili. The language toggle is available in the top-right corner of the main screen. Swahili translations are placeholder-quality and pending review by a qualified Swahili-speaking medical professional (see GitHub issue #29).
+The app is **English only**. (Swahili was removed — the deployed clinical prompt
+was validated in English only, and shipping an un-validated Swahili translation of
+a safety-critical prompt is out of scope.)

@@ -48,8 +48,6 @@ class RagPipeline(application: Application) {
     // file is missing from the APK — fail loud rather than silently wrong.
     private val systemInstructionsEn: String =
         application.assets.open("prompts/system_en.txt").bufferedReader().use { it.readText() }
-    private val systemInstructionsSw: String =
-        application.assets.open("prompts/system_sw.txt").bufferedReader().use { it.readText() }
     private val runtimeConfig: JSONObject =
         JSONObject(application.assets.open("runtime_config.json").bufferedReader().use { it.readText() })
     private val appConfig: JSONObject =
@@ -256,7 +254,7 @@ class RagPipeline(application: Application) {
      *
      *  [systemInstructionsOverride] — when non-null, replaces the asset-loaded
      *  system prompt for this call only. Production callers leave it null and
-     *  inherit the deployed English/Swahili clinical prompt. Used by the eval
+     *  inherit the deployed English clinical prompt. Used by the eval
      *  mode in [BenchmarkForegroundService] to swap in the MCQ adapter prompt
      *  so single-letter answers can be scored.
      *
@@ -307,8 +305,7 @@ class RagPipeline(application: Application) {
             // Number the documents so the LLM can cite them as [1], [2], [3].
             val contextStr = docs.mapIndexed { i, doc -> "Document ${i + 1}:\n${doc.text}" }.joinToString("\n\n")
 
-            val systemInstructions = systemInstructionsOverride
-                ?: if (language == "sw") systemInstructionsSw else systemInstructionsEn
+            val systemInstructions = systemInstructionsOverride ?: systemInstructionsEn
 
             // Build the final user message. The eval path supplies the exact
             // text it wants scored, so we skip context-label / question-label
@@ -317,14 +314,8 @@ class RagPipeline(application: Application) {
             val queryMessage = if (bypassPromptFormatting) {
                 prompt
             } else {
-                val contextLabel = if (language == "sw")
-                    contextInjectionConfig.getString("context_label_sw")
-                else
-                    contextInjectionConfig.getString("context_label_en")
-                val questionLabel = if (language == "sw")
-                    contextInjectionConfig.getString("question_label_sw")
-                else
-                    contextInjectionConfig.getString("question_label_en")
+                val contextLabel = contextInjectionConfig.getString("context_label_en")
+                val questionLabel = contextInjectionConfig.getString("question_label_en")
 
                 // Build the final user message: retrieved context (if any) followed by the question.
                 // LiteRT-LM handles the chat template internally, so we only supply the content.

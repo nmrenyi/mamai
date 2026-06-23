@@ -1,6 +1,6 @@
 {
   "embedder": "embeddinggemma",
-  "llm_model": "gemma-3n-E4B-it-int4.litertlm",
+  "llm_model": "gemma-4-E4B-it.litertlm",
   "embedding_model": "embeddinggemma-300M_seq256_mixed-precision.tflite",
   "tokenizer": "embeddinggemma_tokenizer.model",
   "embedding_dim": 768,

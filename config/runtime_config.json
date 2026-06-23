@@ -13,8 +13,6 @@
   },
   "context_injection": {
     "context_label_en": "RELEVANT CONTEXT FROM MEDICAL GUIDELINES:",
-    "question_label_en": "Question:",
-    "context_label_sw": "MUKTADHA UNAOHUSIANA KUTOKA KWA MIONGOZO YA KIMATIBABU:",
-    "question_label_sw": "Swali:"
+    "question_label_en": "Question:"
   }
 }
