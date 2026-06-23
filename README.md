@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://youtu.be/M_Kruluel28">Demo</a> · <a href="evaluation/reports/eval_report_app_parity_v1.md">Eval Report</a> · <a href="evaluation/reports/latency_report.md">Latency Report</a>
+  <a href="https://youtu.be/M_Kruluel28">Demo video</a> · <a href="https://nmrenyi-mamai-demo.hf.space">Live web demo</a> · <a href="evaluation/reports/eval_report_app_parity_v1.md">Eval Report</a> · <a href="evaluation/reports/latency_report.md">Latency Report</a>
 </p>
 
 ---
