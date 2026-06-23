@@ -16,6 +16,8 @@
 
 Android app that answers clinical questions offline using on-device RAG — Gemma 4 E4B (LiteRT-LM) for generation, EmbeddingGemma-300M for embeddings, SQLite for vector search. English only. No internet needed after the initial ~3.8 GB model download.
 
+**🏥 [Try the live web demo](https://nmrenyi-mamai-demo.hf.space)** — a faithful, browser-based mirror of the on-device app (same Gemma 4 + G1 prompt + EmbeddingGemma RAG, served via llama.cpp). Demonstration only — not medical advice; don't read latency from it. ([demo source](https://github.com/nmrenyi/mamai-demo))
+
 ## Architecture
 
 ```
