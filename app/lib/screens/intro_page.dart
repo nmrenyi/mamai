@@ -112,14 +112,12 @@ class _IntroPageState extends State<IntroPage> {
   // Model files downloaded individually from HuggingFace (public, no auth).
   // Update these URLs if the model repos publish new versions.
   static const Map<String, String> _modelFileUrls = {
-    // The canonical Gemma 3n LiteRT-LM repo (google/gemma-3n-E4B-it-litert-lm)
-    // is license-gated and 401s the app's no-auth downloader. We therefore host
-    // a byte-identical, ungated copy under the project's own HuggingFace account
-    // (redistributed under the Gemma Terms of Use) so fresh installs work without
-    // per-user license gating. Integrity is enforced by the pinned SHA-256 in
-    // `_modelFileSha256`, verified after download.
-    "gemma-3n-E4B-it-int4.litertlm":
-        "https://huggingface.co/nmrenyi/gemma-3n-E4B-it-litert-lm/resolve/main/gemma-3n-E4B-it-int4.litertlm",
+    // Gemma 4 E4B LiteRT-LM, downloaded ungated from the community LiteRT repo
+    // (litert-community/gemma-4-E4B-it-litert-lm) — no per-user license gating, so
+    // fresh installs work without auth. Integrity is enforced by the pinned
+    // SHA-256 in `_modelFileSha256`, verified after download.
+    "gemma-4-E4B-it.litertlm":
+        "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm",
     // EmbeddingGemma-300M retriever (replaces Gecko). Generic CPU int4/int8
     // seq256 LiteRT export + its Gemma SentencePiece tokenizer, hosted ungated
     // under the project HF account (mirror of litert-community/embeddinggemma-300m).
@@ -131,16 +129,14 @@ class _IntroPageState extends State<IntroPage> {
         "https://huggingface.co/nmrenyi/embeddinggemma-300m-litert-mamai/resolve/main/sentencepiece.model",
   };
 
-  // Pinned SHA-256 of each model file, verified after download. This is what
-  // lets us pull the (license-gated) Gemma 3n artifact from an ungated mirror
-  // safely: a mirror that ships a truncated, corrupt, or tampered model fails
-  // this check and the file is deleted + re-downloaded. Integrity of the model
-  // is a patient-safety concern, so this guard is mandatory, not cosmetic.
-  // Values are the SHA-256 of the official google/gemma-3n-E4B-it-litert-lm
-  // int4 export and the litert-community Gecko / SentencePiece artifacts.
+  // Pinned SHA-256 of each model file, verified after download: a truncated,
+  // corrupt, or tampered model fails this check and is deleted + re-downloaded.
+  // Integrity of the model is a patient-safety concern, so this guard is
+  // mandatory, not cosmetic. Values are the SHA-256 of the litert-community
+  // Gemma 4 E4B LiteRT-LM export and the EmbeddingGemma / SentencePiece artifacts.
   static const Map<String, String> _modelFileSha256 = {
-    "gemma-3n-E4B-it-int4.litertlm":
-        "2e67a6cd51dfe0f793431e6bd4ed8d029c88e10f52ca0469ad38445e3cd3c1f4",
+    "gemma-4-E4B-it.litertlm":
+        "0b2a8980ce155fd97673d8e820b4d29d9c7d99b8fa6806f425d969b145bd52e0",
     "embeddinggemma-300M_seq256_mixed-precision.tflite":
         "37115ef7bff76cd37dd86abe503ff511b1032bf85fc624a85c49c84899e92bc5",
     "embeddinggemma_tokenizer.model":
@@ -684,14 +680,14 @@ class _IntroPageState extends State<IntroPage> {
         if (pdfCount != _pinnedBundle!.sourceCount) {
           return false;
         }
-        // Sanity-check: Gemma 3n E4B int4 is 4.92 GB — reject truncated downloads.
-        // Threshold is 4.6 GB (~94 % of actual) to catch partial downloads that
+        // Sanity-check: Gemma 4 E4B int4 is 3.66 GB — reject truncated downloads.
+        // Threshold is 3.5 GB (~96 % of actual) to catch partial downloads that
         // would otherwise pass for a complete model file.
         final gemmaSize = io.File(
-          '${_downloadDir!.path}/gemma-3n-E4B-it-int4.litertlm',
+          '${_downloadDir!.path}/gemma-4-E4B-it.litertlm',
         ).lengthSync();
         debugPrint('Gemma model size: $gemmaSize bytes');
-        return gemmaSize > 4600000000;
+        return gemmaSize > 3500000000;
       }
       return false;
     }
@@ -706,17 +702,17 @@ class _IntroPageState extends State<IntroPage> {
 
   // Model files downloaded individually from HuggingFace.
   static const List<String> _modelFiles = [
-    "gemma-3n-E4B-it-int4.litertlm",
+    "gemma-4-E4B-it.litertlm",
     "embeddinggemma_tokenizer.model",
     "embeddinggemma-300M_seq256_mixed-precision.tflite",
   ];
 
   List<_StartupDownloadItem> _startupDownloads(AppLocalizations l10n) => [
     _StartupDownloadItem(
-      key: "gemma-3n-E4B-it-int4.litertlm",
+      key: "gemma-4-E4B-it.litertlm",
       title: l10n.introAssetGemmaTitle,
       subtitle: l10n.introAssetGemmaSubtitle,
-      sizeLabel: "4.92 GB",
+      sizeLabel: "3.66 GB",
     ),
     _StartupDownloadItem(
       key: "embeddinggemma-300M_seq256_mixed-precision.tflite",

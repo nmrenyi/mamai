@@ -125,7 +125,7 @@ class _SearchPageState extends State<SearchPage> {
   // IDs of conversations that finished generating while the user was elsewhere.
   final Set<String> _unreadConvIds = {};
 
-  static const _modelContextTokens = 32000; // Gemma 3n E4B context window
+  static const _modelContextTokens = 32000; // Gemma 4 E4B context window
   static const _charsPerToken = 4; // rough estimate for English text
   static const _reservedChars =
       16000; // system prompt (~1800) + 3 retrieved docs (~6000) + query + response headroom

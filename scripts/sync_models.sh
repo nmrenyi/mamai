@@ -2,17 +2,15 @@
 # sync_models.sh — Download AI model files from HuggingFace into device_push/models/
 #
 # Downloads:
-#   gemma-3n-E4B-it-int4.litertlm                     (4.92 GB) from nmrenyi/gemma-3n-E4B-it-litert-lm
+#   gemma-4-E4B-it.litertlm                           (3.66 GB) from litert-community/gemma-4-E4B-it-litert-lm
 #   embeddinggemma-300M_seq256_mixed-precision.tflite (171 MB)  from nmrenyi/embeddinggemma-300m-litert-mamai
 #   embeddinggemma_tokenizer.model                    (4.5 MB)  from nmrenyi/embeddinggemma-300m-litert-mamai (sentencepiece.model)
 #
-# All public on HuggingFace — no token required. Both nmrenyi repos are
-# byte-identical, ungated copies of the (license-gated) official
-# google/gemma-3n-E4B-it-litert-lm and litert-community/embeddinggemma-300m,
-# redistributed under the Gemma Terms of Use so the app can fetch them without
-# per-user gating. To validate against a canonical gated repo, override the repo
-# AND pass a token, e.g.:
-#   GEMMA_REPO=google/gemma-3n-E4B-it-litert-lm HF_TOKEN=hf_xxx scripts/sync_models.sh
+# All public on HuggingFace — no token required. The Gemma 4 LiteRT-LM is the
+# ungated community export; the embedder is the project's ungated, byte-identical
+# copy of the (license-gated) litert-community/embeddinggemma-300m. To validate
+# against a canonical gated repo, override the repo AND pass a token, e.g.:
+#   GEMMA_REPO=google/gemma-4-E4B-it-litert-lm HF_TOKEN=hf_xxx scripts/sync_models.sh
 # Files already present are skipped (re-run is idempotent).
 #
 # Usage:
@@ -30,7 +28,7 @@ HF="https://huggingface.co"
 # Overridable so maintainers can pull from a canonical gated repo with a token
 # (see header). Defaults to the project's ungated, byte-identical copies.
 EMBEDDER_REPO="${EMBEDDER_REPO:-nmrenyi/embeddinggemma-300m-litert-mamai}"
-GEMMA_REPO="${GEMMA_REPO:-nmrenyi/gemma-3n-E4B-it-litert-lm}"
+GEMMA_REPO="${GEMMA_REPO:-litert-community/gemma-4-E4B-it-litert-lm}"
 HF_TOKEN="${HF_TOKEN:-}"
 
 EMBEDDER_ONLY=0
@@ -76,8 +74,8 @@ download_file() {
 }
 
 if [[ "$EMBEDDER_ONLY" -eq 0 ]]; then
-  download_file "gemma-3n-E4B-it-int4.litertlm" \
-    "$HF/$GEMMA_REPO/resolve/main/gemma-3n-E4B-it-int4.litertlm"
+  download_file "gemma-4-E4B-it.litertlm" \
+    "$HF/$GEMMA_REPO/resolve/main/gemma-4-E4B-it.litertlm"
 fi
 
 download_file "embeddinggemma-300M_seq256_mixed-precision.tflite" \

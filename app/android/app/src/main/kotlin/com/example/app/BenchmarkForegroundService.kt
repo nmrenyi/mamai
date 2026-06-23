@@ -249,7 +249,7 @@ class BenchmarkForegroundService : Service() {
         val syncInitMs = System.currentTimeMillis() - initStart
         Log.w(BENCH_TAG, "[BENCHMARK] Gecko + SQLite init: ${syncInitMs}ms")
 
-        updateNotification("Loading Gemma 3n LLM…", -1, 0)
+        updateNotification("Loading Gemma 4 LLM…", -1, 0)
         Log.w(BENCH_TAG, "[BENCHMARK] Waiting for LLM model load...")
         val llmWaitStart = System.currentTimeMillis()
         withContext(executor.asCoroutineDispatcher()) { pipeline.awaitLlmReady() }
@@ -430,7 +430,7 @@ class BenchmarkForegroundService : Service() {
                 }
                 // Artifact fingerprint: SHA-256 of the first 64 KB of the loaded .litertlm.
                 // The header (FlatBuffers metadata) lives in the first few KB, so this hash
-                // uniquely distinguishes artifact variants — e.g. the default Gemma 3n E4B
+                // uniquely distinguishes artifact variants — e.g. the default Gemma 4 E4B
                 // build from the FP32-tagged rebuild that adds `prefer_activation_type=float32`
                 // to the prefill_decode section. Without this, JSON metadata can't tell which
                 // .litertlm variant was loaded.

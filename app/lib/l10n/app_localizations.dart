@@ -6,7 +6,6 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/intl.dart' as intl;
 
 import 'app_localizations_en.dart';
-import 'app_localizations_sw.dart';
 
 // ignore_for_file: type=lint
 
@@ -93,10 +92,7 @@ abstract class AppLocalizations {
       ];
 
   /// A list of this localizations delegate's supported locales.
-  static const List<Locale> supportedLocales = <Locale>[
-    Locale('en'),
-    Locale('sw'),
-  ];
+  static const List<Locale> supportedLocales = <Locale>[Locale('en')];
 
   /// No description provided for @appBarSubtitle.
   ///
@@ -539,7 +535,7 @@ abstract class AppLocalizations {
   /// No description provided for @introAssetGemmaTitle.
   ///
   /// In en, this message translates to:
-  /// **'Gemma 3n on-device model'**
+  /// **'Gemma 4 on-device model'**
   String get introAssetGemmaTitle;
 
   /// No description provided for @introAssetGemmaSubtitle.
@@ -602,18 +598,6 @@ abstract class AppLocalizations {
   /// **'In partnership with'**
   String get introPartnership;
 
-  /// No description provided for @switchToSwahili.
-  ///
-  /// In en, this message translates to:
-  /// **'Kiswahili'**
-  String get switchToSwahili;
-
-  /// No description provided for @switchToEnglish.
-  ///
-  /// In en, this message translates to:
-  /// **'English'**
-  String get switchToEnglish;
-
   /// No description provided for @errorOnDeviceUnavailable.
   ///
   /// In en, this message translates to:
@@ -632,7 +616,7 @@ class _AppLocalizationsDelegate
 
   @override
   bool isSupported(Locale locale) =>
-      <String>['en', 'sw'].contains(locale.languageCode);
+      <String>['en'].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
@@ -643,8 +627,6 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
   switch (locale.languageCode) {
     case 'en':
       return AppLocalizationsEn();
-    case 'sw':
-      return AppLocalizationsSw();
   }
 
   throw FlutterError(

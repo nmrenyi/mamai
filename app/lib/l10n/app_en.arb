@@ -140,7 +140,7 @@
       "count": { "type": "int" }
     }
   },
-  "introAssetGemmaTitle": "Gemma 3n on-device model",
+  "introAssetGemmaTitle": "Gemma 4 on-device model",
   "introAssetGemmaSubtitle": "Main language model for chat responses.",
   "introAssetGeckoTitle": "EmbeddingGemma retriever model",
   "introAssetGeckoSubtitle": "Used to find the most relevant guideline passages.",
@@ -156,9 +156,6 @@
   "introWelcome": "Welcome to MAM-AI",
   "introDescription": "Trusted clinical answers, offline and always ready.",
   "introPartnership": "In partnership with",
-
-  "switchToSwahili": "Kiswahili",
-  "switchToEnglish": "English",
 
   "errorOnDeviceUnavailable": "On-device mode is not available on this platform."
 }
