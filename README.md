@@ -56,19 +56,46 @@ adb logcat -s mam-ai     # timing, memory, inference logs
 ## Install
 
 MAM-AI ships as a signed Android APK (it is **not** on the Play Store). The APK is on the
-[Releases page](../../releases), named `mamai-<version>-<sha>-rag-<bundle>.apk`. Install it one of two ways:
+[Releases page](../../releases), named `mamai-<version>-<sha>-rag-<bundle>.apk`. Choose the method
+that fits the phone's connectivity:
 
-**Method 1 — directly on the phone (easiest for end users)**
-1. Open the [Releases page](../../releases) on the phone and download the latest `mamai-*.apk`.
-2. Tap the downloaded file. Android will ask permission to "install unknown apps" for your browser/Files app — enable it, then confirm the install.
+### Method 1 — install the APK, models download on first launch *(needs good internet on the phone)*
 
-**Method 2 — sideload from a computer via `adb`** (phone in Developer Mode with USB debugging on, connected by cable)
+1. On the phone, open the [Releases page](../../releases) and download the latest `mamai-*.apk`.
+2. Tap the downloaded file. When prompted, allow "install unknown apps" for your browser/Files app, then confirm the install.
+3. Open MAM-AI. On first launch it downloads the AI models + medical guidelines (**~4.5 GB, one-time**) over **Wi-Fi** — each file verified against a pinned SHA-256 — then runs fully offline.
+
+### Method 2 — fully offline sideload *(no internet on the phone)*
+
+For field devices with little or no connectivity. Stage the assets **once** on a computer with
+internet, then push the app **and every asset** to the phone over USB — it opens ready with **zero
+on-device downloads**. The phone needs USB debugging on (Settings → Developer options).
+
+Stage the assets (run from the repo root):
+
 ```bash
-adb install mamai-<version>-<sha>-rag-<bundle>.apk
-# upgrading in place? add -r:  adb install -r mamai-*.apk
+bash scripts/sync_models.sh        # Gemma 4 + EmbeddingGemma + tokenizer  → device_push/models/
+bash scripts/sync_rag_assets.sh    # pinned RAG bundle (embeddings + PDFs) → device_push/bundle/
 ```
 
-**Then, either way:** open MAM-AI. On first launch it downloads the AI models + medical guidelines (**~4.5 GB, one-time**) — keep the phone on **Wi-Fi** and plugged in. After that it runs **fully offline**; each downloaded file is verified against a pinned checksum.
+Build the signed APK:
+
+```bash
+cd app
+flutter build apk --release
+cd ..
+```
+
+Connect the phone by USB, then push the app + every asset:
+
+```bash
+bash scripts/push_to_device.sh --all-models --apk app/build/app/outputs/flutter-apk/app-release.apk
+```
+
+`push_to_device.sh --all-models` installs the app and pushes the LLM, the EmbeddingGemma retriever +
+tokenizer (each with its `.verified` checksum marker), the vector store, and all source PDFs — after
+verifying every model against the app's pinned SHA-256. Open MAM-AI afterwards: it goes straight to
+the chat screen, no download. To provision more phones, repeat only the last command (offline) for each.
 
 **Requirements:** a real Android phone (Android 7.0 / API 24 or newer — emulators are unsupported; on-device inference needs real hardware), **~8 GB free storage**, and a recent mid-to-high-end device for acceptable response speed.
 

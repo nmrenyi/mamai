@@ -7,9 +7,20 @@
 # After all pushes succeed, it writes rag_bundle_deployed.json on the device.
 #
 # Usage:
-#   scripts/push_to_device.sh
-#   scripts/push_to_device.sh --embedding-models
+#   scripts/push_to_device.sh                          # RAG bundle only (embeddings + PDFs)
+#   scripts/push_to_device.sh --embedding-models       # + EmbeddingGemma model + tokenizer (+ checksum markers)
+#   scripts/push_to_device.sh --all-models             # + the Gemma LLM too — FULL offline provision
+#   scripts/push_to_device.sh --all-models --apk app-release.apk   # also install the app
 #   scripts/push_to_device.sh --serial <device-id>
+#
+# FULLY OFFLINE INSTALL: `--all-models` (optionally with `--apk`) pushes every
+# asset the app needs — the LLM, the EmbeddingGemma retriever + tokenizer, the
+# vector store, the source PDFs — AND writes the per-model `.verified` checksum
+# markers the app requires. After it completes the app opens ready with ZERO
+# on-device downloads (no internet needed on the phone). Markers are written only
+# after the staged file's SHA-256 is confirmed against the pinned value in
+# app/lib/screens/intro_page.dart, so a wrong/corrupt staged file fails loudly
+# rather than provisioning a model the app would silently re-download.
 
 set -euo pipefail
 
@@ -26,8 +37,12 @@ DEPLOY_RECORD_NAME="rag_bundle_deployed.json"
 BUNDLE_READY_MARKER=".rag_bundle_ready"
 
 PUSH_EMBEDDING_MODELS=0
+PUSH_LLM=0
+APK_PATH=""
 SERIAL=""
 TMP_DIR=""
+APP_CONFIG="$REPO_ROOT/config/app_config.json"
+INTRO_PAGE="$REPO_ROOT/app/lib/screens/intro_page.dart"
 
 # ---------------------------------------------------------------------------
 # Parse args
@@ -43,6 +58,19 @@ while [[ $# -gt 0 ]]; do
             PUSH_EMBEDDING_MODELS=1
             shift
             ;;
+        --all-models)
+            PUSH_EMBEDDING_MODELS=1
+            PUSH_LLM=1
+            shift
+            ;;
+        --apk)
+            if [[ $# -lt 2 ]]; then
+                echo "ERROR: --apk requires a path to the .apk file." >&2
+                exit 1
+            fi
+            APK_PATH="$2"
+            shift 2
+            ;;
         --serial)
             if [[ $# -lt 2 ]]; then
                 echo "ERROR: --serial requires a device id." >&2
@@ -52,7 +80,7 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         -h|--help)
-            awk 'NR >= 2 && NR <= 11 { sub(/^# ?/, ""); print }' "$0"
+            awk 'NR >= 2 && NR <= 27 { sub(/^# ?/, ""); print }' "$0"
             exit 0
             ;;
         *)
@@ -119,6 +147,10 @@ EMBEDDINGS_SQLITE="$DEVICE_PUSH/bundle/embeddings.sqlite"
 DOCS_DIR="$DEVICE_PUSH/bundle/docs"
 EMBEDDER_MODEL="$DEVICE_PUSH/models/embeddinggemma-300M_seq256_mixed-precision.tflite"
 TOKENIZER_MODEL="$DEVICE_PUSH/models/embeddinggemma_tokenizer.model"
+# LLM filename comes from the app config (single source of truth), so this script
+# stays correct across generator swaps (Gemma 3n/4/…).
+LLM_MODEL_NAME=$(python3 -c "import json; print(json.load(open('$APP_CONFIG'))['llm_model'])")
+LLM_MODEL="$DEVICE_PUSH/models/$LLM_MODEL_NAME"
 
 if [[ ! -f "$EMBEDDINGS_SQLITE" ]]; then
     echo "ERROR: staged file missing: $EMBEDDINGS_SQLITE" >&2
@@ -151,6 +183,52 @@ if [[ "$PUSH_EMBEDDING_MODELS" -eq 1 ]]; then
         exit 1
     fi
 fi
+
+if [[ "$PUSH_LLM" -eq 1 && ! -f "$LLM_MODEL" ]]; then
+    echo "ERROR: staged LLM missing: $LLM_MODEL" >&2
+    echo "Run: bash scripts/sync_models.sh" >&2
+    exit 1
+fi
+
+if [[ -n "$APK_PATH" && ! -f "$APK_PATH" ]]; then
+    echo "ERROR: --apk path not found: $APK_PATH" >&2
+    exit 1
+fi
+
+# Pinned SHA-256 for a model filename, read from intro_page.dart's
+# _modelFileSha256 (the app's source of truth). Empty if not pinned.
+pinned_sha_for() {
+    python3 - "$1" <<PY
+import re, sys
+name = sys.argv[1]
+text = open("$INTRO_PAGE").read()
+m = re.search(r"_modelFileSha256\s*=\s*\{(.*?)\}", text, re.S)
+pairs = dict(re.findall(r'"([^"]+)"\s*:\s*"([0-9a-f]{64})"', m.group(1))) if m else {}
+print(pairs.get(name, ""))
+PY
+}
+
+# Push a model file + its `.verified` marker. Verifies the staged file's SHA-256
+# against the app's pinned value first, so we never provision a model the app
+# would silently reject and re-download. Marker content = the pinned hash (what
+# the app's downloadsDone compares against).
+push_model_with_marker() {
+    local path="$1" name; name="$(basename "$1")"
+    local pinned actual
+    pinned="$(pinned_sha_for "$name")"
+    actual="$(shasum -a 256 "$path" | awk '{print $1}')"
+    if [[ -n "$pinned" && "$actual" != "$pinned" ]]; then
+        echo "ERROR: staged $name SHA-256 does not match the app's pinned value." >&2
+        echo "  staged : $actual" >&2
+        echo "  pinned : $pinned" >&2
+        echo "Re-stage with scripts/sync_models.sh (the staged file is wrong/corrupt)." >&2
+        exit 1
+    fi
+    echo "  $name ($actual)"
+    "$ADB_BIN" "${ADB_ARGS[@]}" push "$path" "$DEVICE_DIR/" >/dev/null
+    printf '%s' "$actual" > "$TMP_DIR/$name.verified"
+    "$ADB_BIN" "${ADB_ARGS[@]}" push "$TMP_DIR/$name.verified" "$DEVICE_DIR/$name.verified" >/dev/null
+}
 
 # ---------------------------------------------------------------------------
 # Resolve adb and connected device
@@ -209,6 +287,16 @@ echo "  Device dir     : $DEVICE_DIR"
 echo ""
 
 # ---------------------------------------------------------------------------
+# Install the APK first (if requested), so the package + its data dir exist
+# ---------------------------------------------------------------------------
+
+if [[ -n "$APK_PATH" ]]; then
+    echo "Installing app: $APK_PATH"
+    "$ADB_BIN" "${ADB_ARGS[@]}" install -r "$APK_PATH"
+    echo ""
+fi
+
+# ---------------------------------------------------------------------------
 # Prepare deployment record and device target
 # ---------------------------------------------------------------------------
 
@@ -253,11 +341,16 @@ for pdf in "$DOCS_DIR"/*.pdf; do
 done
 
 MODEL_COUNT=0
+if [[ "$PUSH_LLM" -eq 1 ]]; then
+    echo "Pushing LLM + checksum marker ..."
+    push_model_with_marker "$LLM_MODEL"
+    MODEL_COUNT=$((MODEL_COUNT + 1))
+fi
 if [[ "$PUSH_EMBEDDING_MODELS" -eq 1 ]]; then
-    echo "Pushing embedding model + tokenizer ..."
-    "$ADB_BIN" "${ADB_ARGS[@]}" push "$EMBEDDER_MODEL" "$DEVICE_DIR/" >/dev/null
-    "$ADB_BIN" "${ADB_ARGS[@]}" push "$TOKENIZER_MODEL" "$DEVICE_DIR/" >/dev/null
-    MODEL_COUNT=2
+    echo "Pushing embedding model + tokenizer + checksum markers ..."
+    push_model_with_marker "$EMBEDDER_MODEL"
+    push_model_with_marker "$TOKENIZER_MODEL"
+    MODEL_COUNT=$((MODEL_COUNT + 2))
 fi
 
 echo "Writing deployment receipt ..."
