@@ -55,7 +55,24 @@ adb logcat -s mam-ai     # timing, memory, inference logs
 
 ## Install
 
-Download the APK from [Releases](../../releases) and sideload onto a real Android device.
+MAM-AI ships as a signed Android APK (it is **not** on the Play Store). The APK is on the
+[Releases page](../../releases), named `mamai-<version>-<sha>-rag-<bundle>.apk`. Install it one of two ways:
+
+**Method 1 — directly on the phone (easiest for end users)**
+1. Open the [Releases page](../../releases) on the phone and download the latest `mamai-*.apk`.
+2. Tap the downloaded file. Android will ask permission to "install unknown apps" for your browser/Files app — enable it, then confirm the install.
+
+**Method 2 — sideload from a computer via `adb`** (phone in Developer Mode with USB debugging on, connected by cable)
+```bash
+adb install mamai-<version>-<sha>-rag-<bundle>.apk
+# upgrading in place? add -r:  adb install -r mamai-*.apk
+```
+
+**Then, either way:** open MAM-AI. On first launch it downloads the AI models + medical guidelines (**~4.5 GB, one-time**) — keep the phone on **Wi-Fi** and plugged in. After that it runs **fully offline**; each downloaded file is verified against a pinned checksum.
+
+**Requirements:** a real Android phone (Android 7.0 / API 24 or newer — emulators are unsupported; on-device inference needs real hardware), **~8 GB free storage**, and a recent mid-to-high-end device for acceptable response speed.
+
+> Developers building from source: see [Build & Run](#build--run) above.
 
 ## Model Files
 
