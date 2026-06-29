@@ -65,7 +65,9 @@ download_file() {
   echo "Downloading $filename ..."
   local auth=()
   [[ -n "$HF_TOKEN" ]] && auth=(-H "Authorization: Bearer $HF_TOKEN")
-  if ! curl -fL --show-error --retry 3 --retry-all-errors --progress-bar "${auth[@]}" -o "$dest.tmp" "$url"; then
+  # ${auth[@]+...} guards against "unbound variable" on bash 3.2 (macOS) under
+  # `set -u` when the array is empty (no HF_TOKEN — the common case).
+  if ! curl -fL --show-error --retry 3 --retry-all-errors --progress-bar ${auth[@]+"${auth[@]}"} -o "$dest.tmp" "$url"; then
     rm -f "$dest.tmp"
     return 1
   fi

@@ -55,7 +55,51 @@ adb logcat -s mam-ai     # timing, memory, inference logs
 
 ## Install
 
-Download the APK from [Releases](../../releases) and sideload onto a real Android device.
+MAM-AI ships as a signed Android APK (it is **not** on the Play Store). The APK is on the
+[Releases page](../../releases), named `mamai-<version>-<sha>-rag-<bundle>.apk`. Choose the method
+that fits the phone's connectivity:
+
+### Method 1 — install the APK, models download on first launch *(needs good internet on the phone)*
+
+1. On the phone, open the [Releases page](../../releases) and download the latest `mamai-*.apk`.
+2. Tap the downloaded file. When prompted, allow "install unknown apps" for your browser/Files app, then confirm the install.
+3. Open MAM-AI. On first launch it downloads the AI models + medical guidelines (**~4.5 GB, one-time**) over **Wi-Fi** — each file verified against a pinned SHA-256 — then runs fully offline.
+
+### Method 2 — fully offline sideload *(no internet on the phone)*
+
+For field devices with little or no connectivity. Stage the assets **once** on a computer with
+internet, then push the app **and every asset** to the phone over USB — it opens ready with **zero
+on-device downloads**. The phone needs USB debugging on (Settings → Developer options).
+
+Stage the assets (run from the repo root):
+
+```bash
+bash scripts/sync_models.sh        # Gemma 4 + EmbeddingGemma + tokenizer  → device_push/models/
+bash scripts/sync_rag_assets.sh    # pinned RAG bundle (embeddings + PDFs) → device_push/bundle/
+```
+
+Build the signed APK:
+
+```bash
+cd app
+flutter build apk --release
+cd ..
+```
+
+Connect the phone by USB, then push the app + every asset:
+
+```bash
+bash scripts/push_to_device.sh --all-models --apk app/build/app/outputs/flutter-apk/app-release.apk
+```
+
+`push_to_device.sh --all-models` installs the app and pushes the LLM, the EmbeddingGemma retriever +
+tokenizer (each with its `.verified` checksum marker), the vector store, and all source PDFs — after
+verifying every model against the app's pinned SHA-256. Open MAM-AI afterwards: it goes straight to
+the chat screen, no download. To provision more phones, repeat only the last command (offline) for each.
+
+**Requirements:** a real Android phone (Android 7.0 / API 24 or newer — emulators are unsupported; on-device inference needs real hardware), **~8 GB free storage**, and a recent mid-to-high-end device for acceptable response speed.
+
+> Developers building from source: see [Build & Run](#build--run) above.
 
 ## Model Files
 
